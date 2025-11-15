@@ -3,6 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
+    ActivityIndicator,
     Alert,
     Pressable,
     StyleSheet,
@@ -15,22 +16,49 @@ import { useAuth } from "../../contexts/AuthContext";
 export default function LoginScreen() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const { signIn } = useAuth();
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { signIn, signUp } = useAuth();
   const router = useRouter();
 
-  const handleAuth = () => {
+  const handleAuth = async () => {
     if (!username || !password) {
       Alert.alert("Error", "Please enter both username and password.");
       return;
     }
-    // In a real app, you would have actual registration/login logic
+
     if (isRegistering) {
-      Alert.alert("Success", "Registration successful! Please log in.");
-      setIsRegistering(false);
+      if (!email || !confirmPassword) {
+        Alert.alert("Error", "Please fill in all fields.");
+        return;
+      }
+      if (password !== confirmPassword) {
+        Alert.alert("Error", "Passwords do not match.");
+        return;
+      }
+      
+      try {
+        setLoading(true);
+        await signUp(username, email, password);
+        Alert.alert("Success", "Registration successful!");
+        router.replace("/(tabs)");
+      } catch (error: any) {
+        Alert.alert("Registration Failed", error.response?.data?.message || "Failed to register. Please try again.");
+      } finally {
+        setLoading(false);
+      }
     } else {
-      signIn(username);
-      router.replace("/(tabs)");
+      try {
+        setLoading(true);
+        await signIn(username, password);
+        router.replace("/(tabs)");
+      } catch (error: any) {
+        Alert.alert("Login Failed", error.response?.data?.message || "Invalid credentials. Please try again.");
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -47,7 +75,22 @@ export default function LoginScreen() {
           value={username}
           onChangeText={setUsername}
           autoCapitalize="none"
+          editable={!loading}
         />
+
+        {isRegistering && (
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            placeholderTextColor="#888"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            editable={!loading}
+          />
+        )}
+
         <TextInput
           style={styles.input}
           placeholder="Password"
@@ -55,15 +98,42 @@ export default function LoginScreen() {
           value={password}
           onChangeText={setPassword}
           secureTextEntry
+          editable={!loading}
         />
 
-        <Pressable style={styles.button} onPress={handleAuth}>
-          <Text style={styles.buttonText}>
-            {isRegistering ? "Register" : "Login"}
-          </Text>
+        {isRegistering && (
+          <TextInput
+            style={styles.input}
+            placeholder="Confirm Password"
+            placeholderTextColor="#888"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+            editable={!loading}
+          />
+        )}
+
+        <Pressable 
+          style={[styles.button, loading && styles.buttonDisabled]} 
+          onPress={handleAuth}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>
+              {isRegistering ? "Register" : "Login"}
+            </Text>
+          )}
         </Pressable>
 
-        <Pressable onPress={() => setIsRegistering(!isRegistering)}>
+        <Pressable onPress={() => {
+          setIsRegistering(!isRegistering);
+          setUsername("");
+          setEmail("");
+          setPassword("");
+          setConfirmPassword("");
+        }} disabled={loading}>
           <Text style={styles.toggleText}>
             {isRegistering
               ? "Already have an account? Login"
@@ -106,6 +176,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 10,
   },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
   buttonText: {
     color: "#fff",
     fontWeight: "700",
@@ -116,3 +189,4 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
 });
+
