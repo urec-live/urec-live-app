@@ -1,7 +1,8 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { exercisesData } from "../../constants/equipment-data";
+// UPDATED: Using the path alias '@/' for stable imports
+import { exercisesData } from "@/constants/equipment-data";
 
 const muscles = [
   "Chest", "Shoulders", "Triceps", "Back", "Biceps",
@@ -32,7 +33,7 @@ export default function StrengthWorkout() {
             return (
               <TouchableOpacity
                 style={styles.card}
-                // ✅ Type-safe dynamic routing to /workout/exercises/[muscle]
+                // Now navigating within the tabs stack
                 onPress={() =>
                   router.push({
                     pathname: "/workout/exercises/[muscle]",

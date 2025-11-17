@@ -11,8 +11,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { ExerciseInfo, exercisesData } from "../../../constants/equipment-data";
-import { useWorkout } from "../../../contexts/WorkoutContext";
+// UPDATED: Using path aliases for stable imports
+import { ExerciseInfo, exercisesData } from "@/constants/equipment-data";
+import { useWorkout } from "@/contexts/WorkoutContext";
 
 export default function MuscleExercises() {
   const { muscle } = useLocalSearchParams();
@@ -47,6 +48,7 @@ export default function MuscleExercises() {
         disabled={!isAvailable || isCompleted}
         onPress={() =>
           router.push({
+            // Path is already correct to remain in the tabs stack
             pathname: "/workout/equipment/[exercise]",
             params: { exercise: item.name, muscle: group },
           })

@@ -1,8 +1,8 @@
+import { useWorkout } from "@/contexts/WorkoutContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { useWorkout } from "../contexts/WorkoutContext";
 
 export default function ActiveExerciseTracker() {
   const { currentSession, exerciseStartTime, restStartTime, startRest, endRest, checkOut } =
@@ -82,7 +82,21 @@ export default function ActiveExerciseTracker() {
             "Are you sure you want to end this workout?",
             [
               { text: "Cancel", style: "cancel" },
-              { text: "End", onPress: () => { checkOut(); router.push(`/workout/exercises/${currentSession.muscleGroup}`); } }
+              { 
+                text: "End", 
+                onPress: () => { 
+                  // 1. CAPTURE parameter before state change
+                  const targetMuscleGroup = currentSession.muscleGroup;
+                  
+                  // 2. Perform synchronous state cleanup
+                  checkOut(); 
+                  
+                  // 3. DEFERRED NAVIGATION: Use router.replace to navigate cleanly to the specific list screen
+                  setTimeout(() => {
+                    router.replace(`/workout/exercises/${targetMuscleGroup}`); 
+                  }, 0);
+                } 
+              }
             ]
           );
         }}>

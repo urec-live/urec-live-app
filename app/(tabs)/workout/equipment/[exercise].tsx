@@ -1,3 +1,9 @@
+import {
+  getMachinesForExercise,
+  Machine,
+  Status,
+} from "@/constants/equipment-data"; // UPDATED PATH
+import { useWorkout } from "@/contexts/WorkoutContext"; // UPDATED PATH
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -11,12 +17,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import {
-  getMachinesForExercise,
-  Machine,
-  Status,
-} from "../../../constants/equipment-data";
-import { useWorkout } from "../../../contexts/WorkoutContext";
 
 export default function EquipmentAvailability() {
   const { exercise, muscle } = useLocalSearchParams();

@@ -1,3 +1,5 @@
+// urec-live-app/app/(tabs)/_layout.tsx
+
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Tabs } from "expo-router";
@@ -15,7 +17,14 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="index" // This is the redirect file
+        options={{
+          title: "Home Redirect", // Temporary title for clarity
+          href: null, // FIX: This hides the tab from the tab bar.
+        }}
+      />
+      <Tabs.Screen
+        name="workout"
         options={{
           title: "Workout",
           tabBarIcon: ({ color, size }) => (

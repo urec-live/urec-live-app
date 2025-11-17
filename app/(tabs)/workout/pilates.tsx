@@ -15,7 +15,11 @@ export default function PilatesWorkout() {
           data={pilatesOptions}
           keyExtractor={(item) => item}
           renderItem={({ item }) => (
-            <TouchableOpacity style={styles.card} onPress={() => router.push("/(tabs)/equipment")}>
+            <TouchableOpacity 
+              style={styles.card} 
+              // UPDATED: Navigating directly to the top-level tab screen '/equipment'
+              onPress={() => router.push("/equipment")}
+            >
               <Text style={styles.cardText}>{item}</Text>
             </TouchableOpacity>
           )}
