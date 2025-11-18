@@ -29,10 +29,14 @@ interface WorkoutContextType {
   restStartTime: number | null;
   todayWorkouts: WorkoutSession[];
   workoutHistory: DailyWorkout[];
+  reservedMachineId: string | null; 
   checkIn: (exerciseName: string, machineId: string, muscleGroup: string) => void;
   checkOut: () => void;
   startRest: () => void;
   endRest: () => void;
+  reserveMachine: (machineId: string) => void; 
+  cancelReservation: () => void; 
+  hasActiveEngagement: () => boolean; 
   isUserCheckedIntoMachine: (machineId: string) => boolean;
   isMachineInUseByOther: (machineId: string) => boolean;
 }
@@ -41,7 +45,7 @@ const WorkoutContext = createContext<WorkoutContextType | undefined>(undefined);
 
 export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
-}) => {
+}: { children: React.ReactNode }) => {
   // Mock current user ID (in real app, get from auth)
   const currentUserId = "user123";
 
@@ -49,6 +53,9 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
   const [checkedInMachines, setCheckedInMachines] = useState<
     Map<string, CheckedInMachine>
   >(new Map());
+
+  // Current active reservation machine ID
+  const [reservedMachineId, setReservedMachineId] = useState<string | null>(null);
 
   // Current active session
   const [currentSession, setCurrentSession] = useState<WorkoutSession | null>(
@@ -80,6 +87,7 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
 
     setCurrentSession(session);
     setExerciseStartTime(now);
+    setReservedMachineId(null); // Clear reservation on check-in
 
     // Mark machine as in use by this user
     setCheckedInMachines((prev) => {
@@ -114,10 +122,11 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
       // Update history
       updateWorkoutHistory(completedSession);
 
-      // Clear current session
+      // Clear current session and reservation
       setCurrentSession(null);
       setExerciseStartTime(null);
       setRestStartTime(null);
+      setReservedMachineId(null); 
     }
   };
 
@@ -156,6 +165,20 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
     setRestStartTime(null);
   };
 
+  // --- NEW FUNCTIONS ---
+  const reserveMachine = (machineId: string) => {
+    setReservedMachineId(machineId);
+  };
+
+  const cancelReservation = () => {
+    setReservedMachineId(null);
+  };
+  
+  const hasActiveEngagement = (): boolean => {
+    return currentSession !== null || reservedMachineId !== null;
+  };
+  // --- END NEW FUNCTIONS ---
+
   const isUserCheckedIntoMachine = (machineId: string): boolean => {
     const machine = checkedInMachines.get(machineId);
     return machine?.userId === currentUserId;
@@ -174,6 +197,10 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
     restStartTime,
     todayWorkouts,
     workoutHistory,
+    reservedMachineId,
+    reserveMachine,
+    cancelReservation,
+    hasActiveEngagement,
     checkIn,
     checkOut,
     startRest,

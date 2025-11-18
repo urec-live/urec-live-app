@@ -2,12 +2,12 @@ import {
   getMachinesForExercise,
   Machine,
   Status,
-} from "@/constants/equipment-data"; // UPDATED PATH
-import { useWorkout } from "@/contexts/WorkoutContext"; // UPDATED PATH
+} from "@/constants/equipment-data";
+import { useWorkout } from "@/contexts/WorkoutContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   FlatList,
   Modal,
@@ -27,6 +27,10 @@ export default function EquipmentAvailability() {
   const {
     checkIn,
     checkOut,
+    reserveMachine,
+    cancelReservation,
+    hasActiveEngagement,
+    reservedMachineId,
     isUserCheckedIntoMachine,
     isMachineInUseByOther,
   } = useWorkout();
@@ -39,12 +43,24 @@ export default function EquipmentAvailability() {
     setMachines(getMachinesForExercise(name));
   }, [name]);
 
+  // NEW/UPDATED handlers
   const updateStatus = (id: string, newStatus: Status) => {
     const updatedMachines = machines.map((m) =>
       m.id === id ? { ...m, status: newStatus } : m
     );
     setMachines(updatedMachines);
     setModalVisible(false);
+  };
+  
+  const handleReserve = (machineId: string) => {
+    reserveMachine(machineId); // Update context
+    updateStatus(machineId, "Reserved"); // Update local state for visual effect
+  };
+
+  const handleCancelReservation = (machineId: string) => {
+    // FIX: Corrected logic to prevent infinite recursion
+    cancelReservation(); // Update context to clear reservedMachineId
+    updateStatus(machineId, "Available"); // Update local state for visual effect and close modal
   };
 
   const handleCheckIn = (machineId: string) => {
@@ -60,13 +76,19 @@ export default function EquipmentAvailability() {
   };
 
   const openModal = (machine: Machine) => {
-    // Don't allow opening modal for machines in use by others
-    if (machine.status !== "Available" && !isUserCheckedIntoMachine(machine.id)) {
+    const isMyReservation = machine.id === reservedMachineId;
+    const hasOtherActiveEngagement =
+      hasActiveEngagement() && !isUserCheckedIntoMachine(machine.id) && !isMyReservation;
+
+    // Prevent opening modal if another machine is actively engaged (in use or reserved by user)
+    if (isMachineInUseByOther(machine.id) || hasOtherActiveEngagement) {
       return;
     }
+    
     setSelected(machine);
     setModalVisible(true);
   };
+
 
   return (
     <LinearGradient colors={["#000", "#1a1a1a", "#000"]} style={{ flex: 1 }}>
@@ -78,9 +100,17 @@ export default function EquipmentAvailability() {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => {
             const isMyMachine = isUserCheckedIntoMachine(item.id);
+            const isMyReservation = item.id === reservedMachineId; 
             const isOtherUserMachine = isMachineInUseByOther(item.id);
-            const isClickable =
-              item.status === "Available" || isMyMachine;
+            
+            // This flag determines if the user is prevented from taking action on this machine.
+            const hasOtherActiveEngagement = hasActiveEngagement() && !isMyMachine && !isMyReservation;
+            
+            const isClickable = item.status === "Available" || isMyMachine || isMyReservation;
+            
+            // FIX: Condition for visual disabling covers machines in use by others 
+            // OR machines off-limits due to current user's active engagement.
+            const shouldBeVisuallyDisabled = isOtherUserMachine || (hasOtherActiveEngagement && !isClickable); 
 
             return (
               <TouchableOpacity
@@ -92,11 +122,13 @@ export default function EquipmentAvailability() {
                     ? isMyMachine
                       ? styles.myMachine
                       : styles.inUse
-                    : styles.reserved,
-                  !isClickable && styles.disabled,
+                    : item.status === "Reserved" && isMyReservation 
+                      ? styles.reserved
+                      : styles.reserved,
+                  shouldBeVisuallyDisabled && styles.disabled, // <-- APPLIED visual disable
                 ]}
                 onPress={() => openModal(item)}
-                disabled={!isClickable}
+                disabled={!isClickable} 
               >
                 <MaterialCommunityIcons
                   name="weight-lifter"
@@ -106,16 +138,18 @@ export default function EquipmentAvailability() {
                       ? "#00FF7F"
                       : isMyMachine
                       ? "#00FF7F"
+                      : isMyReservation
+                      ? "#FFA500"
                       : "#FFD700"
                   }
                 />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.machineText}>{item.id}</Text>
                   <Text style={styles.statusText}>
-                    {isMyMachine ? "Your Machine" : item.status}
+                    {isMyMachine ? "Your Machine" : isMyReservation ? "Your Reservation" : item.status}
                   </Text>
                 </View>
-                {isOtherUserMachine && (
+                {(isOtherUserMachine || (item.status === "Reserved" && !isMyReservation)) && (
                   <MaterialCommunityIcons name="lock" size={24} color="#FF4500" />
                 )}
               </TouchableOpacity>
@@ -132,11 +166,12 @@ export default function EquipmentAvailability() {
                 Current Status: {selected?.status}
               </Text>
 
-              {selected?.status === "Available" && (
+              {/* Logic for an AVAILABLE machine */}
+              {selected?.status === "Available" && !hasActiveEngagement() && ( 
                 <>
                   <Pressable
                     style={styles.button}
-                    onPress={() => updateStatus(selected!.id, "Reserved")}
+                    onPress={() => handleReserve(selected!.id)} 
                   >
                     <Text style={styles.buttonText}>Reserve</Text>
                   </Pressable>
@@ -149,6 +184,33 @@ export default function EquipmentAvailability() {
                 </>
               )}
 
+              {/* Logic for MY RESERVED machine */}
+              {selected?.status === "Reserved" && selected.id === reservedMachineId && ( 
+                <>
+                  <Pressable
+                    style={styles.button}
+                    onPress={() => handleCheckIn(selected!.id)}
+                  >
+                    <Text style={styles.buttonText}>Check In</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.button, styles.cancelButton]}
+                    onPress={() => handleCancelReservation(selected!.id)} 
+                  >
+                    <Text style={styles.cancelText}>Cancel Reservation</Text>
+                  </Pressable>
+                </>
+              )}
+              
+              {/* Logic for an AVAILABLE machine, but user is checked into *another* machine */}
+              {selected?.status === "Available" && hasActiveEngagement() && !isUserCheckedIntoMachine(selected!.id) && (
+                  <Text style={styles.modalSubtitle}>
+                    You are already using or have reserved equipment.
+                  </Text>
+              )}
+
+
+              {/* Logic for MY CHECKED-IN machine */}
               {selected?.status === "In Use" &&
                 isUserCheckedIntoMachine(selected!.id) && (
                   <Pressable
@@ -158,15 +220,6 @@ export default function EquipmentAvailability() {
                     <Text style={styles.buttonText}>End Exercise / Check Out</Text>
                   </Pressable>
                 )}
-
-              {selected?.status === "Reserved" && (
-                <Pressable
-                  style={styles.button}
-                  onPress={() => updateStatus(selected!.id, "Available")}
-                >
-                  <Text style={styles.buttonText}>Cancel Reservation</Text>
-                </Pressable>
-              )}
 
               <Pressable
                 style={[styles.button, styles.cancelButton]}
