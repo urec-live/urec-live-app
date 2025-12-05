@@ -94,6 +94,9 @@ export default function EquipmentAvailability() {
     <LinearGradient colors={["#000", "#1a1a1a", "#000"]} style={{ flex: 1 }}>
       <View style={styles.container}>
         <Text style={styles.title}>{name} Machines</Text>
+        <TouchableOpacity style={styles.scanButton} onPress={() => router.push("/scan")}>
+          <Text style={styles.scanButtonText}>Scan QR to Check In</Text>
+        </TouchableOpacity>
 
         <FlatList
           data={machines}
@@ -245,6 +248,17 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     textTransform: "capitalize",
   },
+  scanButton: {
+    backgroundColor: "#009c67",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderWidth: 2,
+    borderColor: "#00ff88",
+    marginBottom: 16,
+    alignItems: "center",
+  },
+  scanButtonText: { color: "#001a14", fontWeight: "900" },
   card: {
     flexDirection: "row",
     alignItems: "center",
