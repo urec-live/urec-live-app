@@ -1,11 +1,16 @@
-import { BarCodeScanner, BarCodeScannerResult } from "expo-barcode-scanner";
+import { CameraView, useCameraPermissions } from "expo-camera";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useWorkout } from "@/contexts/WorkoutContext";
 import { parseMachineQr, ParsedMachineScan } from "@/utils/qr";
+
+type BarCodeScannedData = {
+  data: string;
+  type: string;
+};
 
 export default function ScanScreen() {
   const router = useRouter();
@@ -16,22 +21,14 @@ export default function ScanScreen() {
     isUserCheckedIntoMachine,
   } = useWorkout();
 
-  const [hasPermission, setHasPermission] = useState<null | boolean>(null);
+  const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
-  const [lastResult, setLastResult] = useState<BarCodeScannerResult | null>(null);
+  const [lastResult, setLastResult] = useState<BarCodeScannedData | null>(null);
   const [parsed, setParsed] = useState<ParsedMachineScan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    const requestPermission = async () => {
-      const { status } = await BarCodeScanner.requestPermissionsAsync();
-      setHasPermission(status === "granted");
-    };
-    requestPermission();
-  }, []);
-
-  const handleScan = (result: BarCodeScannerResult) => {
+  const handleScan = (result: BarCodeScannedData) => {
     if (scanned) return; // throttle double-fires
     setScanned(true);
     setLastResult(result);
@@ -85,20 +82,23 @@ export default function ScanScreen() {
     }
   };
 
-  if (hasPermission === null) {
+  if (!permission) {
     return (
       <CenteredScreen>
         <ActivityIndicator color="#00ff88" />
-        <Text style={styles.subtitle}>Requesting camera permission…</Text>
+        <Text style={styles.subtitle}>Loading camera…</Text>
       </CenteredScreen>
     );
   }
 
-  if (hasPermission === false) {
+  if (!permission.granted) {
     return (
       <CenteredScreen>
         <Text style={styles.title}>Camera permission is required to scan QR codes.</Text>
-        <Text style={styles.subtitle}>Enable camera access in settings and reopen the app.</Text>
+        <Text style={styles.subtitle}>Enable camera access to continue.</Text>
+        <Pressable style={styles.button} onPress={requestPermission}>
+          <Text style={styles.buttonText}>Grant Permission</Text>
+        </Pressable>
       </CenteredScreen>
     );
   }
@@ -113,10 +113,13 @@ export default function ScanScreen() {
 
         <View style={styles.scannerFrame}>
           {!scanned ? (
-            <BarCodeScanner
-              onBarCodeScanned={handleScan}
+            <CameraView
               style={StyleSheet.absoluteFillObject}
-              barCodeTypes={[BarCodeScanner.Constants.BarCodeType.qr]}
+              facing="back"
+              barcodeScannerSettings={{
+                barcodeTypes: ["qr"],
+              }}
+              onBarcodeScanned={scanned ? undefined : handleScan}
             />
           ) : (
             <View style={styles.resultBox}>
