@@ -63,7 +63,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <LinearGradient colors={["#000", "#1a1a1a", "#000"]} style={{ flex: 1 }}>
+    <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
       <View style={styles.container}>
         <MaterialCommunityIcons name="dumbbell" size={64} color="#00ff88" />
         <Text style={styles.title}>UREC Live</Text>
@@ -155,22 +155,22 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: "900",
-    color: "#00ff88",
+    color: "#1a1a1a",
     marginBottom: 30,
   },
   input: {
     width: "90%",
-    backgroundColor: "#222",
-    color: "#fff",
+    backgroundColor: "#ffffff",
+    color: "#1a1a1a",
     padding: 15,
     borderRadius: 10,
     marginBottom: 15,
     borderWidth: 1,
-    borderColor: "#444",
+    borderColor: "#e0e0e0",
   },
   button: {
     width: "90%",
-    backgroundColor: "#009c67",
+    backgroundColor: "#4CAF50",
     padding: 15,
     borderRadius: 10,
     alignItems: "center",
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   toggleText: {
-    color: "#00ff88",
+    color: "#4CAF50",
     marginTop: 20,
   },
 });

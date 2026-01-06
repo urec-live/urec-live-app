@@ -8,12 +8,14 @@ export default function PilatesWorkout() {
   const router = useRouter();
 
   return (
-    <LinearGradient colors={["#000", "#1a1a1a", "#000"]} style={{ flex: 1 }}>
+    <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
       <View style={styles.container}>
         <Text style={styles.title}>Select Pilates Type</Text>
         <FlatList
           data={pilatesOptions}
           keyExtractor={(item) => item}
+          contentContainerStyle={{ paddingRight: 8 }}
+          showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
             <TouchableOpacity 
               style={styles.card} 
@@ -33,21 +35,23 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, paddingTop: 60 },
   title: {
     fontSize: 26,
-    color: "#00ff88",
+    color: "#1a1a1a",
     fontWeight: "900",
     textAlign: "center",
     marginBottom: 20,
   },
   card: {
-    backgroundColor: "#111",
+    backgroundColor: "#ffffff",
     borderRadius: 10,
     padding: 15,
     marginBottom: 10,
     alignItems: "center",
-    shadowColor: "#00ff88",
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
   },
-  cardText: { color: "#00ff88", fontWeight: "700", fontSize: 18 },
+  cardText: { color: "#4CAF50", fontWeight: "700", fontSize: 18 },
 });

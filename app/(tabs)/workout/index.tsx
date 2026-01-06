@@ -25,10 +25,8 @@ export default function Dashboard() {
   };
 
   return (
-    <LinearGradient colors={["#000000", "#1a1a1a", "#000000"]} style={{ flex: 1 }}>
+    <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
       <View style={styles.container}>
-        <Text style={styles.title}>Select Your Workout 💪</Text>
-
         {workouts.map((item, index) => (
           <Pressable
             key={index}
@@ -56,12 +54,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 30,
     fontWeight: "900",
-    color: "#00ff88",
+    color: "#1a1a1a",
     textTransform: "uppercase",
     marginBottom: 30,
   },
   subtitle: {
-    color: "#ccc",
+    color: "#666",
     fontSize: 18,
     marginBottom: 40,
   },
@@ -70,18 +68,20 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     marginVertical: 10,
     borderRadius: 15,
-    backgroundColor: "#111",
+    backgroundColor: "#ffffff",
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "center",
     gap: 10,
-    shadowColor: "#00ff88",
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
   },
   optionText: {
-    color: "#00ff88",
+    color: "#4CAF50",
     fontWeight: "700",
     fontSize: 18,
     textTransform: "capitalize",

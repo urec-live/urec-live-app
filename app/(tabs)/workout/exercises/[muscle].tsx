@@ -1,11 +1,12 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   Image,
   Linking,
+  RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -14,31 +15,69 @@ import {
 // UPDATED: Using path aliases for stable imports
 import { ExerciseInfo, exercisesData } from "@/constants/equipment-data";
 import { useWorkout } from "@/contexts/WorkoutContext";
+import { machineAPI } from "@/services/machineAPI";
 
 export default function MuscleExercises() {
   const { muscle } = useLocalSearchParams();
   const router = useRouter();
   const { todayWorkouts } = useWorkout();
   const group = (muscle as string) || "Chest";
-  const exercises = exercisesData[group] || [];
+  const exercises = useMemo(() => exercisesData[group] || [], [group]);
 
-  const sortedExercises = [...exercises].sort((a, b) => {
-    const aAvailable = a.machines.filter(
-      (m) => m.status === "Available"
-    ).length;
-    const bAvailable = b.machines.filter(
-      (m) => m.status === "Available"
-    ).length;
-    if (aAvailable === 0 && bAvailable > 0) return 1;
-    if (aAvailable > 0 && bAvailable === 0) return -1;
-    return 0;
-  });
+  const [availabilityByExercise, setAvailabilityByExercise] = useState<
+    Record<string, { available: number; total: number }>
+  >({});
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadAvailability = async () => {
+    const entries = await Promise.all(
+      exercises.map(async (ex) => {
+        try {
+          const machines = await machineAPI.getByExercise(ex.name);
+          const total = machines.length;
+          const available = machines.filter((m) => m.status.toUpperCase() === "AVAILABLE").length;
+          return [ex.name, { available, total }] as const;
+        } catch {
+          return [ex.name, { available: 0, total: 0 }] as const;
+        }
+      })
+    );
+    setAvailabilityByExercise(Object.fromEntries(entries));
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      await loadAvailability();
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [group, exercises]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await loadAvailability();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const sortedExercises = useMemo(() => {
+    return [...exercises].sort((a, b) => {
+      const aAvailable = availabilityByExercise[a.name]?.available ?? 0;
+      const bAvailable = availabilityByExercise[b.name]?.available ?? 0;
+      if (aAvailable === 0 && bAvailable > 0) return 1;
+      if (aAvailable > 0 && bAvailable === 0) return -1;
+      return 0;
+    });
+  }, [exercises, availabilityByExercise]);
 
   const renderItem = ({ item }: { item: ExerciseInfo }) => {
-    const availableMachines = item.machines.filter(
-      (m) => m.status === "Available"
-    ).length;
-    const totalMachines = item.machines.length;
+    const availableMachines = availabilityByExercise[item.name]?.available ?? 0;
+    const totalMachines = availabilityByExercise[item.name]?.total ?? 0;
     const isAvailable = availableMachines > 0;
     const isCompleted = todayWorkouts.some(session => session.exerciseName === item.name);
 
@@ -65,7 +104,11 @@ export default function MuscleExercises() {
         <View style={styles.cardContent}>
           <Text style={[styles.cardText, isCompleted && styles.completedText]}>{item.name}</Text>
           <Text style={[styles.availabilityText, isCompleted && styles.completedText]}>
-            {isCompleted ? "Completed" : `${availableMachines}/${totalMachines} Available`}
+            {isCompleted
+              ? "Completed"
+              : totalMachines === 0
+              ? "Loading availability…"
+              : `${availableMachines}/${totalMachines} Available`}
           </Text>
         </View>
         <TouchableOpacity
@@ -79,13 +122,26 @@ export default function MuscleExercises() {
   };
 
   return (
-    <LinearGradient colors={["#000", "#1a1a1a", "#000"]} style={{ flex: 1 }}>
+    <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
       <View style={styles.container}>
         <Text style={styles.title}>{group} Exercises</Text>
         <FlatList
           data={sortedExercises}
           keyExtractor={(item) => item.name}
           renderItem={renderItem}
+          contentContainerStyle={{ paddingRight: 8 }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#4CAF50"
+              colors={["#4CAF50", "#66BB6A", "#81C784"]}
+              progressBackgroundColor="#ffffff"
+              title="Pull to refresh"
+              titleColor="#4CAF50"
+            />
+          }
         />
       </View>
     </LinearGradient>
@@ -96,26 +152,29 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, paddingTop: 60 },
   title: {
     fontSize: 26,
-    color: "#00ff88",
+    color: "#1a1a1a",
     fontWeight: "900",
     textAlign: "center",
     marginBottom: 20,
     textTransform: "capitalize",
   },
   card: {
-    backgroundColor: "#003324",
+    backgroundColor: "#ffffff",
     borderRadius: 10,
     marginBottom: 15,
-    elevation: 5,
+    elevation: 3,
     flexDirection: "row",
     alignItems: "center",
     padding: 10,
     borderWidth: 1,
-    borderColor: "#00ff88",
+    borderColor: "#4CAF50",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   disabledCard: {
-    backgroundColor: "#333",
-    shadowColor: "#888",
+    backgroundColor: "#e0e0e0",
+    borderColor: "#bdbdbd",
   },
   cardImage: {
     width: 80,
@@ -133,7 +192,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(76, 175, 80, 0.3)",
     borderRadius: 8,
   },
   cardContent: {
@@ -141,15 +200,15 @@ const styles = StyleSheet.create({
     marginLeft: 15,
   },
   cardText: {
-    color: "#00ff88",
+    color: "#4CAF50",
     fontWeight: "700",
     fontSize: 18,
   },
   completedText: {
-    color: "#888",
+    color: "#999",
   },
   availabilityText: {
-    color: "#ccc",
+    color: "#666",
     fontSize: 14,
     marginTop: 5,
   },
@@ -157,7 +216,7 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   completedCard: {
-    backgroundColor: "#222",
-    borderColor: "#666",
+    backgroundColor: "#f5f5f5",
+    borderColor: "#bdbdbd",
   },
 });

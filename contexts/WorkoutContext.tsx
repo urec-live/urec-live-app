@@ -8,13 +8,6 @@ export interface WorkoutSession {
   endTime?: number;
 }
 
-export interface CheckedInMachine {
-  exerciseName: string;
-  machineId: string;
-  muscleGroup: string;
-  userId: string;
-}
-
 export interface DailyWorkout {
   date: string;
   sessions: WorkoutSession[];
@@ -22,23 +15,15 @@ export interface DailyWorkout {
 }
 
 interface WorkoutContextType {
-  currentUserId: string;
-  checkedInMachines: Map<string, CheckedInMachine>;
   currentSession: WorkoutSession | null;
   exerciseStartTime: number | null;
   restStartTime: number | null;
   todayWorkouts: WorkoutSession[];
   workoutHistory: DailyWorkout[];
-  reservedMachineId: string | null; 
   checkIn: (exerciseName: string, machineId: string, muscleGroup: string) => void;
   checkOut: () => void;
   startRest: () => void;
   endRest: () => void;
-  reserveMachine: (machineId: string) => void; 
-  cancelReservation: () => void; 
-  hasActiveEngagement: () => boolean; 
-  isUserCheckedIntoMachine: (machineId: string) => boolean;
-  isMachineInUseByOther: (machineId: string) => boolean;
 }
 
 const WorkoutContext = createContext<WorkoutContextType | undefined>(undefined);
@@ -46,17 +31,6 @@ const WorkoutContext = createContext<WorkoutContextType | undefined>(undefined);
 export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }: { children: React.ReactNode }) => {
-  // Mock current user ID (in real app, get from auth)
-  const currentUserId = "user123";
-
-  // Track which machines are checked in by which users
-  const [checkedInMachines, setCheckedInMachines] = useState<
-    Map<string, CheckedInMachine>
-  >(new Map());
-
-  // Current active reservation machine ID
-  const [reservedMachineId, setReservedMachineId] = useState<string | null>(null);
-
   // Current active session
   const [currentSession, setCurrentSession] = useState<WorkoutSession | null>(
     null
@@ -87,19 +61,6 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
 
     setCurrentSession(session);
     setExerciseStartTime(now);
-    setReservedMachineId(null); // Clear reservation on check-in
-
-    // Mark machine as in use by this user
-    setCheckedInMachines((prev) => {
-      const updated = new Map(prev);
-      updated.set(machineId, {
-        exerciseName,
-        machineId,
-        muscleGroup,
-        userId: currentUserId,
-      });
-      return updated;
-    });
   };
 
   const checkOut = () => {
@@ -112,13 +73,6 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
       // Add to today's workouts
       setTodayWorkouts((prev) => [...prev, completedSession]);
 
-      // Remove from checked in machines
-      setCheckedInMachines((prev) => {
-        const updated = new Map(prev);
-        updated.delete(currentSession.machineId);
-        return updated;
-      });
-
       // Update history
       updateWorkoutHistory(completedSession);
 
@@ -126,7 +80,6 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
       setCurrentSession(null);
       setExerciseStartTime(null);
       setRestStartTime(null);
-      setReservedMachineId(null); 
     }
   };
 
@@ -165,48 +118,16 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
     setRestStartTime(null);
   };
 
-  // --- NEW FUNCTIONS ---
-  const reserveMachine = (machineId: string) => {
-    setReservedMachineId(machineId);
-  };
-
-  const cancelReservation = () => {
-    setReservedMachineId(null);
-  };
-  
-  const hasActiveEngagement = (): boolean => {
-    return currentSession !== null || reservedMachineId !== null;
-  };
-  // --- END NEW FUNCTIONS ---
-
-  const isUserCheckedIntoMachine = (machineId: string): boolean => {
-    const machine = checkedInMachines.get(machineId);
-    return machine?.userId === currentUserId;
-  };
-
-  const isMachineInUseByOther = (machineId: string): boolean => {
-    const machine = checkedInMachines.get(machineId);
-    return machine !== undefined && machine.userId !== currentUserId;
-  };
-
   const value: WorkoutContextType = {
-    currentUserId,
-    checkedInMachines,
     currentSession,
     exerciseStartTime,
     restStartTime,
     todayWorkouts,
     workoutHistory,
-    reservedMachineId,
-    reserveMachine,
-    cancelReservation,
-    hasActiveEngagement,
     checkIn,
     checkOut,
     startRest,
     endRest,
-    isUserCheckedIntoMachine,
-    isMachineInUseByOther,
   };
 
   return (

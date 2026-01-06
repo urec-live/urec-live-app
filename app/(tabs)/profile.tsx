@@ -27,9 +27,9 @@ export default function Profile() {
   };
 
   return (
-    <LinearGradient colors={["#000", "#1a1a1a", "#000"]} style={{ flex: 1 }}>
+    <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
       <View style={styles.container}>
-        <MaterialCommunityIcons name="account-circle" size={80} color="#00ff88" />
+        <MaterialCommunityIcons name="account-circle" size={80} color="#4CAF50" />
         <Text style={styles.title}>My Profile</Text>
         <Text style={styles.text}>Track your gym history and achievements here soon.</Text>
         
@@ -47,11 +47,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: "900",
-    color: "#00ff88",
+    color: "#1a1a1a",
     marginTop: 20,
     marginBottom: 10,
   },
-  text: { color: "#ccc", textAlign: "center", fontSize: 16, marginBottom: 40 },
+  text: { color: "#666", textAlign: "center", fontSize: 16, marginBottom: 40 },
   logoutButton: {
     backgroundColor: "#ff4444",
     borderRadius: 10,

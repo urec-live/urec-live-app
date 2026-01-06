@@ -25,7 +25,7 @@ export default function HistoryScreen() {
   };
 
   return (
-    <LinearGradient colors={["#000", "#1a1a1a", "#000"]} style={{ flex: 1 }}>
+    <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
       <View style={styles.container}>
         <Text style={styles.title}>Workout History</Text>
 
@@ -41,6 +41,8 @@ export default function HistoryScreen() {
           <FlatList
             data={workoutHistory}
             keyExtractor={(item) => item.date}
+            contentContainerStyle={{ paddingRight: 8 }}
+            showsVerticalScrollIndicator={false}
             renderItem={({ item }) => (
               <View style={styles.dayCard}>
                 <View style={styles.dayHeader}>
@@ -94,7 +96,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, paddingTop: 60 },
   title: {
     fontSize: 26,
-    color: "#00ff88",
+    color: "#1a1a1a",
     fontWeight: "900",
     textAlign: "center",
     marginBottom: 20,
@@ -119,12 +121,16 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   dayCard: {
-    backgroundColor: "#003324",
+    backgroundColor: "#ffffff",
     borderRadius: 15,
     padding: 15,
     marginBottom: 15,
     borderWidth: 2,
-    borderColor: "#00ff88",
+    borderColor: "#4CAF50",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   dayHeader: {
     flexDirection: "row",
@@ -135,7 +141,7 @@ const styles = StyleSheet.create({
   dateText: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#00ff88",
+    color: "#4CAF50",
   },
   summaryRow: {
     flexDirection: "row",
@@ -143,21 +149,21 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#333",
+    borderBottomColor: "#e0e0e0",
   },
   summaryText: {
     fontSize: 14,
-    color: "#ccc",
+    color: "#666",
   },
   sessionCard: {
-    backgroundColor: "#009c67",
+    backgroundColor: "#E8F5E9",
     borderRadius: 10,
     padding: 12,
     marginTop: 10,
     borderLeftWidth: 4,
-    borderLeftColor: "#00ff88",
+    borderLeftColor: "#4CAF50",
     borderWidth: 1,
-    borderColor: "#00ff88",
+    borderColor: "#4CAF50",
   },
   sessionHeader: {
     flexDirection: "row",
@@ -168,16 +174,16 @@ const styles = StyleSheet.create({
   exerciseName: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#00ff88",
+    color: "#4CAF50",
   },
   machineText: {
     fontSize: 14,
-    color: "#aaa",
+    color: "#666",
     marginBottom: 4,
   },
   durationText: {
     fontSize: 12,
-    color: "#00ff88",
+    color: "#4CAF50",
     fontWeight: "600",
   },
 });

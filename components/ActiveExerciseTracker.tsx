@@ -1,4 +1,5 @@
 import { useWorkout } from "@/contexts/WorkoutContext";
+import { machineAPI } from "@/services/machineAPI";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -84,18 +85,22 @@ export default function ActiveExerciseTracker() {
               { text: "Cancel", style: "cancel" },
               { 
                 text: "End", 
-                onPress: () => { 
-                  // 1. CAPTURE parameter before state change
+                onPress: async () => { 
                   const targetMuscleGroup = currentSession.muscleGroup;
-                  
-                  // 2. Perform synchronous state cleanup
-                  checkOut(); 
-                  
-                  // 3. DEFERRED NAVIGATION: Use router.replace to navigate cleanly to the specific list screen
+
+                  try {
+                    await machineAPI.checkOut(currentSession.machineId);
+                  } catch {
+                    // If checkout fails (offline/conflict), keep local flow usable.
+                    // User can retry from the machine list later.
+                  }
+
+                  checkOut();
+
                   setTimeout(() => {
-                    router.replace(`/workout/exercises/${targetMuscleGroup}`); 
+                    router.replace(`/workout/exercises/${targetMuscleGroup}`);
                   }, 0);
-                } 
+                }
               }
             ]
           );

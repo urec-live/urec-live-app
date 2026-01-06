@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-nati
 
 import { useWorkout } from "@/contexts/WorkoutContext";
 import { parseMachineQr, ParsedMachineScan } from "@/utils/qr";
+import { machineAPI } from "@/services/machineAPI";
 
 type BarCodeScannedData = {
   data: string;
@@ -14,12 +15,7 @@ type BarCodeScannedData = {
 
 export default function ScanScreen() {
   const router = useRouter();
-  const {
-    checkIn,
-    hasActiveEngagement,
-    isMachineInUseByOther,
-    isUserCheckedIntoMachine,
-  } = useWorkout();
+  const { checkIn } = useWorkout();
 
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
@@ -51,27 +47,28 @@ export default function ScanScreen() {
     setMessage(null);
   };
 
-  const handleConfirmCheckIn = () => {
+  const handleConfirmCheckIn = async () => {
     if (!parsed?.machineId) {
       setError("No machine ID found in QR code.");
-      return;
-    }
-
-    if (isMachineInUseByOther(parsed.machineId)) {
-      setError("This machine is in use by another member.");
-      return;
-    }
-
-    if (hasActiveEngagement() && !isUserCheckedIntoMachine(parsed.machineId)) {
-      setError("You already have an active machine/reservation.");
       return;
     }
 
     const exerciseName = parsed.exercise || parsed.machineId;
     const muscleGroup = parsed.muscle || "General";
 
-    checkIn(exerciseName, parsed.machineId, muscleGroup);
-    setMessage(`Checked into ${parsed.machineId}`);
+    try {
+      await machineAPI.checkIn(parsed.machineId);
+      checkIn(exerciseName, parsed.machineId, muscleGroup);
+      setMessage(`Checked into ${parsed.machineId}`);
+    } catch (e: any) {
+      const status = e?.response?.status;
+      const msg = e?.response?.data?.message || e?.response?.data || e?.message;
+      if (status === 401) setError("Please sign in to check in.");
+      else if (status === 409) setError(String(msg || "Machine not available. Please retry."));
+      else if (status === 404) setError("Machine not found.");
+      else setError(String(msg || "Unable to check in right now."));
+      return;
+    }
 
     // Navigate to the related equipment list if we know the exercise
     if (parsed.exercise) {
@@ -104,7 +101,7 @@ export default function ScanScreen() {
   }
 
   return (
-    <LinearGradient colors={["#000", "#1a1a1a", "#000"]} style={{ flex: 1 }}>
+    <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
       <View style={styles.container}>
         <Text style={styles.title}>Scan Machine QR</Text>
         <Text style={styles.subtitle}>

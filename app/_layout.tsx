@@ -44,7 +44,7 @@ export default function RootLayout() {
       <WorkoutProvider>
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
           <SafeAreaProvider>
-            <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
+            <SafeAreaView style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
               <RootLayoutNav />
               <StatusBar style="auto" />
             </SafeAreaView>

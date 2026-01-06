@@ -1,17 +1,15 @@
-import {
-  getMachinesForExercise,
-  Machine,
-  Status,
-} from "@/constants/equipment-data";
+import { MachineDto, machineAPI } from "@/services/machineAPI";
 import { useWorkout } from "@/contexts/WorkoutContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Modal,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -24,111 +22,137 @@ export default function EquipmentAvailability() {
   const muscleGroup = (muscle as string) || "Chest";
   const router = useRouter();
 
-  const {
-    checkIn,
-    checkOut,
-    reserveMachine,
-    cancelReservation,
-    hasActiveEngagement,
-    reservedMachineId,
-    isUserCheckedIntoMachine,
-    isMachineInUseByOther,
-  } = useWorkout();
+  const { checkIn, checkOut } = useWorkout();
 
-  const [machines, setMachines] = useState<Machine[]>([]);
-  const [selected, setSelected] = useState<Machine | null>(null);
+  const [machines, setMachines] = useState<MachineDto[]>([]);
+  const [selected, setSelected] = useState<MachineDto | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [myEngagement, setMyEngagement] = useState<MachineDto | null>(null);
+  const [busyCode, setBusyCode] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    setMachines(getMachinesForExercise(name));
+    const load = async () => {
+      try {
+        setLoading(true);
+        console.log('Fetching machines for exercise:', name);
+        const [ms, me] = await Promise.all([
+          machineAPI.getByExercise(name),
+          machineAPI.getMyEngagement().catch(() => null),
+        ]);
+        console.log('Machines received:', ms);
+        setMachines(ms);
+        setMyEngagement(me);
+      } catch (error) {
+        console.error('Error loading machines:', error);
+        setMachines([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
   }, [name]);
 
-  // NEW/UPDATED handlers
-  const updateStatus = (id: string, newStatus: Status) => {
-    const updatedMachines = machines.map((m) =>
-      m.id === id ? { ...m, status: newStatus } : m
-    );
-    setMachines(updatedMachines);
-    setModalVisible(false);
-  };
-  
-  const handleReserve = (machineId: string) => {
-    reserveMachine(machineId); // Update context
-    updateStatus(machineId, "Reserved"); // Update local state for visual effect
-  };
-
-  const handleCancelReservation = (machineId: string) => {
-    // FIX: Corrected logic to prevent infinite recursion
-    cancelReservation(); // Update context to clear reservedMachineId
-    updateStatus(machineId, "Available"); // Update local state for visual effect and close modal
-  };
-
-  const handleCheckIn = (machineId: string) => {
-    checkIn(name, machineId, muscleGroup);
-    updateStatus(machineId, "In Use");
-  };
-
-  const handleCheckOut = (machineId: string) => {
-    checkOut();
-    updateStatus(machineId, "Available");
-    // Navigate back to exercises page
-    router.back();
-  };
-
-  const openModal = (machine: Machine) => {
-    const isMyReservation = machine.id === reservedMachineId;
-    const hasOtherActiveEngagement =
-      hasActiveEngagement() && !isUserCheckedIntoMachine(machine.id) && !isMyReservation;
-
-    // Prevent opening modal if another machine is actively engaged (in use or reserved by user)
-    if (isMachineInUseByOther(machine.id) || hasOtherActiveEngagement) {
-      return;
+  const refresh = async () => {
+    try {
+      setRefreshing(true);
+      const [ms, me] = await Promise.all([
+        machineAPI.getByExercise(name),
+        machineAPI.getMyEngagement().catch(() => null),
+      ]);
+      setMachines(ms);
+      setMyEngagement(me);
+    } finally {
+      setRefreshing(false);
     }
-    
+  };
+
+  const handleCheckIn = async (code: string) => {
+    setBusyCode(code);
+    try {
+      await machineAPI.checkIn(code);
+      checkIn(name, code, muscleGroup);
+      await refresh();
+      setModalVisible(false);
+    } finally {
+      setBusyCode(null);
+    }
+  };
+
+  const handleCheckOut = async (code: string) => {
+    setBusyCode(code);
+    try {
+      await machineAPI.checkOut(code);
+      checkOut();
+      await refresh();
+      router.back();
+    } finally {
+      setBusyCode(null);
+    }
+  };
+
+  const openModal = (machine: MachineDto) => {
+    const userHoldingOther = myEngagement && myEngagement.code !== machine.code;
+    const statusUpper = machine.status.toUpperCase();
+    const lockedByOther = !machine.heldByMe && (statusUpper === "IN_USE" || statusUpper === "IN USE");
+    if (lockedByOther || userHoldingOther) return;
     setSelected(machine);
     setModalVisible(true);
   };
 
 
   return (
-    <LinearGradient colors={["#000", "#1a1a1a", "#000"]} style={{ flex: 1 }}>
+    <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
       <View style={styles.container}>
         <Text style={styles.title}>{name} Machines</Text>
         <TouchableOpacity style={styles.scanButton} onPress={() => router.push("/scan")}>
           <Text style={styles.scanButtonText}>Scan QR to Check In</Text>
         </TouchableOpacity>
 
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#00ff88" />
+            <Text style={styles.loadingText}>Loading machines...</Text>
+          </View>
+        ) : (
         <FlatList
           data={machines}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.code}
+          contentContainerStyle={{ paddingRight: 8 }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={refresh}
+              tintColor="#4CAF50"
+              colors={["#4CAF50", "#66BB6A", "#81C784"]}
+              progressBackgroundColor="#ffffff"
+              title="Pull to refresh"
+              titleColor="#4CAF50"
+            />
+          }
           renderItem={({ item }) => {
-            const isMyMachine = isUserCheckedIntoMachine(item.id);
-            const isMyReservation = item.id === reservedMachineId; 
-            const isOtherUserMachine = isMachineInUseByOther(item.id);
-            
-            // This flag determines if the user is prevented from taking action on this machine.
-            const hasOtherActiveEngagement = hasActiveEngagement() && !isMyMachine && !isMyReservation;
-            
-            const isClickable = item.status === "Available" || isMyMachine || isMyReservation;
-            
-            // FIX: Condition for visual disabling covers machines in use by others 
-            // OR machines off-limits due to current user's active engagement.
-            const shouldBeVisuallyDisabled = isOtherUserMachine || (hasOtherActiveEngagement && !isClickable); 
+            const isMyEngagement = myEngagement?.code === item.code;
+            const userHoldingOther = myEngagement && !isMyEngagement;
+            const statusUpper = item.status.toUpperCase();
+            const lockedByOther = !item.heldByMe && (statusUpper === "IN_USE" || statusUpper === "IN USE");
+            const isClickable = !lockedByOther && !userHoldingOther;
+            const shouldBeVisuallyDisabled = !isClickable;
+
+            const statusLabel =
+              statusUpper === "AVAILABLE" ? "Available" : "In Use";
 
             return (
               <TouchableOpacity
                 style={[
                   styles.card,
-                  item.status === "Available"
+                  statusUpper === "AVAILABLE"
                     ? styles.available
-                    : item.status === "In Use"
-                    ? isMyMachine
+                    : item.heldByMe
                       ? styles.myMachine
-                      : styles.inUse
-                    : item.status === "Reserved" && isMyReservation 
-                      ? styles.reserved
-                      : styles.reserved,
-                  shouldBeVisuallyDisabled && styles.disabled, // <-- APPLIED visual disable
+                      : styles.inUse,
+                  shouldBeVisuallyDisabled && styles.disabled,
                 ]}
                 onPress={() => openModal(item)}
                 disabled={!isClickable} 
@@ -137,28 +161,29 @@ export default function EquipmentAvailability() {
                   name="weight-lifter"
                   size={32}
                   color={
-                    item.status === "Available"
+                    item.status === "AVAILABLE"
                       ? "#00FF7F"
-                      : isMyMachine
+                      : item.heldByMe
                       ? "#00FF7F"
-                      : isMyReservation
-                      ? "#FFA500"
                       : "#FFD700"
                   }
                 />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.machineText}>{item.id}</Text>
+                  <Text style={styles.machineText}>{item.name}</Text>
                   <Text style={styles.statusText}>
-                    {isMyMachine ? "Your Machine" : isMyReservation ? "Your Reservation" : item.status}
+                    {item.heldByMe && item.status === "IN_USE"
+                      ? "Your Machine"
+                      : statusLabel}
                   </Text>
                 </View>
-                {(isOtherUserMachine || (item.status === "Reserved" && !isMyReservation)) && (
+                {lockedByOther && (
                   <MaterialCommunityIcons name="lock" size={24} color="#FF4500" />
                 )}
               </TouchableOpacity>
             );
           }}
         />
+        )}
 
         {/* Modal */}
         <Modal visible={modalVisible} transparent animationType="slide">
@@ -170,55 +195,32 @@ export default function EquipmentAvailability() {
               </Text>
 
               {/* Logic for an AVAILABLE machine */}
-              {selected?.status === "Available" && !hasActiveEngagement() && ( 
+              {selected?.status === "AVAILABLE" && !myEngagement && (
                 <>
                   <Pressable
                     style={styles.button}
-                    onPress={() => handleReserve(selected!.id)} 
-                  >
-                    <Text style={styles.buttonText}>Reserve</Text>
-                  </Pressable>
-                  <Pressable
-                    style={styles.button}
-                    onPress={() => handleCheckIn(selected!.id)}
+                    onPress={() => handleCheckIn(selected!.code)}
+                    disabled={busyCode === selected?.code}
                   >
                     <Text style={styles.buttonText}>Check In</Text>
                   </Pressable>
                 </>
               )}
 
-              {/* Logic for MY RESERVED machine */}
-              {selected?.status === "Reserved" && selected.id === reservedMachineId && ( 
-                <>
-                  <Pressable
-                    style={styles.button}
-                    onPress={() => handleCheckIn(selected!.id)}
-                  >
-                    <Text style={styles.buttonText}>Check In</Text>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.button, styles.cancelButton]}
-                    onPress={() => handleCancelReservation(selected!.id)} 
-                  >
-                    <Text style={styles.cancelText}>Cancel Reservation</Text>
-                  </Pressable>
-                </>
-              )}
-              
               {/* Logic for an AVAILABLE machine, but user is checked into *another* machine */}
-              {selected?.status === "Available" && hasActiveEngagement() && !isUserCheckedIntoMachine(selected!.id) && (
+              {selected?.status === "AVAILABLE" && myEngagement && myEngagement.code !== selected?.code && (
                   <Text style={styles.modalSubtitle}>
-                    You are already using or have reserved equipment.
+                    You are already using equipment.
                   </Text>
               )}
 
 
               {/* Logic for MY CHECKED-IN machine */}
-              {selected?.status === "In Use" &&
-                isUserCheckedIntoMachine(selected!.id) && (
+              {selected?.status === "IN_USE" && selected?.heldByMe && (
                   <Pressable
                     style={styles.button}
-                    onPress={() => handleCheckOut(selected!.id)}
+                    onPress={() => handleCheckOut(selected!.code)}
+                    disabled={busyCode === selected?.code}
                   >
                     <Text style={styles.buttonText}>End Exercise / Check Out</Text>
                   </Pressable>
@@ -242,68 +244,84 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, paddingTop: 60 },
   title: {
     fontSize: 26,
-    color: "#00ff88",
+    color: "#1a1a1a",
     fontWeight: "900",
     textAlign: "center",
     marginBottom: 20,
     textTransform: "capitalize",
   },
   scanButton: {
-    backgroundColor: "#009c67",
+    backgroundColor: "#4CAF50",
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderWidth: 2,
-    borderColor: "#00ff88",
+    borderColor: "#2e7d32",
     marginBottom: 16,
     alignItems: "center",
   },
-  scanButtonText: { color: "#001a14", fontWeight: "900" },
+  scanButtonText: { color: "#ffffff", fontWeight: "900" },
   card: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#003324",
+    backgroundColor: "#ffffff",
     borderRadius: 10,
     padding: 15,
     marginBottom: 12,
-    elevation: 5,
+    elevation: 3,
     gap: 15,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
-  available: { borderColor: "#00ff88", borderWidth: 2 },
-  inUse: { borderColor: "#ff6b00", borderWidth: 2 },
-  reserved: { borderColor: "#ff0066", borderWidth: 2 },
-  myMachine: { borderColor: "#00ff88", borderWidth: 3, backgroundColor: "#009c67" },
+  available: { borderColor: "#4CAF50", borderWidth: 2 },
+  inUse: { borderColor: "#FF9800", borderWidth: 2 },
+  reserved: { borderColor: "#F44336", borderWidth: 2 },
+  myMachine: { borderColor: "#4CAF50", borderWidth: 3, backgroundColor: "#E8F5E9" },
   disabled: { opacity: 0.5 },
-  machineText: { color: "#00ff88", fontWeight: "700", fontSize: 18 },
-  statusText: { color: "#ccc", fontSize: 14 },
+  machineText: { color: "#4CAF50", fontWeight: "700", fontSize: 18 },
+  statusText: { color: "#666", fontSize: 14 },
 
   // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "flex-end",
   },
   modalContainer: {
-    backgroundColor: "#001a14",
+    backgroundColor: "#ffffff",
     padding: 25,
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
     alignItems: "center",
     borderTopWidth: 3,
-    borderColor: "#00ff88",
+    borderColor: "#4CAF50",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
   },
-  modalTitle: { color: "#00ff88", fontSize: 24, fontWeight: "900", marginBottom: 10 },
-  modalSubtitle: { color: "#ccc", fontSize: 16, marginBottom: 20 },
+  modalTitle: { color: "#4CAF50", fontSize: 24, fontWeight: "900", marginBottom: 10 },
+  modalSubtitle: { color: "#666", fontSize: 16, marginBottom: 20 },
   button: {
-    backgroundColor: "#009c67",
+    backgroundColor: "#4CAF50",
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 25,
     marginVertical: 6,
     borderWidth: 2,
-    borderColor: "#00ff88",
+    borderColor: "#2e7d32",
   },
-  buttonText: { color: "#00ff88", fontWeight: "700", fontSize: 16 },
-  cancelButton: { backgroundColor: "#001a14", borderWidth: 2, borderColor: "#00ff88" },
-  cancelText: { color: "#00ff88", fontWeight: "700", fontSize: 16 },
+  buttonText: { color: "#ffffff", fontWeight: "700", fontSize: 16 },
+  cancelButton: { backgroundColor: "#ffffff", borderWidth: 2, borderColor: "#bdbdbd" },
+  cancelText: { color: "#666", fontWeight: "700", fontSize: 16 },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    color: "#4CAF50",
+    fontSize: 16,
+    marginTop: 10,
+  },
 });
