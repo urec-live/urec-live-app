@@ -39,7 +39,7 @@ export default function Dashboard() {
             onPress={() => handlePress(item.route)}
           >
             <Animated.View style={[styles.option, { transform: [{ scale }] }]}>
-              <MaterialCommunityIcons name={item.icon as any} size={36} color="#00ff88" />
+              <MaterialCommunityIcons name={item.icon as any} size={32} color="#4CAF50" />
               <Text style={styles.optionText}>{item.name}</Text>
             </Animated.View>
           </Pressable>
@@ -65,15 +65,16 @@ const styles = StyleSheet.create({
   },
   option: {
     width: 280,
-    paddingVertical: 18,
-    marginVertical: 10,
-    borderRadius: 15,
+    padding: 15,
+    marginVertical: 6,
+    borderRadius: 10,
     backgroundColor: "#ffffff",
     alignItems: "center",
     flexDirection: "row",
-    justifyContent: "center",
-    gap: 10,
+    justifyContent: "flex-start",
+    gap: 15,
     shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
@@ -84,6 +85,5 @@ const styles = StyleSheet.create({
     color: "#4CAF50",
     fontWeight: "700",
     fontSize: 18,
-    textTransform: "capitalize",
   },
 });

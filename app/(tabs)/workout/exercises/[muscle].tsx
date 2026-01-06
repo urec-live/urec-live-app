@@ -125,7 +125,7 @@ export default function MuscleExercises() {
           style={styles.infoButton}
           onPress={() => Linking.openURL(item.youtubeUrl)}
         >
-          <MaterialCommunityIcons name="information" size={24} color="#00ff88" />
+          <MaterialCommunityIcons name="information" size={24} color="#4CAF50" />
         </TouchableOpacity>
       </TouchableOpacity>
     );
@@ -169,26 +169,28 @@ const styles = StyleSheet.create({
     textTransform: "capitalize",
   },
   card: {
-    backgroundColor: "#ffffff",
-    borderRadius: 10,
-    marginBottom: 15,
-    elevation: 3,
     flexDirection: "row",
     alignItems: "center",
-    padding: 10,
-    borderWidth: 1,
-    borderColor: "#4CAF50",
+    backgroundColor: "#ffffff",
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 12,
+    elevation: 3,
+    gap: 15,
     shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
   },
   disabledCard: {
     backgroundColor: "#e0e0e0",
     borderColor: "#bdbdbd",
   },
   cardImage: {
-    width: 80,
-    height: 80,
+    width: 70,
+    height: 70,
     borderRadius: 8,
   },
   imageContainer: {
@@ -207,10 +209,9 @@ const styles = StyleSheet.create({
   },
   cardContent: {
     flex: 1,
-    marginLeft: 15,
   },
   cardText: {
-    color: "#4CAF50",
+    color: "#1a1a1a",
     fontWeight: "700",
     fontSize: 18,
   },

@@ -1,21 +1,10 @@
 import { useRouter } from "expo-router";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View, RefreshControl, ActivityIndicator } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import { MachineDto, machineAPI } from "@/services/machineAPI";
 import websocketService from "@/services/websocketService";
 
-const getStatusColor = (status: string) => {
-  const upperStatus = status.toUpperCase();
-  switch (upperStatus) {
-    case "AVAILABLE":
-      return "#4CAF50"; // green
-    case "IN USE":
-    case "IN_USE":
-      return "#FF5722"; // red-orange
-    default:
-      return "#999";
-  }
-};
 
 export default function Equipment() {
   const router = useRouter();
@@ -26,15 +15,9 @@ export default function Equipment() {
   const loadMachines = async (isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true);
-      console.log('Fetching machines from API...');
+      console.log('[Equipment] Fetching machines from API...');
       const res = await machineAPI.listAll();
-      console.log('Machines received:', res);
-      console.log('Number of machines:', res.length);
-      if (res.length > 0) {
-        console.log('First machine:', JSON.stringify(res[0]));
-        console.log('First machine status:', res[0].status);
-        console.log('Status color:', getStatusColor(res[0].status));
-      }
+      console.log('[Equipment] Machines received:', res.length);
       setMachines(res);
     } catch (error) {
       console.error("Error loading machines:", error);
@@ -107,21 +90,55 @@ export default function Equipment() {
             titleColor="#4CAF50"
           />
         }
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            // ✅ Type-safe navigation to dynamic route
-            onPress={() => router.push({ pathname: "/machine/[id]", params: { id: String(item.id) } })}
-            activeOpacity={0.85}
-            style={[styles.card, { borderLeftColor: getStatusColor(item.status) }]}
-          >
-            <View style={styles.cardTop}>
-              <Text style={styles.name}>{item.name}</Text>
-              <Text style={[styles.status, { color: getStatusColor(item.status) }]}>
-                {item.status}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        )}
+        renderItem={({ item }) => {
+          const statusUpper = item.status.toUpperCase();
+          const isAvailable = statusUpper === "AVAILABLE";
+          
+          return (
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: "/machine/[id]", params: { id: String(item.id) } })}
+              activeOpacity={0.7}
+              style={[
+                styles.card,
+                isAvailable ? styles.availableCard : styles.inUseCard,
+              ]}
+            >
+              <View style={[
+                styles.iconContainer,
+                isAvailable ? styles.availableIconBg : styles.inUseIconBg
+              ]}>
+                <MaterialCommunityIcons
+                  name="dumbbell"
+                  size={28}
+                  color={isAvailable ? "#4CAF50" : "#FF5722"}
+                />
+              </View>
+              <View style={styles.cardContent}>
+                <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+                <View style={[
+                  styles.statusBadge,
+                  isAvailable ? styles.availableBadge : styles.inUseBadge
+                ]}>
+                  <View style={[
+                    styles.statusDot,
+                    isAvailable ? styles.availableDot : styles.inUseDot
+                  ]} />
+                  <Text style={[
+                    styles.statusText,
+                    isAvailable ? styles.availableText : styles.inUseText
+                  ]}>
+                    {isAvailable ? "Available" : "In Use"}
+                  </Text>
+                </View>
+              </View>
+              <MaterialCommunityIcons
+                name="chevron-right"
+                size={24}
+                color="#bdbdbd"
+              />
+            </TouchableOpacity>
+          );
+        }}
       />
     </View>
   );
@@ -144,21 +161,91 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   card: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#ffffff",
-    padding: 18,
-    marginBottom: 15,
-    borderRadius: 10,
-    borderLeftWidth: 6,
+    padding: 16,
+    marginBottom: 12,
+    borderRadius: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
   },
-  cardTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  availableCard: {
+    backgroundColor: "#f1f8f4",
+    borderLeftWidth: 4,
+    borderLeftColor: "#4CAF50",
+  },
+  inUseCard: {
+    backgroundColor: "#fff5f2",
+    borderLeftWidth: 4,
+    borderLeftColor: "#FF5722",
+  },
+  iconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    justifyContent: "center",
     alignItems: "center",
+    marginRight: 16,
+  },
+  availableIconBg: {
+    backgroundColor: "#e8f5e9",
+  },
+  inUseIconBg: {
+    backgroundColor: "#ffebee",
+  },
+  cardContent: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  name: {
+    color: "#1a1a1a",
+    fontSize: 17,
+    fontWeight: "700",
+    marginBottom: 6,
+  },
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 6,
+  },
+  availableBadge: {
+    backgroundColor: "#e8f5e9",
+  },
+  inUseBadge: {
+    backgroundColor: "#ffebee",
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  availableDot: {
+    backgroundColor: "#4CAF50",
+  },
+  inUseDot: {
+    backgroundColor: "#FF5722",
+  },
+  statusText: {
+    fontSize: 13,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  availableText: {
+    color: "#2e7d32",
+  },
+  inUseText: {
+    color: "#d32f2f",
   },
   scanButton: {
     backgroundColor: "#4CAF50",
@@ -170,16 +257,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     alignItems: "center",
   },
-  scanButtonText: { color: "#ffffff", fontWeight: "900", fontSize: 14 },
-  name: {
-    color: "#1a1a1a",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  status: {
-    fontWeight: "800",
+  scanButtonText: {
+    color: "#ffffff",
+    fontWeight: "900",
     fontSize: 14,
-    textTransform: "uppercase",
   },
   centered: {
     justifyContent: "center",

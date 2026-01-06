@@ -1,6 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useState } from "react";
 // UPDATED: Using the path alias '@/' for stable imports
 import { exercisesData } from "@/constants/equipment-data";
@@ -61,8 +62,11 @@ export default function StrengthWorkout() {
                   })
                 }
               >
-                <Text style={styles.cardText}>{item}</Text>
-                <Text style={styles.countText}>{availableCount} exercises available</Text>
+                <MaterialCommunityIcons name="arm-flex" size={32} color="#4CAF50" />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardText}>{item}</Text>
+                  <Text style={styles.countText}>{availableCount} exercises available</Text>
+                </View>
               </TouchableOpacity>
             );
           }}
@@ -82,20 +86,21 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   card: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#ffffff",
     borderRadius: 10,
     padding: 15,
-    marginBottom: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    marginBottom: 12,
+    elevation: 3,
+    gap: 15,
     shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3,
     borderWidth: 1,
     borderColor: "#e0e0e0",
   },
-  cardText: { color: "#4CAF50", fontWeight: "700", fontSize: 18 },
+  cardText: { color: "#1a1a1a", fontWeight: "700", fontSize: 18 },
   countText: { color: "#666", fontSize: 14 },
 });

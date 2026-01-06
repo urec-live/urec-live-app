@@ -178,10 +178,10 @@ export default function EquipmentAvailability() {
                   size={32}
                   color={
                     item.status === "AVAILABLE"
-                      ? "#00FF7F"
+                      ? "#4CAF50"
                       : item.heldByMe
-                      ? "#00FF7F"
-                      : "#FFD700"
+                      ? "#4CAF50"
+                      : "#FF5722"
                   }
                 />
                 <View style={{ flex: 1 }}>
@@ -287,11 +287,14 @@ const styles = StyleSheet.create({
     elevation: 3,
     gap: 15,
     shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
   },
   available: { borderColor: "#4CAF50", borderWidth: 2 },
-  inUse: { borderColor: "#FF9800", borderWidth: 2 },
+  inUse: { borderColor: "#FF5722", borderWidth: 2 },
   reserved: { borderColor: "#F44336", borderWidth: 2 },
   myMachine: { borderColor: "#4CAF50", borderWidth: 3, backgroundColor: "#E8F5E9" },
   disabled: { opacity: 0.5 },
