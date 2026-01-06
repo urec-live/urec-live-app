@@ -1,6 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useState } from "react";
 // UPDATED: Using the path alias '@/' for stable imports
 import { exercisesData } from "@/constants/equipment-data";
 
@@ -12,6 +13,14 @@ const muscles = [
 
 export default function StrengthWorkout() {
   const router = useRouter();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    // Simulate refresh - in a real app, you might refetch machine data from API
+    await new Promise(resolve => setTimeout(resolve, 500));
+    setRefreshing(false);
+  };
 
   const getAvailableExercisesCount = (muscle: string) => {
     const exercises = exercisesData[muscle] || [];
@@ -28,6 +37,17 @@ export default function StrengthWorkout() {
         <FlatList
           data={muscles}
           keyExtractor={(item) => item}          contentContainerStyle={{ paddingRight: 8 }}          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#4CAF50"
+              colors={["#4CAF50", "#66BB6A", "#81C784"]}
+              progressBackgroundColor="#ffffff"
+              title="Pull to refresh"
+              titleColor="#4CAF50"
+            />
+          }
           renderItem={({ item }) => {
             const availableCount = getAvailableExercisesCount(item);
             return (

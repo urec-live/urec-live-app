@@ -16,6 +16,7 @@ import {
 import { ExerciseInfo, exercisesData } from "@/constants/equipment-data";
 import { useWorkout } from "@/contexts/WorkoutContext";
 import { machineAPI } from "@/services/machineAPI";
+import websocketService from "@/services/websocketService";
 
 export default function MuscleExercises() {
   const { muscle } = useLocalSearchParams();
@@ -51,8 +52,17 @@ export default function MuscleExercises() {
       await loadAvailability();
     };
     load();
+
+    // Subscribe to WebSocket updates
+    const unsubscribe = websocketService.subscribe((updatedMachine) => {
+      console.log('[Exercise List] Received machine update:', updatedMachine);
+      // Reload availability when any machine is updated
+      loadAvailability();
+    });
+
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [group, exercises]);
 

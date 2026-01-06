@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View, RefreshControl, ActivityIndicator } from "react-native";
 import React, { useEffect, useState } from "react";
 import { MachineDto, machineAPI } from "@/services/machineAPI";
+import websocketService from "@/services/websocketService";
 
 const getStatusColor = (status: string) => {
   const upperStatus = status.toUpperCase();
@@ -47,6 +48,21 @@ export default function Equipment() {
 
   useEffect(() => {
     loadMachines();
+
+    // Connect to WebSocket for real-time updates
+    websocketService.connect();
+    
+    const unsubscribe = websocketService.subscribe((updatedMachine) => {
+      console.log('[Equipment] Received machine update via WebSocket:', updatedMachine);
+      setMachines(prev => 
+        prev.map(m => m.id === updatedMachine.id ? updatedMachine : m)
+      );
+    });
+
+    // Cleanup on unmount
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const onRefresh = () => {
