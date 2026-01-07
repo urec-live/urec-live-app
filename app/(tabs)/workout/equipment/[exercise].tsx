@@ -135,7 +135,8 @@ export default function EquipmentAvailability() {
         <FlatList
           data={machines}
           keyExtractor={(item) => item.code}
-          contentContainerStyle={{ paddingRight: 8 }}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ margin: 4, flexGrow: 1 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -334,9 +335,9 @@ const styles = StyleSheet.create({
   cancelButton: { backgroundColor: "#ffffff", borderWidth: 2, borderColor: "#bdbdbd" },
   cancelText: { color: "#666", fontWeight: "700", fontSize: 16 },
   loadingContainer: {
-    flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    minHeight: 200,
   },
   loadingText: {
     color: "#4CAF50",

@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { machineAPI, Machine } from "@/services/machineAPI";
+import { getMachineExercises } from "@/constants/equipment-data";
 
 export default function MachineDetails() {
   const { id } = useLocalSearchParams();
@@ -54,7 +55,7 @@ export default function MachineDetails() {
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#00ff88" />
+        <ActivityIndicator size="large" color="#4CAF50" />
         <Text style={styles.loadingText}>Loading machine details...</Text>
       </View>
     );
@@ -84,25 +85,26 @@ export default function MachineDetails() {
         {status.toUpperCase()}
       </Text>
 
-      {machine.exercise && (
-        <Text style={styles.exercise}>Exercise: {machine.exercise}</Text>
-      )}
+      <TouchableOpacity style={styles.scanButton} onPress={() => router.push("/scan")}>
+        <Text style={styles.scanButtonText}>Scan QR to Check In</Text>
+      </TouchableOpacity>
+
+      {machine.exercise && (() => {
+        const machineExercises = getMachineExercises(machine.exercise);
+        return machineExercises ? (
+          <View style={styles.exercisesContainer}>
+            <Text style={styles.muscleGroupTitle}>MUSCLE GROUP</Text>
+            <Text style={styles.muscleGroupText}>{machineExercises.muscleGroup}</Text>
+            
+            <Text style={styles.relatedExercisesTitle}>RELATED EXERCISES</Text>
+            <Text style={styles.relatedExercisesText}>
+              {machineExercises.exercises.join(", ")}
+            </Text>
+          </View>
+        ) : null;
+      })()}
 
       <View style={styles.buttons}>
-        {statusLower === "available" && (
-          <TouchableOpacity
-            style={[styles.button, styles.goldButton, updating && styles.buttonDisabled]}
-            onPress={() => handleAction("checkin")}
-            disabled={updating}
-          >
-            {updating ? (
-              <ActivityIndicator color="#000" />
-            ) : (
-              <Text style={styles.buttonText}>CHECK IN</Text>
-            )}
-          </TouchableOpacity>
-        )}
-
         {statusLower === "in use" && (
           <TouchableOpacity
             style={[styles.button, styles.goldButton, updating && styles.buttonDisabled]}
@@ -125,9 +127,9 @@ const getStatusColor = (status: string) => {
   const statusLower = status.toLowerCase();
   switch (statusLower) {
     case "available":
-      return "#00FF7F";
+      return "#4CAF50";
     case "in use":
-      return "#FF3B30";
+      return "#FF5722";
     default:
       return "#999";
   }
@@ -206,5 +208,60 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: "center",
     marginBottom: 30,
+  },
+  exercisesContainer: {
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 30,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  muscleGroupTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#666",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  muscleGroupText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#4CAF50",
+    marginBottom: 16,
+  },
+  relatedExercisesTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#666",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  relatedExercisesText: {
+    fontSize: 14,
+    color: "#1a1a1a",
+    lineHeight: 20,
+  },
+  scanButton: {
+    backgroundColor: "#4CAF50",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderWidth: 2,
+    borderColor: "#2e7d32",
+    marginBottom: 20,
+    alignItems: "center",
+  },
+  scanButtonText: {
+    color: "#ffffff",
+    fontWeight: "900",
+    fontSize: 14,
   },
 });

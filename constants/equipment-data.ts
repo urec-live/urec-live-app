@@ -89,3 +89,19 @@ export const getMachinesForExercise = (exerciseName: string): Machine[] => {
         { id: `${exerciseName} Machine 3`, status: "Reserved" },
       ];
   };
+
+// Function to get muscle group and exercises for a machine
+export const getMachineExercises = (exerciseName: string): { muscleGroup: string; exercises: string[] } | null => {
+  for (const muscleGroup in exercisesData) {
+    const exercises = exercisesData[muscleGroup];
+    const matchingExercise = exercises.find(ex => ex.name === exerciseName);
+    if (matchingExercise) {
+      // Return the muscle group and all exercises in that group
+      return {
+        muscleGroup,
+        exercises: exercises.map(ex => ex.name)
+      };
+    }
+  }
+  return null;
+};

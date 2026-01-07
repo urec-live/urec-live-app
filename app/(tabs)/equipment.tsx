@@ -4,6 +4,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import { MachineDto, machineAPI } from "@/services/machineAPI";
 import websocketService from "@/services/websocketService";
+import { getMachineExercises } from "@/constants/equipment-data";
 
 
 export default function Equipment() {
@@ -93,6 +94,7 @@ export default function Equipment() {
         renderItem={({ item }) => {
           const statusUpper = item.status.toUpperCase();
           const isAvailable = statusUpper === "AVAILABLE";
+          const machineExercises = getMachineExercises(item.exercise);
           
           return (
             <TouchableOpacity
@@ -130,6 +132,17 @@ export default function Equipment() {
                     {isAvailable ? "Available" : "In Use"}
                   </Text>
                 </View>
+                {machineExercises && (
+                  <View style={styles.exercisesContainer}>
+                    <Text style={styles.muscleGroupText}>
+                      {machineExercises.muscleGroup}
+                    </Text>
+                    <Text style={styles.exercisesText} numberOfLines={2}>
+                      {machineExercises.exercises.slice(0, 3).join(", ")}
+                      {machineExercises.exercises.length > 3 && "..."}
+                    </Text>
+                  </View>
+                )}
               </View>
               <MaterialCommunityIcons
                 name="chevron-right"
@@ -246,6 +259,22 @@ const styles = StyleSheet.create({
   },
   inUseText: {
     color: "#d32f2f",
+  },
+  exercisesContainer: {
+    marginTop: 8,
+  },
+  muscleGroupText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#666",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  exercisesText: {
+    fontSize: 13,
+    color: "#888",
+    lineHeight: 16,
   },
   scanButton: {
     backgroundColor: "#4CAF50",
