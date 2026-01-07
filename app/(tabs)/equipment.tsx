@@ -72,7 +72,7 @@ export default function Equipment() {
       <FlatList
         data={machines}
         keyExtractor={(item) => item.code}
-        contentContainerStyle={{ paddingRight: 8 }}
+        contentContainerStyle={{ margin: 0 }}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={() => (
           <View style={styles.emptyContainer}>
@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 4,
     gap: 6,
   },
   availableBadge: {
