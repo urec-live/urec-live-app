@@ -1,34 +1,67 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useState } from "react";
-// UPDATED: Using the path alias '@/' for stable imports
-import { exercisesData } from "@/constants/equipment-data";
-
-const muscles = [
-  "Chest", "Shoulders", "Triceps", "Back", "Biceps",
-  "Quads", "Hamstrings", "Calves", "Glutes",
-  "Forearms", "Abs", "Core",
-];
+import { useState, useEffect } from "react";
+import { machineAPI } from "@/services/machineAPI";
 
 export default function StrengthWorkout() {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [muscleGroups, setMuscleGroups] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchMuscleGroups = async () => {
+    try {
+      setError(null);
+      const groups = await machineAPI.getMuscleGroups();
+      setMuscleGroups(groups);
+    } catch (err) {
+      console.error('Failed to fetch muscle groups:', err);
+      setError('Failed to load muscle groups');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMuscleGroups();
+  }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    // Simulate refresh - in a real app, you might refetch machine data from API
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await fetchMuscleGroups();
     setRefreshing(false);
   };
 
-  const getAvailableExercisesCount = (muscle: string) => {
-    const exercises = exercisesData[muscle] || [];
-    return exercises.filter(exercise =>
-      exercise.machines.some(machine => machine.status === "Available")
-    ).length;
-  };
+  if (loading) {
+    return (
+      <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color="#4CAF50" />
+          <Text style={{ marginTop: 10, color: '#666' }}>Loading muscle groups...</Text>
+        </View>
+      </LinearGradient>
+    );
+  }
+
+  if (error) {
+    return (
+      <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+          <MaterialCommunityIcons name="alert-circle" size={48} color="#f44336" />
+          <Text style={{ marginTop: 10, color: '#f44336', fontSize: 16 }}>{error}</Text>
+          <TouchableOpacity 
+            style={{ marginTop: 20, backgroundColor: '#4CAF50', padding: 12, borderRadius: 8 }}
+            onPress={fetchMuscleGroups}
+          >
+            <Text style={{ color: '#fff', fontWeight: '600' }}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
+    );
+  }
 
   return (
     <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
@@ -36,8 +69,10 @@ export default function StrengthWorkout() {
         <Text style={styles.title}>SELECT MUSCLE GROUP</Text>
 
         <FlatList
-          data={muscles}
-          keyExtractor={(item) => item}          contentContainerStyle={{ paddingRight: 8 }}          showsVerticalScrollIndicator={false}
+          data={muscleGroups}
+          keyExtractor={(item) => item}
+          contentContainerStyle={{ paddingRight: 8 }}
+          showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -49,27 +84,22 @@ export default function StrengthWorkout() {
               titleColor="#4CAF50"
             />
           }
-          renderItem={({ item }) => {
-            const availableCount = getAvailableExercisesCount(item);
-            return (
-              <TouchableOpacity
-                style={styles.card}
-                // Now navigating within the tabs stack
-                onPress={() =>
-                  router.push({
-                    pathname: "/workout/exercises/[muscle]",
-                    params: { muscle: item },
-                  })
-                }
-              >
-                <MaterialCommunityIcons name="arm-flex" size={32} color="#4CAF50" />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.cardText}>{item}</Text>
-                  <Text style={styles.countText}>{availableCount} exercises available</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          }}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.card}
+              onPress={() =>
+                router.push({
+                  pathname: "/workout/exercises/[muscle]",
+                  params: { muscle: item },
+                })
+              }
+            >
+              <MaterialCommunityIcons name="arm-flex" size={32} color="#4CAF50" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardText}>{item}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
         />
       </View>
     </LinearGradient>

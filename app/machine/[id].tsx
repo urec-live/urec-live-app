@@ -1,8 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { machineAPI, Machine } from "@/services/machineAPI";
-import { getMachineExercises } from "@/constants/equipment-data";
+import { machineAPI, Machine, Exercise } from "@/services/machineAPI";
 
 export default function MachineDetails() {
   const { id } = useLocalSearchParams();
@@ -11,6 +10,7 @@ export default function MachineDetails() {
   const [status, setStatus] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
 
   useEffect(() => {
     loadMachine();
@@ -22,6 +22,15 @@ export default function MachineDetails() {
       const data = await machineAPI.getMachineById(Number(id));
       setMachine(data);
       setStatus(data.status);
+      
+      // Fetch exercises for this machine
+      try {
+        const machineExercises = await machineAPI.getExercisesByEquipmentId(Number(id));
+        setExercises(machineExercises);
+      } catch (err) {
+        console.error("Error loading exercises:", err);
+        setExercises([]);
+      }
     } catch (error) {
       console.error("Error loading machine:", error);
       Alert.alert("Error", "Failed to load machine details");
@@ -89,20 +98,19 @@ export default function MachineDetails() {
         <Text style={styles.scanButtonText}>Scan QR to Check In</Text>
       </TouchableOpacity>
 
-      {machine.exercise && (() => {
-        const machineExercises = getMachineExercises(machine.exercise);
-        return machineExercises ? (
-          <View style={styles.exercisesContainer}>
-            <Text style={styles.muscleGroupTitle}>MUSCLE GROUP</Text>
-            <Text style={styles.muscleGroupText}>{machineExercises.muscleGroup}</Text>
-            
-            <Text style={styles.relatedExercisesTitle}>RELATED EXERCISES</Text>
-            <Text style={styles.relatedExercisesText}>
-              {machineExercises.exercises.join(", ")}
-            </Text>
-          </View>
-        ) : null;
-      })()}
+      {exercises.length > 0 && (
+        <View style={styles.exercisesContainer}>
+          <Text style={styles.muscleGroupTitle}>MUSCLE GROUPS</Text>
+          <Text style={styles.muscleGroupText}>
+            {[...new Set(exercises.map(e => e.muscleGroup))].join(", ")}
+          </Text>
+          
+          <Text style={styles.relatedExercisesTitle}>EXERCISES</Text>
+          <Text style={styles.relatedExercisesText}>
+            {exercises.map(e => e.name).join(", ")}
+          </Text>
+        </View>
+      )}
 
       <View style={styles.buttons}>
         {statusLower === "in use" && (

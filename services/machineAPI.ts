@@ -16,6 +16,13 @@ export interface Machine {
   exercise: string;
 }
 
+export interface Exercise {
+  id: number;
+  name: string;
+  muscleGroup: string;
+  gifUrl: string;
+}
+
 export const machineAPI = {
   // Get all machines
   listAll: async (): Promise<MachineDto[]> => {
@@ -82,6 +89,30 @@ export const machineAPI = {
   // Update status (alternative method name)
   updateStatus: async (id: number, status: string): Promise<MachineDto> => {
     const response = await api.put(`/machines/${id}/status`, { status });
+    return response.data;
+  },
+
+  // Get all muscle groups
+  getMuscleGroups: async (): Promise<string[]> => {
+    const response = await api.get('/machines/muscle-groups');
+    return response.data;
+  },
+
+  // Get exercises by muscle group
+  getExercisesByMuscleGroup: async (muscleGroup: string): Promise<Exercise[]> => {
+    const response = await api.get(`/machines/exercises/muscle/${muscleGroup}`);
+    return response.data;
+  },
+
+  // Get exercises for a specific equipment by ID
+  getExercisesByEquipmentId: async (id: number): Promise<Exercise[]> => {
+    const response = await api.get(`/machines/${id}/exercises`);
+    return response.data;
+  },
+
+  // Get exercises for a specific equipment by code
+  getExercisesByEquipmentCode: async (code: string): Promise<Exercise[]> => {
+    const response = await api.get(`/machines/code/${code}/exercises`);
     return response.data;
   },
 };

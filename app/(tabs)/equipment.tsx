@@ -2,9 +2,8 @@ import { useRouter } from "expo-router";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View, RefreshControl, ActivityIndicator } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { MachineDto, machineAPI } from "@/services/machineAPI";
+import { MachineDto, machineAPI, Exercise } from "@/services/machineAPI";
 import websocketService from "@/services/websocketService";
-import { getMachineExercises } from "@/constants/equipment-data";
 
 
 export default function Equipment() {
@@ -12,6 +11,7 @@ export default function Equipment() {
   const [machines, setMachines] = useState<MachineDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [exercisesByEquipment, setExercisesByEquipment] = useState<Record<number, Exercise[]>>({});
 
   const loadMachines = async (isRefresh = false) => {
     try {
@@ -20,6 +20,21 @@ export default function Equipment() {
       const res = await machineAPI.listAll();
       console.log('[Equipment] Machines received:', res.length);
       setMachines(res);
+      
+      // Fetch exercises for each machine
+      const exercisesMap: Record<number, Exercise[]> = {};
+      await Promise.all(
+        res.map(async (machine) => {
+          try {
+            const exercises = await machineAPI.getExercisesByEquipmentId(machine.id);
+            exercisesMap[machine.id] = exercises;
+          } catch (err) {
+            console.error(`Error fetching exercises for machine ${machine.id}:`, err);
+            exercisesMap[machine.id] = [];
+          }
+        })
+      );
+      setExercisesByEquipment(exercisesMap);
     } catch (error) {
       console.error("Error loading machines:", error);
       console.error("Error details:", JSON.stringify(error));
@@ -94,7 +109,8 @@ export default function Equipment() {
         renderItem={({ item }) => {
           const statusUpper = item.status.toUpperCase();
           const isAvailable = statusUpper === "AVAILABLE";
-          const machineExercises = getMachineExercises(item.exercise);
+          const exercises = exercisesByEquipment[item.id] || [];
+          const muscleGroups = [...new Set(exercises.map(e => e.muscleGroup))].join(", ");
           
           return (
             <TouchableOpacity
@@ -132,14 +148,16 @@ export default function Equipment() {
                     {isAvailable ? "Available" : "In Use"}
                   </Text>
                 </View>
-                {machineExercises && (
+                {exercises.length > 0 && (
                   <View style={styles.exercisesContainer}>
-                    <Text style={styles.muscleGroupText}>
-                      {machineExercises.muscleGroup}
-                    </Text>
+                    {muscleGroups && (
+                      <Text style={styles.muscleGroupText}>
+                        {muscleGroups}
+                      </Text>
+                    )}
                     <Text style={styles.exercisesText} numberOfLines={2}>
-                      {machineExercises.exercises.slice(0, 3).join(", ")}
-                      {machineExercises.exercises.length > 3 && "..."}
+                      {exercises.slice(0, 3).map(e => e.name).join(", ")}
+                      {exercises.length > 3 && "..."}
                     </Text>
                   </View>
                 )}

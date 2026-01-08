@@ -28,7 +28,7 @@ export default function WorkoutSummary() {
 
       <TouchableOpacity
         style={[styles.button, styles.goldButton]}
-        onPress={() => router.push("/dashboard")}
+        onPress={() => router.push("/(tabs)")}
         activeOpacity={0.8}
       >
         <Text style={styles.buttonText}>FINISH WORKOUT</Text>
