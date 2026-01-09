@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { workoutAPI } from "@/services/workoutAPI";
 
 export interface WorkoutSession {
   exerciseName: string;
@@ -8,6 +10,13 @@ export interface WorkoutSession {
   endTime?: number;
 }
 
+export interface CheckedInMachine {
+  exerciseName: string;
+  machineId: string;
+  muscleGroup: string;
+  userId: string;
+}
+
 export interface DailyWorkout {
   date: string;
   sessions: WorkoutSession[];
@@ -15,15 +24,23 @@ export interface DailyWorkout {
 }
 
 interface WorkoutContextType {
+  currentUserId: string;
+  checkedInMachines: Map<string, CheckedInMachine>;
   currentSession: WorkoutSession | null;
   exerciseStartTime: number | null;
   restStartTime: number | null;
   todayWorkouts: WorkoutSession[];
   workoutHistory: DailyWorkout[];
+  reservedMachineId: string | null;
   checkIn: (exerciseName: string, machineId: string, muscleGroup: string) => void;
-  checkOut: () => void;
+  checkOut: () => Promise<void>;
   startRest: () => void;
   endRest: () => void;
+  reserveMachine: (machineId: string) => void;
+  cancelReservation: () => void;
+  hasActiveEngagement: () => boolean;
+  isUserCheckedIntoMachine: (machineId: string) => boolean;
+  isMachineInUseByOther: (machineId: string) => boolean;
 }
 
 const WorkoutContext = createContext<WorkoutContextType | undefined>(undefined);
@@ -31,6 +48,18 @@ const WorkoutContext = createContext<WorkoutContextType | undefined>(undefined);
 export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }: { children: React.ReactNode }) => {
+  const { user } = useAuth();
+  // Mock current user ID (in real app, get from auth)
+  const currentUserId = "user123";
+
+  // Track which machines are checked in by which users
+  const [checkedInMachines, setCheckedInMachines] = useState<
+    Map<string, CheckedInMachine>
+  >(new Map());
+
+  // Current active reservation machine ID
+  const [reservedMachineId, setReservedMachineId] = useState<string | null>(null);
+
   // Current active session
   const [currentSession, setCurrentSession] = useState<WorkoutSession | null>(
     null
@@ -45,6 +74,30 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Historical workouts
   const [workoutHistory, setWorkoutHistory] = useState<DailyWorkout[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  const getTodayKey = () => new Date().toISOString().split("T")[0];
+
+  const refreshHistory = async () => {
+    if (!user) {
+      setWorkoutHistory([]);
+      setTodayWorkouts([]);
+      return;
+    }
+
+    try {
+      setLoadingHistory(true);
+      const history = await workoutAPI.getHistory(28);
+      setWorkoutHistory(history);
+      const todayKey = getTodayKey();
+      const today = history.find((day) => day.date === todayKey);
+      setTodayWorkouts(today?.sessions || []);
+    } catch (error) {
+      console.error("Failed to load workout history:", error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
 
   const checkIn = (
     exerciseName: string,
@@ -61,9 +114,22 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
 
     setCurrentSession(session);
     setExerciseStartTime(now);
+    setReservedMachineId(null); // Clear reservation on check-in
+
+    // Mark machine as in use by this user
+    setCheckedInMachines((prev) => {
+      const updated = new Map(prev);
+      updated.set(machineId, {
+        exerciseName,
+        machineId,
+        muscleGroup,
+        userId: currentUserId,
+      });
+      return updated;
+    });
   };
 
-  const checkOut = () => {
+  const checkOut = async () => {
     if (currentSession) {
       const completedSession: WorkoutSession = {
         ...currentSession,
@@ -73,6 +139,13 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
       // Add to today's workouts
       setTodayWorkouts((prev) => [...prev, completedSession]);
 
+      // Remove from checked in machines
+      setCheckedInMachines((prev) => {
+        const updated = new Map(prev);
+        updated.delete(currentSession.machineId);
+        return updated;
+      });
+
       // Update history
       updateWorkoutHistory(completedSession);
 
@@ -80,11 +153,27 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
       setCurrentSession(null);
       setExerciseStartTime(null);
       setRestStartTime(null);
+      setReservedMachineId(null);
+
+      if (user) {
+        try {
+          await workoutAPI.addSession({
+            exerciseName: completedSession.exerciseName,
+            machineId: completedSession.machineId,
+            muscleGroup: completedSession.muscleGroup,
+            startTime: completedSession.startTime,
+            endTime: completedSession.endTime || Date.now(),
+          });
+          await refreshHistory();
+        } catch (error) {
+          console.error("Failed to save workout session:", error);
+        }
+      }
     }
   };
 
   const updateWorkoutHistory = (session: WorkoutSession) => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = getTodayKey();
 
     setWorkoutHistory((prev) => {
       const existingDayIndex = prev.findIndex((day) => day.date === today);
@@ -118,17 +207,53 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
     setRestStartTime(null);
   };
 
+  // --- NEW FUNCTIONS ---
+  const reserveMachine = (machineId: string) => {
+    setReservedMachineId(machineId);
+  };
+
+  const cancelReservation = () => {
+    setReservedMachineId(null);
+  };
+  
+  const hasActiveEngagement = (): boolean => {
+    return currentSession !== null || reservedMachineId !== null;
+  };
+  // --- END NEW FUNCTIONS ---
+
+  const isUserCheckedIntoMachine = (machineId: string): boolean => {
+    const machine = checkedInMachines.get(machineId);
+    return machine?.userId === currentUserId;
+  };
+
+  const isMachineInUseByOther = (machineId: string): boolean => {
+    const machine = checkedInMachines.get(machineId);
+    return machine !== undefined && machine.userId !== currentUserId;
+  };
+
   const value: WorkoutContextType = {
+    currentUserId,
+    checkedInMachines,
     currentSession,
     exerciseStartTime,
     restStartTime,
     todayWorkouts,
     workoutHistory,
+    reservedMachineId,
+    reserveMachine,
+    cancelReservation,
+    hasActiveEngagement,
     checkIn,
     checkOut,
     startRest,
     endRest,
+    isUserCheckedIntoMachine,
+    isMachineInUseByOther,
   };
+
+  useEffect(() => {
+    refreshHistory();
+  }, [user]);
 
   return (
     <WorkoutContext.Provider value={value}>{children}</WorkoutContext.Provider>

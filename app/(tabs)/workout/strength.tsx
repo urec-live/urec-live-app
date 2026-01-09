@@ -3,10 +3,12 @@ import { useRouter } from "expo-router";
 import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useState, useEffect } from "react";
+import { useSplit } from "@/contexts/SplitContext";
 import { machineAPI } from "@/services/machineAPI";
 
 export default function StrengthWorkout() {
   const router = useRouter();
+  const { todayGroups, todayStrengthGroups } = useSplit();
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [muscleGroups, setMuscleGroups] = useState<string[]>([]);
@@ -67,9 +69,20 @@ export default function StrengthWorkout() {
     <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
       <View style={styles.container}>
         <Text style={styles.title}>SELECT MUSCLE GROUP</Text>
+        {todayGroups.length > 0 ? (
+          <Text style={styles.subTitle}>Today&apos;s focus: {todayGroups.join(", ")}</Text>
+        ) : (
+          <Text style={styles.subTitle}>
+            Looks like a rest day. Update your split if you want a focused plan.
+          </Text>
+        )}
 
         <FlatList
-          data={muscleGroups}
+          data={
+            todayStrengthGroups.length > 0
+              ? muscleGroups.filter((group) => todayStrengthGroups.includes(group))
+              : muscleGroups
+          }
           keyExtractor={(item) => item}
           contentContainerStyle={{ paddingRight: 8 }}
           showsVerticalScrollIndicator={false}
@@ -114,6 +127,11 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textAlign: "center",
     marginBottom: 20,
+  },
+  subTitle: {
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 16,
   },
   card: {
     flexDirection: "row",

@@ -2,18 +2,27 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useSplit } from "@/contexts/SplitContext";
 
 const pilatesOptions = ["Mat Pilates", "Reformer", "Power Pilates"];
 
 export default function PilatesWorkout() {
   const router = useRouter();
+  const { todayGroups } = useSplit();
+  const isPilatesDay =
+    todayGroups.length === 0 || todayGroups.includes("Pilates") || todayGroups.includes("Core");
 
   return (
     <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
       <View style={styles.container}>
         <Text style={styles.title}>Select Pilates Type</Text>
+        {!isPilatesDay && (
+          <Text style={styles.subTitle}>
+            Pilates isn&apos;t scheduled today. Update your split to focus on core work.
+          </Text>
+        )}
         <FlatList
-          data={pilatesOptions}
+          data={isPilatesDay ? pilatesOptions : []}
           keyExtractor={(item) => item}
           contentContainerStyle={{ paddingRight: 8 }}
           showsVerticalScrollIndicator={false}
@@ -41,6 +50,11 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textAlign: "center",
     marginBottom: 20,
+  },
+  subTitle: {
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 16,
   },
   card: {
     flexDirection: "row",

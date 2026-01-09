@@ -9,6 +9,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import ActiveExerciseTracker from '../components/ActiveExerciseTracker';
 import DailyWorkoutSummary from '../components/DailyWorkoutSummary';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { SplitProvider } from '../contexts/SplitContext';
 import { WorkoutProvider } from '../contexts/WorkoutContext';
 
 export const unstable_settings = {
@@ -42,14 +43,16 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <WorkoutProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <SafeAreaProvider>
-            <SafeAreaView style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-              <RootLayoutNav />
-              <StatusBar style="auto" />
-            </SafeAreaView>
-          </SafeAreaProvider>
-        </ThemeProvider>
+        <SplitProvider>
+          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <SafeAreaProvider>
+              <SafeAreaView style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+                <RootLayoutNav />
+                <StatusBar style="auto" />
+              </SafeAreaView>
+            </SafeAreaProvider>
+          </ThemeProvider>
+        </SplitProvider>
       </WorkoutProvider>
     </AuthProvider>
   );
