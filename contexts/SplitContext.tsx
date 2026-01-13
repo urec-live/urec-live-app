@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWorkout } from "@/contexts/WorkoutContext";
@@ -64,6 +65,9 @@ const createEmptySplit = (): WeeklySplit => ({
   Sun: [],
 });
 
+const GUEST_SPLIT_KEY = "guestSplit";
+const GUEST_MODE_KEY = "guestSplitMode";
+
 const expandGroup = (group: string): string[] => {
   switch (group) {
     case "Upper Body":
@@ -119,6 +123,7 @@ interface SplitContextType {
   loading: boolean;
   isRestDay: boolean;
   todayGroups: string[];
+  todayExpandedGroups: string[];
   todayStrengthGroups: string[];
   splitOptions: string[];
   refreshSplit: () => Promise<void>;
@@ -129,7 +134,7 @@ interface SplitContextType {
 const SplitContext = createContext<SplitContextType | undefined>(undefined);
 
 export const SplitProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, isGuest } = useAuth();
   const { workoutHistory } = useWorkout();
   const [mode, setModeState] = useState<SplitMode>("auto");
   const [manualSplit, setManualSplit] = useState<WeeklySplit>(createEmptySplit());
@@ -138,21 +143,38 @@ export const SplitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const autoSplit = useMemo(() => buildAutoSplit(workoutHistory), [workoutHistory]);
   const todayKey = dayIndexToKey[new Date().getDay()];
   const todayGroups = (mode === "manual" ? manualSplit : autoSplit)[todayKey] || [];
-  const todayStrengthGroups = todayGroups
-    .flatMap(expandGroup)
-    .filter((group) => STRENGTH_GROUPS.includes(group));
+  const todayExpandedGroups = Array.from(new Set(todayGroups.flatMap(expandGroup)));
+  const todayStrengthGroups = todayExpandedGroups.filter((group) =>
+    STRENGTH_GROUPS.includes(group)
+  );
   const isRestDay = todayGroups.length === 0;
 
   const refreshSplit = async () => {
-    if (!user) {
-      setModeState("auto");
-      setManualSplit(createEmptySplit());
-      setLoading(false);
-      return;
-    }
-
     try {
       setLoading(true);
+      if (isGuest) {
+        const storedMode = await AsyncStorage.getItem(GUEST_MODE_KEY);
+        const storedSplit = await AsyncStorage.getItem(GUEST_SPLIT_KEY);
+        const nextMode = storedMode === "auto" ? "auto" : "manual";
+        setModeState(nextMode);
+        if (storedSplit) {
+          try {
+            setManualSplit(JSON.parse(storedSplit));
+          } catch (parseError) {
+            console.error("Failed to parse guest split:", parseError);
+            setManualSplit(createEmptySplit());
+          }
+        } else {
+          setManualSplit(createEmptySplit());
+        }
+        return;
+      }
+      if (!user) {
+        setModeState("auto");
+        setManualSplit(createEmptySplit());
+        return;
+      }
+
       const response = await splitAPI.getSplit();
       const responseMode = String(response.mode || "auto").toLowerCase() as SplitMode;
       setModeState(responseMode === "manual" ? "manual" : "auto");
@@ -166,9 +188,14 @@ export const SplitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     refreshSplit();
-  }, [user]);
+  }, [user, isGuest]);
 
   const saveSplit = async (nextMode: SplitMode, nextSplit: WeeklySplit) => {
+    if (isGuest) {
+      await AsyncStorage.setItem(GUEST_MODE_KEY, nextMode);
+      await AsyncStorage.setItem(GUEST_SPLIT_KEY, JSON.stringify(nextSplit));
+      return;
+    }
     if (!user) return;
     try {
       await splitAPI.saveSplit({
@@ -200,6 +227,7 @@ export const SplitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         loading,
         isRestDay,
         todayGroups,
+        todayExpandedGroups,
         todayStrengthGroups,
         splitOptions: SPLIT_OPTIONS,
         refreshSplit,

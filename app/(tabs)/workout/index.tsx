@@ -19,7 +19,13 @@ const workouts: { name: string; icon: string; route: WorkoutRoute }[] = [
 export default function Dashboard() {
   const router = useRouter();
   const scale = useRef(new Animated.Value(1)).current;
-  const { todayGroups, isRestDay } = useSplit();
+  const { todayGroups, todayExpandedGroups, isRestDay } = useSplit();
+
+  const hasStrength = todayExpandedGroups.some(
+    (group) => group !== "Cardio" && group !== "Pilates"
+  );
+  const hasCardio = todayExpandedGroups.includes("Cardio");
+  const hasPilates = todayExpandedGroups.includes("Pilates");
 
   // ✅ router.push now gets strictly typed route
   const handlePress = (route: WorkoutRoute) => {
@@ -40,7 +46,15 @@ export default function Dashboard() {
             <Text style={styles.splitText}>{todayGroups.join(", ")}</Text>
           )}
         </View>
-        {workouts.map((item, index) => (
+        {workouts.map((item, index) => {
+          const isEnabled =
+            !isRestDay &&
+            (item.name === "Strength Training"
+              ? hasStrength
+              : item.name === "Cardio"
+              ? hasCardio
+              : hasPilates);
+          return (
           <Pressable
             key={index}
             onPressIn={() =>
@@ -50,13 +64,30 @@ export default function Dashboard() {
               Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start()
             }
             onPress={() => handlePress(item.route)}
+            disabled={!isEnabled}
           >
-            <Animated.View style={[styles.option, { transform: [{ scale }] }]}>
-              <MaterialCommunityIcons name={item.icon as any} size={32} color="#4CAF50" />
-              <Text style={styles.optionText}>{item.name}</Text>
+            <Animated.View
+              style={[
+                styles.option,
+                !isEnabled && styles.optionDisabled,
+                { transform: [{ scale }] },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name={item.icon as any}
+                size={32}
+                color={isEnabled ? "#4CAF50" : "#bdbdbd"}
+              />
+              <View>
+                <Text style={[styles.optionText, !isEnabled && styles.optionTextDisabled]}>
+                  {item.name}
+                </Text>
+                {!isEnabled && <Text style={styles.optionSubText}>Not scheduled today</Text>}
+              </View>
             </Animated.View>
           </Pressable>
-        ))}
+        );
+        })}
       </View>
     </LinearGradient>
   );
@@ -98,6 +129,17 @@ const styles = StyleSheet.create({
     color: "#4CAF50",
     fontWeight: "700",
     fontSize: 18,
+  },
+  optionSubText: {
+    color: "#9e9e9e",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  optionDisabled: {
+    opacity: 0.5,
+  },
+  optionTextDisabled: {
+    color: "#9e9e9e",
   },
   splitCard: {
     width: "100%",

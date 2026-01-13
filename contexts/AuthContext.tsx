@@ -15,6 +15,9 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   restoreToken: () => Promise<void>;
   isSignedIn: boolean;
+  isGuest: boolean;
+  startGuest: () => Promise<void>;
+  endGuest: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,6 +26,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSignedIn, setIsSignedIn] = useState(false);
+  const [isGuest, setIsGuest] = useState(false);
 
   // Try to restore token on app load
   useEffect(() => {
@@ -34,18 +38,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setLoading(true);
       const userData = await AsyncStorage.getItem('user');
       const accessToken = await AsyncStorage.getItem('accessToken');
+      const guestFlag = await AsyncStorage.getItem('guest');
 
       if (userData && accessToken) {
         setUser(JSON.parse(userData));
         setIsSignedIn(true);
+        setIsGuest(false);
+      } else if (guestFlag === 'true') {
+        setUser(null);
+        setIsSignedIn(true);
+        setIsGuest(true);
       } else {
         setUser(null);
         setIsSignedIn(false);
+        setIsGuest(false);
       }
     } catch (error) {
       console.error('Error restoring token:', error);
       setUser(null);
       setIsSignedIn(false);
+      setIsGuest(false);
     } finally {
       setLoading(false);
     }
@@ -69,6 +81,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       setUser(userData);
       setIsSignedIn(true);
+      setIsGuest(false);
+      await AsyncStorage.removeItem('guest');
     } catch (error) {
       console.error('Sign in error:', error);
       throw error;
@@ -95,6 +109,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       setUser(userData);
       setIsSignedIn(true);
+      setIsGuest(false);
+      await AsyncStorage.removeItem('guest');
     } catch (error) {
       console.error('Sign up error:', error);
       throw error;
@@ -110,11 +126,41 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await AsyncStorage.removeItem('accessToken');
       await AsyncStorage.removeItem('refreshToken');
       await AsyncStorage.removeItem('user');
+      await AsyncStorage.removeItem('guest');
 
       setUser(null);
       setIsSignedIn(false);
+      setIsGuest(false);
     } catch (error) {
       console.error('Sign out error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startGuest = async () => {
+    try {
+      setLoading(true);
+      await AsyncStorage.setItem('guest', 'true');
+      setUser(null);
+      setIsSignedIn(true);
+      setIsGuest(true);
+    } catch (error) {
+      console.error('Start guest error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const endGuest = async () => {
+    try {
+      setLoading(true);
+      await AsyncStorage.removeItem('guest');
+      setUser(null);
+      setIsSignedIn(false);
+      setIsGuest(false);
+    } catch (error) {
+      console.error('End guest error:', error);
     } finally {
       setLoading(false);
     }
@@ -130,6 +176,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         signOut,
         restoreToken,
         isSignedIn,
+        isGuest,
+        startGuest,
+        endGuest,
       }}
     >
       {children}

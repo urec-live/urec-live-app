@@ -1,9 +1,20 @@
 import { useRouter } from "expo-router";
-import { FlatList, StyleSheet, Text, TouchableOpacity, View, RefreshControl, ActivityIndicator } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import { MachineDto, machineAPI, Exercise } from "@/services/machineAPI";
 import websocketService from "@/services/websocketService";
+import { useSplit } from "@/contexts/SplitContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 
 export default function Equipment() {
@@ -12,6 +23,9 @@ export default function Equipment() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [exercisesByEquipment, setExercisesByEquipment] = useState<Record<number, Exercise[]>>({});
+  const [showAll, setShowAll] = useState(false);
+  const { todayExpandedGroups, isRestDay } = useSplit();
+  const { isGuest } = useAuth();
 
   const loadMachines = async (isRefresh = false) => {
     try {
@@ -68,6 +82,13 @@ export default function Equipment() {
     loadMachines(true);
   };
 
+  const visibleMachines = showAll
+    ? machines
+    : machines.filter((machine) => {
+        const exercises = exercisesByEquipment[machine.id] || [];
+        return exercises.some((exercise) => todayExpandedGroups.includes(exercise.muscleGroup));
+      });
+
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
@@ -79,20 +100,48 @@ export default function Equipment() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Equipment Availability</Text>
-      <TouchableOpacity style={styles.scanButton} onPress={() => router.push("/scan")}>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>Equipment Availability</Text>
+        <TouchableOpacity
+          style={[styles.showAllButton, showAll && styles.showAllButtonActive]}
+          onPress={() => setShowAll((prev) => !prev)}
+        >
+          <Text style={[styles.showAllButtonText, showAll && styles.showAllButtonTextActive]}>
+            {showAll ? "Show Split" : "Show All"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+      <TouchableOpacity
+        style={[styles.scanButton, isGuest && styles.scanButtonDisabled]}
+        onPress={() => {
+          if (isGuest) {
+            Alert.alert("Guest Mode", "Sign in to scan and check in to equipment.");
+            return;
+          }
+          router.push("/scan");
+        }}
+      >
         <Text style={styles.scanButtonText}>Scan QR to Check In</Text>
       </TouchableOpacity>
 
       <FlatList
-        data={machines}
+        data={visibleMachines}
         keyExtractor={(item) => item.code}
         contentContainerStyle={{ margin: 0 }}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={() => (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No machines available</Text>
-            <Text style={styles.emptySubtext}>Pull to refresh</Text>
+            {isRestDay && !showAll ? (
+              <>
+                <Text style={styles.emptyText}>Rest day today</Text>
+                <Text style={styles.emptySubtext}>Tap "Show All" to browse everything.</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.emptyText}>No machines available</Text>
+                <Text style={styles.emptySubtext}>Pull to refresh</Text>
+              </>
+            )}
           </View>
         )}
         refreshControl={
@@ -182,14 +231,38 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 50,
   },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12,
+  },
   title: {
     fontSize: 26,
     fontWeight: "900",
     color: "#1a1a1a",
     textAlign: "center",
-    marginBottom: 20,
     letterSpacing: 1,
     textTransform: "uppercase",
+  },
+  showAllButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  showAllButtonActive: {
+    backgroundColor: "#4CAF50",
+  },
+  showAllButtonText: {
+    color: "#4CAF50",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  showAllButtonTextActive: {
+    color: "#ffffff",
   },
   card: {
     flexDirection: "row",
@@ -303,6 +376,9 @@ const styles = StyleSheet.create({
     borderColor: "#2e7d32",
     marginBottom: 16,
     alignItems: "center",
+  },
+  scanButtonDisabled: {
+    opacity: 0.5,
   },
   scanButtonText: {
     color: "#ffffff",

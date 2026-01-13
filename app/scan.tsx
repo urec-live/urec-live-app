@@ -5,6 +5,7 @@ import React, { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useWorkout } from "@/contexts/WorkoutContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { parseMachineQr, ParsedMachineScan } from "@/utils/qr";
 import { machineAPI } from "@/services/machineAPI";
 
@@ -16,6 +17,7 @@ type BarCodeScannedData = {
 export default function ScanScreen() {
   const router = useRouter();
   const { checkIn } = useWorkout();
+  const { isGuest } = useAuth();
 
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
@@ -78,6 +80,18 @@ export default function ScanScreen() {
       });
     }
   };
+
+  if (isGuest) {
+    return (
+      <CenteredScreen>
+        <Text style={styles.title}>Guest Mode</Text>
+        <Text style={styles.subtitle}>Sign in to scan and check in to equipment.</Text>
+        <Pressable style={styles.button} onPress={() => router.replace("/(auth)/login")}>
+          <Text style={styles.buttonText}>Go to Login</Text>
+        </Pressable>
+      </CenteredScreen>
+    );
+  }
 
   if (!permission) {
     return (

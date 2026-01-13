@@ -17,13 +17,13 @@ export const unstable_settings = {
 };
 
 function RootLayoutNav() {
-  const { user } = useAuth();
+  const { user, isGuest } = useAuth();
 
   return (
     <>
       <DailyWorkoutSummary />
       <Stack screenOptions={{ headerShown: false }}>
-        {user ? (
+        {user || isGuest ? (
           <>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />

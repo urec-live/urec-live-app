@@ -7,7 +7,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { DayKey, DAY_KEYS, useSplit } from "../../contexts/SplitContext";
 
 export default function Profile() {
-  const { signOut } = useAuth();
+  const { signOut, endGuest, isGuest } = useAuth();
   const router = useRouter();
   const {
     mode,
@@ -24,14 +24,20 @@ export default function Profile() {
 
   const handleLogoutPress = () => {
     Alert.alert(
-      "Logout",
-      "Are you sure you want to log out?",
+      isGuest ? "Exit Guest Mode" : "Logout",
+      isGuest
+        ? "Return to login to use a full account."
+        : "Are you sure you want to log out?",
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Logout",
+          text: isGuest ? "Exit" : "Logout",
           onPress: () => {
-            signOut();
+            if (isGuest) {
+              endGuest();
+            } else {
+              signOut();
+            }
             router.replace("/(auth)/login");
           },
           style: "destructive",
@@ -138,7 +144,7 @@ export default function Profile() {
 
         <Pressable style={styles.logoutButton} onPress={handleLogoutPress}>
           <MaterialCommunityIcons name="logout" size={20} color="#fff" />
-          <Text style={styles.logoutButtonText}>Logout</Text>
+          <Text style={styles.logoutButtonText}>{isGuest ? "Exit Guest" : "Logout"}</Text>
         </Pressable>
       </ScrollView>
 

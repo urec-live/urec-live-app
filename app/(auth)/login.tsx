@@ -20,7 +20,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, startGuest } = useAuth();
   const router = useRouter();
 
   const handleAuth = async () => {
@@ -140,6 +140,19 @@ export default function LoginScreen() {
               : "Don't have an account? Register"}
           </Text>
         </Pressable>
+
+        <Pressable
+          style={[styles.guestButton, loading && styles.buttonDisabled]}
+          onPress={async () => {
+            setLoading(true);
+            await startGuest();
+            router.replace("/(tabs)");
+            setLoading(false);
+          }}
+          disabled={loading}
+        >
+          <Text style={styles.guestButtonText}>Continue as Guest</Text>
+        </Pressable>
       </View>
     </LinearGradient>
   );
@@ -187,6 +200,18 @@ const styles = StyleSheet.create({
   toggleText: {
     color: "#4CAF50",
     marginTop: 20,
+  },
+  guestButton: {
+    marginTop: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+  },
+  guestButtonText: {
+    color: "#4CAF50",
+    fontWeight: "700",
   },
 });
 
