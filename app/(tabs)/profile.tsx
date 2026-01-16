@@ -1,4 +1,5 @@
 import React from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -7,7 +8,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { DayKey, DAY_KEYS, useSplit } from "../../contexts/SplitContext";
 
 export default function Profile() {
-  const { signOut, endGuest, isGuest } = useAuth();
+  const { signOut, endGuest, isGuest, user } = useAuth();
   const router = useRouter();
   const {
     mode,
@@ -21,6 +22,35 @@ export default function Profile() {
   } = useSplit();
   const [editingDay, setEditingDay] = React.useState<DayKey | null>(null);
   const [draftGroups, setDraftGroups] = React.useState<string[]>([]);
+  const [displayName, setDisplayName] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (isGuest) {
+      setDisplayName(null);
+      return;
+    }
+    if (user?.username) {
+      setDisplayName(user.username);
+      return;
+    }
+    let isActive = true;
+    const loadStoredUser = async () => {
+      try {
+        const stored = await AsyncStorage.getItem("user");
+        if (!stored || !isActive) return;
+        const parsed = JSON.parse(stored) as { username?: string };
+        if (parsed?.username) {
+          setDisplayName(parsed.username);
+        }
+      } catch (error) {
+        console.error("Failed to load stored user:", error);
+      }
+    };
+    loadStoredUser();
+    return () => {
+      isActive = false;
+    };
+  }, [isGuest, user?.username]);
 
   const handleLogoutPress = () => {
     Alert.alert(
@@ -79,7 +109,7 @@ export default function Profile() {
     <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.container}>
         <MaterialCommunityIcons name="account-circle" size={80} color="#4CAF50" />
-        <Text style={styles.title}>My Profile</Text>
+        <Text style={styles.title}>{displayName || "My Profile"}</Text>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Weekly Split</Text>

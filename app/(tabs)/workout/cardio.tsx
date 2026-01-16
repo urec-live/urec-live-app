@@ -8,20 +8,21 @@ const cardioOptions = ["Treadmill", "Elliptical", "Stairmaster"];
 
 export default function CardioWorkout() {
   const router = useRouter();
-  const { todayGroups } = useSplit();
+  const { todayGroups, showAllWorkouts } = useSplit();
   const isCardioDay = todayGroups.length === 0 || todayGroups.includes("Cardio");
+  const canShow = showAllWorkouts || isCardioDay;
 
   return (
     <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
       <View style={styles.container}>
         <Text style={styles.title}>Select Cardio Machine</Text>
-        {!isCardioDay && (
+        {!canShow && (
           <Text style={styles.subTitle}>
             Cardio isn&apos;t scheduled today. Update your split to focus on cardio.
           </Text>
         )}
         <FlatList
-          data={isCardioDay ? cardioOptions : []}
+          data={canShow ? cardioOptions : []}
           keyExtractor={(item) => item}
           contentContainerStyle={{ paddingRight: 8 }}
           showsVerticalScrollIndicator={false}

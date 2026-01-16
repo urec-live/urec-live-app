@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSplit } from "@/contexts/SplitContext";
+import React from "react";
 
 // ✅ Define type-safe route literals
 // UPDATED: Removed "/(tabs)" prefix as these routes are relative to the tab's root.
@@ -19,7 +20,8 @@ const workouts: { name: string; icon: string; route: WorkoutRoute }[] = [
 export default function Dashboard() {
   const router = useRouter();
   const scale = useRef(new Animated.Value(1)).current;
-  const { todayGroups, todayExpandedGroups, isRestDay } = useSplit();
+  const { todayGroups, todayExpandedGroups, isRestDay, showAllWorkouts, setShowAllWorkouts } =
+    useSplit();
 
   const hasStrength = todayExpandedGroups.some(
     (group) => group !== "Cardio" && group !== "Pilates"
@@ -36,7 +38,17 @@ export default function Dashboard() {
     <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
       <View style={styles.container}>
         <View style={styles.splitCard}>
-          <Text style={styles.splitTitle}>Today&apos;s Split</Text>
+          <View style={styles.splitHeader}>
+            <Text style={styles.splitTitle}>Today&apos;s Split</Text>
+            <Pressable
+              style={[styles.showAllButton, showAllWorkouts && styles.showAllButtonActive]}
+              onPress={() => setShowAllWorkouts(!showAllWorkouts)}
+            >
+              <Text style={[styles.showAllText, showAllWorkouts && styles.showAllTextActive]}>
+                {showAllWorkouts ? "Show Split" : "Show All"}
+              </Text>
+            </Pressable>
+          </View>
           {isRestDay ? (
             <Text style={styles.splitText}>
               Hey looks like it&apos;s your rest day. Recovery is as important as training, so take
@@ -48,15 +60,16 @@ export default function Dashboard() {
         </View>
         {workouts.map((item, index) => {
           const isEnabled =
-            !isRestDay &&
-            (item.name === "Strength Training"
-              ? hasStrength
-              : item.name === "Cardio"
-              ? hasCardio
-              : hasPilates);
+            showAllWorkouts ||
+            (!isRestDay &&
+              (item.name === "Strength Training"
+                ? hasStrength
+                : item.name === "Cardio"
+                ? hasCardio
+                : hasPilates));
           return (
-          <Pressable
-            key={index}
+            <Pressable
+              key={index}
             onPressIn={() =>
               Animated.spring(scale, { toValue: 0.95, useNativeDriver: true }).start()
             }
@@ -155,10 +168,33 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  splitHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
   splitTitle: {
     color: "#1a1a1a",
     fontWeight: "800",
-    marginBottom: 6,
+  },
+  showAllButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  showAllButtonActive: {
+    backgroundColor: "#4CAF50",
+  },
+  showAllText: {
+    color: "#4CAF50",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  showAllTextActive: {
+    color: "#ffffff",
   },
   splitText: {
     color: "#666",

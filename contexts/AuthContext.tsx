@@ -74,8 +74,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       // Store user info
       const userData: User = {
-        username: response.username,
-        email: response.email,
+        username: response.username || username,
+        email: response.email || "",
       };
       await AsyncStorage.setItem('user', JSON.stringify(userData));
 
@@ -102,8 +102,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       // Store user info
       const userData: User = {
-        username: response.username,
-        email: response.email,
+        username: response.username || username,
+        email: response.email || email,
       };
       await AsyncStorage.setItem('user', JSON.stringify(userData));
 

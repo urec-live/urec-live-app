@@ -8,21 +8,22 @@ const pilatesOptions = ["Mat Pilates", "Reformer", "Power Pilates"];
 
 export default function PilatesWorkout() {
   const router = useRouter();
-  const { todayGroups } = useSplit();
+  const { todayGroups, showAllWorkouts } = useSplit();
   const isPilatesDay =
     todayGroups.length === 0 || todayGroups.includes("Pilates") || todayGroups.includes("Core");
+  const canShow = showAllWorkouts || isPilatesDay;
 
   return (
     <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
       <View style={styles.container}>
         <Text style={styles.title}>Select Pilates Type</Text>
-        {!isPilatesDay && (
+        {!canShow && (
           <Text style={styles.subTitle}>
             Pilates isn&apos;t scheduled today. Update your split to focus on core work.
           </Text>
         )}
         <FlatList
-          data={isPilatesDay ? pilatesOptions : []}
+          data={canShow ? pilatesOptions : []}
           keyExtractor={(item) => item}
           contentContainerStyle={{ paddingRight: 8 }}
           showsVerticalScrollIndicator={false}

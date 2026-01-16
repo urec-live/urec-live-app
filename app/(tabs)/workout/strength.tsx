@@ -8,7 +8,7 @@ import { machineAPI } from "@/services/machineAPI";
 
 export default function StrengthWorkout() {
   const router = useRouter();
-  const { todayGroups, todayStrengthGroups } = useSplit();
+  const { todayGroups, todayStrengthGroups, showAllWorkouts } = useSplit();
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [muscleGroups, setMuscleGroups] = useState<string[]>([]);
@@ -79,9 +79,9 @@ export default function StrengthWorkout() {
 
         <FlatList
           data={
-            todayStrengthGroups.length > 0
-              ? muscleGroups.filter((group) => todayStrengthGroups.includes(group))
-              : muscleGroups
+            showAllWorkouts || todayStrengthGroups.length === 0
+              ? muscleGroups
+              : muscleGroups.filter((group) => todayStrengthGroups.includes(group))
           }
           keyExtractor={(item) => item}
           contentContainerStyle={{ paddingRight: 8 }}

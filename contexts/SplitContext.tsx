@@ -125,6 +125,8 @@ interface SplitContextType {
   todayGroups: string[];
   todayExpandedGroups: string[];
   todayStrengthGroups: string[];
+  showAllWorkouts: boolean;
+  setShowAllWorkouts: (value: boolean) => void;
   splitOptions: string[];
   refreshSplit: () => Promise<void>;
   setMode: (mode: SplitMode) => Promise<void>;
@@ -134,11 +136,12 @@ interface SplitContextType {
 const SplitContext = createContext<SplitContextType | undefined>(undefined);
 
 export const SplitProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isGuest } = useAuth();
+  const { user, isGuest, signOut } = useAuth();
   const { workoutHistory } = useWorkout();
   const [mode, setModeState] = useState<SplitMode>("auto");
   const [manualSplit, setManualSplit] = useState<WeeklySplit>(createEmptySplit());
   const [loading, setLoading] = useState(true);
+  const [showAllWorkouts, setShowAllWorkouts] = useState(false);
 
   const autoSplit = useMemo(() => buildAutoSplit(workoutHistory), [workoutHistory]);
   const todayKey = dayIndexToKey[new Date().getDay()];
@@ -180,6 +183,11 @@ export const SplitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setModeState(responseMode === "manual" ? "manual" : "auto");
       setManualSplit(response.manualSplit || createEmptySplit());
     } catch (error) {
+      const status = (error as any)?.response?.status;
+      if (status === 401 && !isGuest) {
+        await signOut();
+        return;
+      }
       console.error("Failed to load split:", error);
     } finally {
       setLoading(false);
@@ -203,6 +211,11 @@ export const SplitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         manualSplit: nextSplit,
       });
     } catch (error) {
+      const status = (error as any)?.response?.status;
+      if (status === 401 && !isGuest) {
+        await signOut();
+        return;
+      }
       console.error("Failed to save split:", error);
     }
   };
@@ -229,6 +242,8 @@ export const SplitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         todayGroups,
         todayExpandedGroups,
         todayStrengthGroups,
+        showAllWorkouts,
+        setShowAllWorkouts,
         splitOptions: SPLIT_OPTIONS,
         refreshSplit,
         setMode,
