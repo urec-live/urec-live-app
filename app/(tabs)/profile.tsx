@@ -22,35 +22,7 @@ export default function Profile() {
   } = useSplit();
   const [editingDay, setEditingDay] = React.useState<DayKey | null>(null);
   const [draftGroups, setDraftGroups] = React.useState<string[]>([]);
-  const [displayName, setDisplayName] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (isGuest) {
-      setDisplayName(null);
-      return;
-    }
-    if (user?.username) {
-      setDisplayName(user.username);
-      return;
-    }
-    let isActive = true;
-    const loadStoredUser = async () => {
-      try {
-        const stored = await AsyncStorage.getItem("user");
-        if (!stored || !isActive) return;
-        const parsed = JSON.parse(stored) as { username?: string };
-        if (parsed?.username) {
-          setDisplayName(parsed.username);
-        }
-      } catch (error) {
-        console.error("Failed to load stored user:", error);
-      }
-    };
-    loadStoredUser();
-    return () => {
-      isActive = false;
-    };
-  }, [isGuest, user?.username]);
+  const displayName = isGuest ? null : user?.username ?? null;
 
   const handleLogoutPress = () => {
     Alert.alert(

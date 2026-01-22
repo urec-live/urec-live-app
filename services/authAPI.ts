@@ -25,10 +25,24 @@ if (envApiBaseUrl) {
   }
 }
 
+let currentAuthHeader: string | null = null;
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
 });
+
+export const setAuthToken = (token: string | null) => {
+  if (token) {
+    currentAuthHeader = `Bearer ${token}`;
+    api.defaults.headers.common.Authorization = currentAuthHeader;
+  } else {
+    currentAuthHeader = null;
+    delete api.defaults.headers.common.Authorization;
+  }
+};
+
+export const getAuthHeader = (): string | null => currentAuthHeader;
 
 // Add token to requests
 api.interceptors.request.use(
@@ -47,7 +61,6 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       
@@ -63,13 +76,11 @@ api.interceptors.response.use(
           await AsyncStorage.setItem('refreshToken', newRefreshToken);
 
           originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+          setAuthToken(accessToken);
           return api(originalRequest);
         }
       } catch {
-        // Refresh failed, redirect to login
-        await AsyncStorage.removeItem('accessToken');
-        await AsyncStorage.removeItem('refreshToken');
-        await AsyncStorage.removeItem('user');
+        // Refresh failed; keep current token so we don't force logout on a single 401.
       }
     }
 

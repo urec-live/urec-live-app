@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
-import { authAPI } from '../services/authAPI';
+import { authAPI, setAuthToken } from '../services/authAPI';
 
 interface User {
   username: string;
@@ -41,20 +41,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const guestFlag = await AsyncStorage.getItem('guest');
 
       if (userData && accessToken) {
+        setAuthToken(accessToken);
         setUser(JSON.parse(userData));
         setIsSignedIn(true);
         setIsGuest(false);
       } else if (guestFlag === 'true') {
+        setAuthToken(null);
         setUser(null);
         setIsSignedIn(true);
         setIsGuest(true);
       } else {
+        setAuthToken(null);
         setUser(null);
         setIsSignedIn(false);
         setIsGuest(false);
       }
     } catch (error) {
       console.error('Error restoring token:', error);
+      setAuthToken(null);
       setUser(null);
       setIsSignedIn(false);
       setIsGuest(false);
@@ -71,6 +75,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Store tokens
       await AsyncStorage.setItem('accessToken', response.accessToken);
       await AsyncStorage.setItem('refreshToken', response.refreshToken);
+      setAuthToken(response.accessToken);
 
       // Store user info
       const userData: User = {
@@ -84,7 +89,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsGuest(false);
       await AsyncStorage.removeItem('guest');
     } catch (error) {
-      console.error('Sign in error:', error);
+      console.error("Sign in error:", error);
       throw error;
     } finally {
       setLoading(false);
@@ -99,6 +104,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Store tokens
       await AsyncStorage.setItem('accessToken', response.accessToken);
       await AsyncStorage.setItem('refreshToken', response.refreshToken);
+      setAuthToken(response.accessToken);
 
       // Store user info
       const userData: User = {
@@ -127,6 +133,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await AsyncStorage.removeItem('refreshToken');
       await AsyncStorage.removeItem('user');
       await AsyncStorage.removeItem('guest');
+      setAuthToken(null);
 
       setUser(null);
       setIsSignedIn(false);
@@ -142,6 +149,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       setLoading(true);
       await AsyncStorage.setItem('guest', 'true');
+      setAuthToken(null);
       setUser(null);
       setIsSignedIn(true);
       setIsGuest(true);
@@ -156,6 +164,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       setLoading(true);
       await AsyncStorage.removeItem('guest');
+      setAuthToken(null);
       setUser(null);
       setIsSignedIn(false);
       setIsGuest(false);

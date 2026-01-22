@@ -91,8 +91,8 @@ export default function MuscleExercises() {
       loadAvailability();
 
       // Subscribe to WebSocket updates
-      const unsubscribe = websocketService.subscribe((updatedMachine) => {
-        console.log('[Exercise List] Received machine update:', updatedMachine);
+      const unsubscribe = websocketService.subscribe((update) => {
+        console.log('[Exercise List] Received equipment status update:', update);
         // Reload availability when any machine is updated
         loadAvailability();
       });

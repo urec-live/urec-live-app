@@ -55,14 +55,11 @@ export default function EquipmentAvailability() {
     load();
 
     // Subscribe to WebSocket updates
-    const unsubscribe = websocketService.subscribe((updatedMachine) => {
-      console.log('[Workout Equipment] Received machine update:', updatedMachine);
-      // Only update if the machine belongs to this exercise
-      if (updatedMachine.exercise?.toLowerCase() === name.toLowerCase()) {
-        setMachines(prev => 
-          prev.map(m => m.id === updatedMachine.id ? updatedMachine : m)
-        );
-      }
+    const unsubscribe = websocketService.subscribe((update) => {
+      console.log('[Workout Equipment] Received equipment status update:', update);
+      setMachines(prev =>
+        prev.map(m => m.id === update.equipmentId ? { ...m, status: update.status } : m)
+      );
     });
 
     return () => {

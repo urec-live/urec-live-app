@@ -116,7 +116,7 @@ export default function ActiveExerciseTracker() {
 const styles = StyleSheet.create({
   container: {
     position: "absolute",
-    bottom: 0,
+    bottom: 70,
     left: 0,
     right: 0,
     backgroundColor: "#001a14",

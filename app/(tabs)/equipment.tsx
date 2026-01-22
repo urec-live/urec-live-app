@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { MachineDto, machineAPI, Exercise } from "@/services/machineAPI";
+import { MachineDto, machineAPI, Exercise, ActiveEquipmentSession } from "@/services/machineAPI";
 import websocketService from "@/services/websocketService";
 import { useSplit } from "@/contexts/SplitContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -25,7 +25,8 @@ export default function Equipment() {
   const [exercisesByEquipment, setExercisesByEquipment] = useState<Record<number, Exercise[]>>({});
   const [showAll, setShowAll] = useState(false);
   const { todayExpandedGroups, isRestDay } = useSplit();
-  const { isGuest } = useAuth();
+  const { isGuest, isSignedIn, loading: authLoading } = useAuth();
+  const [myActiveSession, setMyActiveSession] = useState<ActiveEquipmentSession | null>(null);
 
   const loadMachines = async (isRefresh = false) => {
     try {
@@ -49,6 +50,18 @@ export default function Equipment() {
         })
       );
       setExercisesByEquipment(exercisesMap);
+
+      if (!isGuest && isSignedIn && !authLoading) {
+        try {
+          const active = await machineAPI.getMyActiveSession();
+          setMyActiveSession(active);
+        } catch (err) {
+          console.error('[Equipment] Error loading active session:', err);
+          setMyActiveSession(null);
+        }
+      } else {
+        setMyActiveSession(null);
+      }
     } catch (error) {
       console.error("Error loading machines:", error);
       console.error("Error details:", JSON.stringify(error));
@@ -60,15 +73,18 @@ export default function Equipment() {
   };
 
   useEffect(() => {
+    if (authLoading) {
+      return;
+    }
     loadMachines();
 
     // Connect to WebSocket for real-time updates
     websocketService.connect();
     
-    const unsubscribe = websocketService.subscribe((updatedMachine) => {
-      console.log('[Equipment] Received machine update via WebSocket:', updatedMachine);
-      setMachines(prev => 
-        prev.map(m => m.id === updatedMachine.id ? updatedMachine : m)
+    const unsubscribe = websocketService.subscribe((update) => {
+      console.log('[Equipment] Received equipment status update via WebSocket:', update);
+      setMachines(prev =>
+        prev.map(m => m.id === update.equipmentId ? { ...m, status: update.status } : m)
       );
     });
 
@@ -76,10 +92,18 @@ export default function Equipment() {
     return () => {
       unsubscribe();
     };
-  }, []);
+  }, [authLoading, isSignedIn, isGuest]);
 
   const onRefresh = () => {
     loadMachines(true);
+  };
+
+  const formatStartedAt = (iso: string) => {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) {
+      return iso;
+    }
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
   const visibleMachines = showAll
@@ -111,6 +135,27 @@ export default function Equipment() {
           </Text>
         </TouchableOpacity>
       </View>
+      {myActiveSession && (
+        <View style={styles.activeSessionBanner}>
+          <Text style={styles.activeSessionTitle}>Currently using</Text>
+          <Text style={styles.activeSessionText}>
+            {myActiveSession.equipment.name} (started {formatStartedAt(myActiveSession.startedAt)})
+          </Text>
+          {myActiveSession.equipment?.id && (
+            <TouchableOpacity
+              style={styles.activeSessionButton}
+              onPress={() =>
+                router.push({
+                  pathname: "/machine/[id]",
+                  params: { id: String(myActiveSession.equipment.id) },
+                })
+              }
+            >
+              <Text style={styles.activeSessionButtonText}>Resume Session</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
       <TouchableOpacity
         style={[styles.scanButton, isGuest && styles.scanButtonDisabled]}
         onPress={() => {
@@ -407,5 +452,41 @@ const styles = StyleSheet.create({
     color: "#999",
     fontSize: 14,
     marginTop: 8,
+  },
+  activeSessionBanner: {
+    borderWidth: 1,
+    borderColor: "#1b5e20",
+    backgroundColor: "#e8f5e9",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  activeSessionTitle: {
+    color: "#1b5e20",
+    fontWeight: "800",
+    textTransform: "uppercase",
+    fontSize: 12,
+    letterSpacing: 0.6,
+    marginBottom: 4,
+  },
+  activeSessionText: {
+    color: "#1a1a1a",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  activeSessionButton: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+    backgroundColor: "#1b5e20",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  activeSessionButtonText: {
+    color: "#ffffff",
+    fontWeight: "800",
+    fontSize: 12,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
 });

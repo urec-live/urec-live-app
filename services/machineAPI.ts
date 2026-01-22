@@ -1,4 +1,5 @@
-import api from './authAPI';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import api, { getAuthHeader } from './authAPI';
 
 export interface MachineDto {
   id: number;
@@ -16,6 +17,27 @@ export interface Machine {
   exercise: string;
 }
 
+export interface ActiveEquipmentSession {
+  id: number;
+  status: string;
+  startedAt: string;
+  endedAt?: string | null;
+  endReason?: string | null;
+  equipment: {
+    id: number;
+    code: string;
+    name: string;
+  };
+}
+
+export interface EquipmentSessionResponse {
+  id: number;
+  status: string;
+  startedAt: string;
+  endedAt?: string | null;
+  endReason?: string | null;
+}
+
 export interface Exercise {
   id: number;
   name: string;
@@ -24,6 +46,18 @@ export interface Exercise {
 }
 
 export const machineAPI = {
+  // Build auth headers for protected endpoints
+  authHeaders: async (): Promise<Record<string, string>> => {
+    const token = await AsyncStorage.getItem('accessToken');
+    if (token) {
+      return { Authorization: `Bearer ${token}` };
+    }
+    const fallback = getAuthHeader() ?? api.defaults.headers.common.Authorization;
+    if (typeof fallback === 'string' && fallback.trim().length > 0) {
+      return { Authorization: fallback };
+    }
+    return {};
+  },
   // Get all machines
   listAll: async (): Promise<MachineDto[]> => {
     const response = await api.get('/machines');
@@ -68,15 +102,30 @@ export const machineAPI = {
     }
   },
 
+  // Get current user's active equipment session (if any)
+  getMyActiveSession: async (): Promise<ActiveEquipmentSession | null> => {
+    const headers = await machineAPI.authHeaders();
+    const response = await api.get('/equipment-sessions/my-active', {
+      headers,
+      validateStatus: (status) => (status >= 200 && status < 300) || status === 204,
+    });
+    if (response.status === 204) {
+      return null;
+    }
+    return response.data;
+  },
+
   // Check in to a machine
-  checkIn: async (code: string): Promise<MachineDto> => {
-    const response = await api.put(`/machines/code/${code}/status`, { status: 'In Use' });
+  checkIn: async (code: string): Promise<EquipmentSessionResponse> => {
+    const headers = await machineAPI.authHeaders();
+    const response = await api.post(`/equipment-sessions/start/code/${code}`, undefined, { headers });
     return response.data;
   },
 
   // Check out from a machine
-  checkOut: async (code: string): Promise<MachineDto> => {
-    const response = await api.put(`/machines/code/${code}/status`, { status: 'Available' });
+  checkOut: async (code: string): Promise<EquipmentSessionResponse> => {
+    const headers = await machineAPI.authHeaders();
+    const response = await api.post(`/equipment-sessions/end/code/${code}`, undefined, { headers });
     return response.data;
   },
 

@@ -2,14 +2,39 @@ import { Client, IMessage } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import { Platform } from 'react-native';
 
-const WS_URL = Platform.select({
-  ios: 'http://172.20.1.229:8080/ws',
-  android: 'http://172.20.1.229:8080/ws',
+const envWsBaseUrl = process.env.EXPO_PUBLIC_WS_BASE_URL;
+const envApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
+
+const deriveWsUrl = (baseUrl: string) => {
+  const trimmed = baseUrl.replace(/\/$/, "");
+  if (trimmed.endsWith("/api")) {
+    return trimmed.replace(/\/api$/, "/ws");
+  }
+  return `${trimmed}/ws`;
+};
+
+let WS_URL = Platform.select({
+  ios: 'http://localhost:8080/ws',
+  android: 'http://10.0.2.2:8080/ws',
   default: 'http://localhost:8080/ws',
 }) || 'http://localhost:8080/ws';
 
-export interface MachineUpdateCallback {
-  (machine: any): void;
+if (envWsBaseUrl) {
+  WS_URL = envWsBaseUrl.replace(/\/$/, "");
+} else if (envApiBaseUrl) {
+  WS_URL = deriveWsUrl(envApiBaseUrl);
+}
+
+export interface EquipmentStatusUpdate {
+  equipmentId: number;
+  status: string;
+  sessionId?: number | null;
+  userId?: number | null;
+  occurredAt?: string;
+}
+
+export interface EquipmentStatusUpdateCallback {
+  (update: EquipmentStatusUpdate): void;
 }
 
 class WebSocketService {
@@ -17,7 +42,7 @@ class WebSocketService {
   private isConnected = false;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
-  private subscribers: MachineUpdateCallback[] = [];
+  private subscribers: EquipmentStatusUpdateCallback[] = [];
 
   constructor() {
     this.client = null;
@@ -45,14 +70,14 @@ class WebSocketService {
           this.isConnected = true;
           this.reconnectAttempts = 0;
 
-          // Subscribe to machine updates
-          this.client?.subscribe('/topic/machines', (message: IMessage) => {
+          // Subscribe to equipment status updates
+          this.client?.subscribe('/topic/equipment-status', (message: IMessage) => {
             try {
-              const machine = JSON.parse(message.body);
-              console.log('[WebSocket] Received machine update:', machine);
+              const update = JSON.parse(message.body) as EquipmentStatusUpdate;
+              console.log('[WebSocket] Received equipment status update:', update);
               
               // Notify all subscribers
-              this.subscribers.forEach(callback => callback(machine));
+              this.subscribers.forEach(callback => callback(update));
             } catch (error) {
               console.error('[WebSocket] Error parsing message:', error);
             }
@@ -95,7 +120,7 @@ class WebSocketService {
     }
   }
 
-  subscribe(callback: MachineUpdateCallback) {
+  subscribe(callback: EquipmentStatusUpdateCallback) {
     this.subscribers.push(callback);
     
     // Return unsubscribe function
