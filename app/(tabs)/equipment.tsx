@@ -15,6 +15,7 @@ import { MachineDto, machineAPI, Exercise, ActiveEquipmentSession } from "@/serv
 import websocketService from "@/services/websocketService";
 import { useSplit } from "@/contexts/SplitContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useWorkout } from "@/contexts/WorkoutContext";
 
 
 export default function Equipment() {
@@ -26,7 +27,23 @@ export default function Equipment() {
   const [showAll, setShowAll] = useState(false);
   const { todayExpandedGroups, isRestDay } = useSplit();
   const { isGuest, isSignedIn, loading: authLoading } = useAuth();
+  const { currentSession } = useWorkout();
   const [myActiveSession, setMyActiveSession] = useState<ActiveEquipmentSession | null>(null);
+
+  const refreshActiveSession = async () => {
+    if (isGuest || !isSignedIn || authLoading) {
+      setMyActiveSession(null);
+      return;
+    }
+
+    try {
+      const active = await machineAPI.getMyActiveSession();
+      setMyActiveSession(active);
+    } catch (err) {
+      console.error('[Equipment] Error loading active session:', err);
+      setMyActiveSession(null);
+    }
+  };
 
   const loadMachines = async (isRefresh = false) => {
     try {
@@ -50,18 +67,7 @@ export default function Equipment() {
         })
       );
       setExercisesByEquipment(exercisesMap);
-
-      if (!isGuest && isSignedIn && !authLoading) {
-        try {
-          const active = await machineAPI.getMyActiveSession();
-          setMyActiveSession(active);
-        } catch (err) {
-          console.error('[Equipment] Error loading active session:', err);
-          setMyActiveSession(null);
-        }
-      } else {
-        setMyActiveSession(null);
-      }
+      await refreshActiveSession();
     } catch (error) {
       console.error("Error loading machines:", error);
       console.error("Error details:", JSON.stringify(error));
@@ -87,12 +93,20 @@ export default function Equipment() {
         prev.map(m => m.id === update.equipmentId ? { ...m, status: update.status } : m)
       );
     });
+    const unsubscribeConnection = websocketService.subscribeConnection(() => {
+      loadMachines(true);
+    });
 
     // Cleanup on unmount
     return () => {
       unsubscribe();
+      unsubscribeConnection();
     };
   }, [authLoading, isSignedIn, isGuest]);
+
+  useEffect(() => {
+    refreshActiveSession();
+  }, [currentSession, authLoading, isSignedIn, isGuest]);
 
   const onRefresh = () => {
     loadMachines(true);

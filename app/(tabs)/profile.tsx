@@ -6,9 +6,10 @@ import { useRouter } from "expo-router";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useAuth } from "../../contexts/AuthContext";
 import { DayKey, DAY_KEYS, useSplit } from "../../contexts/SplitContext";
+import { analyticsAPI, SessionUsageSummary } from "../../services/analyticsAPI";
 
 export default function Profile() {
-  const { signOut, endGuest, isGuest, user } = useAuth();
+  const { signOut, endGuest, isGuest, user, isSignedIn, loading: authLoading } = useAuth();
   const router = useRouter();
   const {
     mode,
@@ -22,7 +23,65 @@ export default function Profile() {
   } = useSplit();
   const [editingDay, setEditingDay] = React.useState<DayKey | null>(null);
   const [draftGroups, setDraftGroups] = React.useState<string[]>([]);
+  const [usageSummary, setUsageSummary] = React.useState<SessionUsageSummary | null>(null);
+  const [overallSummary, setOverallSummary] = React.useState<SessionUsageSummary | null>(null);
+  const [usageLoading, setUsageLoading] = React.useState(false);
+  const retryRef = React.useRef(0);
   const displayName = isGuest ? null : user?.username ?? null;
+
+  const formatDuration = (seconds: number) => {
+    if (seconds <= 0) return "0m";
+    const mins = Math.floor(seconds / 60);
+    const hrs = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    if (hrs > 0) return `${hrs}h ${remMins}m`;
+    return `${remMins}m`;
+  };
+
+  const formatPeakHour = (hour?: number | null) => {
+    if (hour === null || hour === undefined) return "N/A";
+    const suffix = hour >= 12 ? "PM" : "AM";
+    const display = hour % 12 === 0 ? 12 : hour % 12;
+    return `${display} ${suffix}`;
+  };
+
+  React.useEffect(() => {
+    if (authLoading || !isSignedIn || isGuest || !user) {
+      setUsageSummary(null);
+      setOverallSummary(null);
+      return;
+    }
+
+    const loadUsage = async () => {
+      try {
+        setUsageLoading(true);
+        const token = await AsyncStorage.getItem("accessToken");
+        if (!token) {
+          setUsageLoading(false);
+          return;
+        }
+        const [mine, overall] = await Promise.all([
+          analyticsAPI.getMyUsage(7),
+          analyticsAPI.getOverallUsage(7),
+        ]);
+        setUsageSummary(mine);
+        setOverallSummary(overall);
+      } catch (error: any) {
+        if (error?.response?.status === 401 && retryRef.current < 1) {
+          retryRef.current += 1;
+          setTimeout(loadUsage, 500);
+          return;
+        }
+        console.error("Failed to load usage summary:", error);
+        setUsageSummary(null);
+        setOverallSummary(null);
+      } finally {
+        setUsageLoading(false);
+      }
+    };
+
+    loadUsage();
+  }, [authLoading, isSignedIn, isGuest, user?.username]);
 
   const handleLogoutPress = () => {
     Alert.alert(
@@ -82,6 +141,63 @@ export default function Profile() {
       <ScrollView contentContainerStyle={styles.container}>
         <MaterialCommunityIcons name="account-circle" size={80} color="#4CAF50" />
         <Text style={styles.title}>{displayName || "My Profile"}</Text>
+
+        {!isGuest && (
+          <View style={styles.statsCard}>
+            <View style={styles.statsHeader}>
+              <Text style={styles.statsTitle}>Usage Stats (7 days)</Text>
+              <MaterialCommunityIcons name="chart-line" size={20} color="#4CAF50" />
+            </View>
+            {usageLoading ? (
+              <Text style={styles.statsSubtle}>Loading stats...</Text>
+            ) : usageSummary ? (
+              <>
+                <Text style={styles.statsSectionLabel}>You</Text>
+                <View style={styles.statsRow}>
+                  <View style={styles.statsItem}>
+                    <Text style={styles.statsValue}>{usageSummary.totalSessions}</Text>
+                    <Text style={styles.statsLabel}>Sessions</Text>
+                  </View>
+                  <View style={styles.statsItem}>
+                    <Text style={styles.statsValue}>
+                      {formatDuration(usageSummary.averageDurationSeconds)}
+                    </Text>
+                    <Text style={styles.statsLabel}>Avg</Text>
+                  </View>
+                  <View style={styles.statsItem}>
+                    <Text style={styles.statsValue}>{formatPeakHour(usageSummary.peakStartHour)}</Text>
+                    <Text style={styles.statsLabel}>Peak</Text>
+                  </View>
+                </View>
+                {overallSummary && (
+                  <>
+                    <Text style={styles.statsSectionLabel}>Overall</Text>
+                    <View style={styles.statsRow}>
+                      <View style={styles.statsItem}>
+                        <Text style={styles.statsValue}>{overallSummary.totalSessions}</Text>
+                        <Text style={styles.statsLabel}>Sessions</Text>
+                      </View>
+                      <View style={styles.statsItem}>
+                        <Text style={styles.statsValue}>
+                          {formatDuration(overallSummary.averageDurationSeconds)}
+                        </Text>
+                        <Text style={styles.statsLabel}>Avg</Text>
+                      </View>
+                      <View style={styles.statsItem}>
+                        <Text style={styles.statsValue}>
+                          {formatPeakHour(overallSummary.peakStartHour)}
+                        </Text>
+                        <Text style={styles.statsLabel}>Peak</Text>
+                      </View>
+                    </View>
+                  </>
+                )}
+              </>
+            ) : (
+              <Text style={styles.statsSubtle}>No usage data yet.</Text>
+            )}
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Weekly Split</Text>
@@ -203,6 +319,69 @@ const styles = StyleSheet.create({
     color: "#1a1a1a",
     marginTop: 20,
     marginBottom: 10,
+  },
+  statsCard: {
+    width: "100%",
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    padding: 16,
+    marginTop: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  statsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  statsTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#1a1a1a",
+  },
+  statsSubtle: {
+    color: "#777",
+  },
+  statsSectionLabel: {
+    marginTop: 6,
+    marginBottom: 6,
+    color: "#4CAF50",
+    fontWeight: "700",
+    textTransform: "uppercase",
+    fontSize: 12,
+    letterSpacing: 0.6,
+  },
+  statsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  statsItem: {
+    flex: 1,
+    padding: 10,
+    backgroundColor: "#f5f5f5",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    alignItems: "center",
+  },
+  statsValue: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#1a1a1a",
+  },
+  statsLabel: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#666",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   section: {
     width: "100%",

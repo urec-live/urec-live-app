@@ -1,6 +1,7 @@
 import { Client, IMessage } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 const envWsBaseUrl = process.env.EXPO_PUBLIC_WS_BASE_URL;
 const envApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
@@ -18,6 +19,25 @@ let WS_URL = Platform.select({
   android: 'http://10.0.2.2:8080/ws',
   default: 'http://localhost:8080/ws',
 }) || 'http://localhost:8080/ws';
+
+const getDevHost = (): string | null => {
+  const hostUri =
+    Constants.expoConfig?.hostUri ||
+    (Constants.manifest as { debuggerHost?: string } | null)?.debuggerHost;
+  if (!hostUri) return null;
+  return hostUri.split(":")[0] || null;
+};
+
+const devHost = getDevHost();
+if (Platform.OS === 'android') {
+  if (Constants.isDevice && devHost) {
+    WS_URL = `http://${devHost}:8080/ws`;
+  }
+} else if (Platform.OS === 'ios') {
+  if (Constants.isDevice && devHost) {
+    WS_URL = `http://${devHost}:8080/ws`;
+  }
+}
 
 if (envWsBaseUrl) {
   WS_URL = envWsBaseUrl.replace(/\/$/, "");
@@ -37,12 +57,17 @@ export interface EquipmentStatusUpdateCallback {
   (update: EquipmentStatusUpdate): void;
 }
 
+export interface ConnectionStatusCallback {
+  (): void;
+}
+
 class WebSocketService {
   private client: Client | null = null;
   private isConnected = false;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private subscribers: EquipmentStatusUpdateCallback[] = [];
+  private connectionSubscribers: ConnectionStatusCallback[] = [];
 
   constructor() {
     this.client = null;
@@ -69,6 +94,7 @@ class WebSocketService {
           console.log('[WebSocket] Connected successfully');
           this.isConnected = true;
           this.reconnectAttempts = 0;
+          this.connectionSubscribers.forEach((callback) => callback());
 
           // Subscribe to equipment status updates
           this.client?.subscribe('/topic/equipment-status', (message: IMessage) => {
@@ -126,6 +152,14 @@ class WebSocketService {
     // Return unsubscribe function
     return () => {
       this.subscribers = this.subscribers.filter(cb => cb !== callback);
+    };
+  }
+
+  subscribeConnection(callback: ConnectionStatusCallback) {
+    this.connectionSubscribers.push(callback);
+
+    return () => {
+      this.connectionSubscribers = this.connectionSubscribers.filter(cb => cb !== callback);
     };
   }
 

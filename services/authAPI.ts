@@ -1,17 +1,36 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 // API URL based on platform
 let API_BASE_URL = 'http://localhost:8080/api';
 
+const getDevHost = (): string | null => {
+  const hostUri =
+    Constants.expoConfig?.hostUri ||
+    (Constants.manifest as { debuggerHost?: string } | null)?.debuggerHost;
+  if (!hostUri) return null;
+  return hostUri.split(":")[0] || null;
+};
+
 // Adjust the base URL with your local IP address when testing locally
 if (Platform.OS === 'android') {
-  // Android emulator: use special IP for host machine
-  API_BASE_URL = 'http://10.0.2.2:8080/api';
+  const devHost = getDevHost();
+  if (!Constants.isDevice) {
+    // Android emulator: use special IP for host machine
+    API_BASE_URL = 'http://10.0.2.2:8080/api';
+  } else if (devHost) {
+    API_BASE_URL = `http://${devHost}:8080/api`;
+  }
 } else if (Platform.OS === 'ios') {
-  // iOS simulator: use localhost
-  API_BASE_URL = 'http://localhost:8080/api';
+  const devHost = getDevHost();
+  if (Constants.isDevice && devHost) {
+    API_BASE_URL = `http://${devHost}:8080/api`;
+  } else {
+    // iOS simulator: use localhost
+    API_BASE_URL = 'http://localhost:8080/api';
+  }
 } else if (Platform.OS === 'web') {
   // Web: use localhost (or update for production)
   API_BASE_URL = 'http://localhost:8080/api';
