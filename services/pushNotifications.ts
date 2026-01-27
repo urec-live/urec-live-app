@@ -20,7 +20,13 @@ const getProjectId = () =>
   Constants.expoConfig?.extra?.eas?.projectId ||
   Constants.expoConfig?.extra?.projectId;
 
+const ENABLE_PUSH = process.env.EXPO_PUBLIC_ENABLE_PUSH !== "false";
+
 export const registerForPushNotificationsAsync = async () => {
+  if (!ENABLE_PUSH) {
+    console.log("[push] disabled via EXPO_PUBLIC_ENABLE_PUSH");
+    return;
+  }
   if (!Device.isDevice) {
     console.log("[push] Physical device required for push notifications");
     return;
