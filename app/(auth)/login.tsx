@@ -12,6 +12,7 @@ import {
     View,
 } from "react-native";
 import { useAuth } from "../../contexts/AuthContext";
+import { authAPI } from "../../services/authAPI";
 
 export default function LoginScreen() {
   const [isRegistering, setIsRegistering] = useState(false);
@@ -19,6 +20,9 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signIn, signUp, startGuest } = useAuth();
   const router = useRouter();
@@ -59,6 +63,27 @@ export default function LoginScreen() {
       } finally {
         setLoading(false);
       }
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!forgotEmail.trim()) {
+      Alert.alert("Error", "Please enter your email.");
+      return;
+    }
+    try {
+      setForgotLoading(true);
+      await authAPI.forgotPassword(forgotEmail.trim());
+      Alert.alert(
+        "Check your email",
+        "If an account exists for that email, you'll receive a reset link shortly."
+      );
+      setShowForgotPassword(false);
+      setForgotEmail("");
+    } catch (error: any) {
+      Alert.alert("Error", "Unable to request password reset right now.");
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -127,12 +152,51 @@ export default function LoginScreen() {
           )}
         </Pressable>
 
+        {!isRegistering && (
+          <>
+            <Pressable
+              onPress={() => setShowForgotPassword((prev) => !prev)}
+              disabled={loading || forgotLoading}
+            >
+              <Text style={styles.forgotText}>Forgot password?</Text>
+            </Pressable>
+
+            {showForgotPassword && (
+              <View style={styles.forgotContainer}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email"
+                  placeholderTextColor="#888"
+                  value={forgotEmail}
+                  onChangeText={setForgotEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  editable={!forgotLoading}
+                />
+                <Pressable
+                  style={[styles.button, forgotLoading && styles.buttonDisabled]}
+                  onPress={handleForgotPassword}
+                  disabled={forgotLoading}
+                >
+                  {forgotLoading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.buttonText}>Send Reset Link</Text>
+                  )}
+                </Pressable>
+              </View>
+            )}
+          </>
+        )}
+
         <Pressable onPress={() => {
           setIsRegistering(!isRegistering);
           setUsername("");
           setEmail("");
           setPassword("");
           setConfirmPassword("");
+          setShowForgotPassword(false);
+          setForgotEmail("");
         }} disabled={loading}>
           <Text style={styles.toggleText}>
             {isRegistering
@@ -200,6 +264,16 @@ const styles = StyleSheet.create({
   toggleText: {
     color: "#4CAF50",
     marginTop: 20,
+  },
+  forgotText: {
+    color: "#1b5e20",
+    marginTop: 12,
+    fontWeight: "700",
+  },
+  forgotContainer: {
+    width: "100%",
+    alignItems: "center",
+    marginTop: 12,
   },
   guestButton: {
     marginTop: 14,
