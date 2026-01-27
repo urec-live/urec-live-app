@@ -10,11 +10,12 @@ import {
   View,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
-import { MachineDto, machineAPI, Exercise, ActiveEquipmentSession } from "@/services/machineAPI";
+import React, { useEffect, useRef, useState } from "react";
+import { MachineDto, machineAPI, Exercise } from "@/services/machineAPI";
 import websocketService from "@/services/websocketService";
 import { useSplit } from "@/contexts/SplitContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { analyticsAPI, EquipmentUtilizationSnapshot } from "@/services/analyticsAPI";
 import { useWorkout } from "@/contexts/WorkoutContext";
 
 
@@ -28,20 +29,72 @@ export default function Equipment() {
   const { todayExpandedGroups, isRestDay } = useSplit();
   const { isGuest, isSignedIn, loading: authLoading } = useAuth();
   const { currentSession } = useWorkout();
-  const [myActiveSession, setMyActiveSession] = useState<ActiveEquipmentSession | null>(null);
+  const [utilizationByEquipmentId, setUtilizationByEquipmentId] = useState<Record<number, number>>({});
+  const [rollingUtilization, setRollingUtilization] = useState<EquipmentUtilizationSnapshot[]>([]);
+  const [utilizationUpdatedAt, setUtilizationUpdatedAt] = useState<number | null>(null);
+  const [waitTimeByEquipmentId, setWaitTimeByEquipmentId] = useState<Record<number, number | null>>({});
+  const machinesRef = useRef<MachineDto[]>([]);
+  const realtimeRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const refreshActiveSession = async () => {
+  const refreshRollingUtilization = async () => {
     if (isGuest || !isSignedIn || authLoading) {
-      setMyActiveSession(null);
+      setUtilizationByEquipmentId({});
+      setRollingUtilization([]);
       return;
     }
 
     try {
-      const active = await machineAPI.getMyActiveSession();
-      setMyActiveSession(active);
+      const utilization = await analyticsAPI.getRollingUtilization(15);
+      const map: Record<number, number> = {};
+      utilization.forEach((item) => {
+        map[item.equipmentId] = item.utilizationPercent;
+      });
+      setUtilizationByEquipmentId(map);
+      setRollingUtilization(utilization);
+      setUtilizationUpdatedAt(Date.now());
     } catch (err) {
-      console.error('[Equipment] Error loading active session:', err);
-      setMyActiveSession(null);
+      console.error("[Equipment] Error loading rolling utilization:", err);
+      setUtilizationByEquipmentId({});
+      setRollingUtilization([]);
+      setUtilizationUpdatedAt(null);
+    }
+  };
+
+  const refreshWaitTimes = async (machinesList: MachineDto[]) => {
+    if (isGuest || !isSignedIn || authLoading) {
+      setWaitTimeByEquipmentId({});
+      return;
+    }
+
+    const inUseMachines = machinesList.filter(
+      (machine) => machine.status.toUpperCase() !== "AVAILABLE"
+    );
+
+    if (!inUseMachines.length) {
+      setWaitTimeByEquipmentId({});
+      return;
+    }
+
+    try {
+      const entries = await Promise.all(
+        inUseMachines.map(async (machine) => {
+          try {
+            const estimate = await analyticsAPI.getWaitTimeEstimate(machine.code);
+            return [machine.id, estimate.estimatedWaitSeconds ?? null] as const;
+          } catch (err) {
+            console.error(`[Equipment] Error loading wait time for ${machine.code}:`, err);
+            return [machine.id, null] as const;
+          }
+        })
+      );
+      const map: Record<number, number | null> = {};
+      entries.forEach(([id, seconds]) => {
+        map[id] = seconds;
+      });
+      setWaitTimeByEquipmentId(map);
+    } catch (err) {
+      console.error("[Equipment] Error loading wait times:", err);
+      setWaitTimeByEquipmentId({});
     }
   };
 
@@ -67,7 +120,8 @@ export default function Equipment() {
         })
       );
       setExercisesByEquipment(exercisesMap);
-      await refreshActiveSession();
+      await refreshWaitTimes(res);
+      await refreshRollingUtilization();
     } catch (error) {
       console.error("Error loading machines:", error);
       console.error("Error details:", JSON.stringify(error));
@@ -76,6 +130,21 @@ export default function Equipment() {
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  useEffect(() => {
+    machinesRef.current = machines;
+  }, [machines]);
+
+  const scheduleRealtimeRefresh = () => {
+    if (realtimeRefreshTimeoutRef.current) {
+      clearTimeout(realtimeRefreshTimeoutRef.current);
+    }
+    realtimeRefreshTimeoutRef.current = setTimeout(async () => {
+      realtimeRefreshTimeoutRef.current = null;
+      await refreshRollingUtilization();
+      await refreshWaitTimes(machinesRef.current);
+    }, 400);
   };
 
   useEffect(() => {
@@ -89,9 +158,11 @@ export default function Equipment() {
     
     const unsubscribe = websocketService.subscribe((update) => {
       console.log('[Equipment] Received equipment status update via WebSocket:', update);
-      setMachines(prev =>
-        prev.map(m => m.id === update.equipmentId ? { ...m, status: update.status } : m)
-      );
+      setMachines(prev => {
+        const next = prev.map(m => m.id === update.equipmentId ? { ...m, status: update.status } : m);
+        return next;
+      });
+      scheduleRealtimeRefresh();
     });
     const unsubscribeConnection = websocketService.subscribeConnection(() => {
       loadMachines(true);
@@ -101,23 +172,99 @@ export default function Equipment() {
     return () => {
       unsubscribe();
       unsubscribeConnection();
+      if (realtimeRefreshTimeoutRef.current) {
+        clearTimeout(realtimeRefreshTimeoutRef.current);
+      }
     };
   }, [authLoading, isSignedIn, isGuest]);
-
-  useEffect(() => {
-    refreshActiveSession();
-  }, [currentSession, authLoading, isSignedIn, isGuest]);
 
   const onRefresh = () => {
     loadMachines(true);
   };
 
-  const formatStartedAt = (iso: string) => {
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) {
-      return iso;
+  const formatWaitTime = (seconds: number | null | undefined) => {
+    if (!seconds || seconds <= 0) {
+      return null;
     }
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const minutes = Math.max(1, Math.ceil(seconds / 60));
+    return `Wait ~${minutes}m`;
+  };
+
+  const getBusyLabel = (utilization?: number) => {
+    if (utilization == null || Number.isNaN(utilization)) {
+      return null;
+    }
+    if (utilization < 33) {
+      return { label: "Low", style: styles.busyLow, textStyle: styles.busyTextLow };
+    }
+    if (utilization < 66) {
+      return { label: "Med", style: styles.busyMedium, textStyle: styles.busyTextMedium };
+    }
+    return { label: "High", style: styles.busyHigh, textStyle: styles.busyTextHigh };
+  };
+
+  const overallUtilization = rollingUtilization.length
+    ? rollingUtilization.reduce((sum, item) => sum + item.utilizationPercent, 0) /
+      rollingUtilization.length
+    : null;
+  const overallBusyInfo = getBusyLabel(overallUtilization ?? undefined);
+  const overallFillStyle =
+    overallUtilization == null
+      ? styles.busyFillNeutral
+      : overallUtilization < 33
+        ? styles.busyFillLow
+        : overallUtilization < 66
+          ? styles.busyFillMedium
+          : styles.busyFillHigh;
+  const busyCardStyle =
+    overallUtilization == null
+      ? styles.busySummaryCardNeutral
+      : overallUtilization < 33
+        ? styles.busySummaryCardLow
+        : overallUtilization < 66
+          ? styles.busySummaryCardMedium
+          : styles.busySummaryCardHigh;
+  const busyAccentStyle =
+    overallBusyInfo?.textStyle ?? styles.busyTextNeutral;
+  const busyPillText =
+    overallUtilization == null ? "Guest" : "Live";
+  const showBusySummary = overallUtilization != null || isGuest || !isSignedIn;
+  const busySummarySubtitle = isGuest
+    ? "Sign in to see live usage."
+    : overallUtilization == null
+      ? "No recent usage data."
+      : "Avg utilization across equipment";
+  const showBusySummaryHint = true;
+  const busySummaryHintText = isGuest
+    ? "Sign in for live utilization updates."
+    : "Pull to refresh for the latest utilization.";
+  const lastUpdatedLabel = (() => {
+    if (!utilizationUpdatedAt || overallUtilization == null) {
+      return null;
+    }
+    const minutes = Math.floor((Date.now() - utilizationUpdatedAt) / 60000);
+    if (minutes <= 0) {
+      return "Updated just now";
+    }
+    return `Updated ${minutes}m ago`;
+  })();
+  const hasActiveSession = Boolean(currentSession);
+  const handleScanPress = () => {
+    if (isGuest) {
+      Alert.alert("Guest Mode", "Sign in to scan and check in to equipment.");
+      return;
+    }
+    if (hasActiveSession && currentSession) {
+      router.push({
+        pathname: "/workout/equipment/[exercise]",
+        params: {
+          exercise: currentSession.exerciseName,
+          muscle: currentSession.muscleGroup,
+        },
+      });
+      return;
+    }
+    router.push("/scan");
   };
 
   const visibleMachines = showAll
@@ -140,53 +287,87 @@ export default function Equipment() {
     <View style={styles.container}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Equipment Availability</Text>
-        <TouchableOpacity
-          style={[styles.showAllButton, showAll && styles.showAllButtonActive]}
-          onPress={() => setShowAll((prev) => !prev)}
-        >
-          <Text style={[styles.showAllButtonText, showAll && styles.showAllButtonTextActive]}>
-            {showAll ? "Show Split" : "Show All"}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={[styles.showAllButton, showAll && styles.showAllButtonActive]}
+            onPress={() => setShowAll((prev) => !prev)}
+          >
+            <Text style={[styles.showAllButtonText, showAll && styles.showAllButtonTextActive]}>
+              {showAll ? "Show Split" : "Show All"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
-      {myActiveSession && (
-        <View style={styles.activeSessionBanner}>
-          <Text style={styles.activeSessionTitle}>Currently using</Text>
-          <Text style={styles.activeSessionText}>
-            {myActiveSession.equipment.name} (started {formatStartedAt(myActiveSession.startedAt)})
-          </Text>
-          {myActiveSession.equipment?.id && (
-            <TouchableOpacity
-              style={styles.activeSessionButton}
-              onPress={() =>
-                router.push({
-                  pathname: "/machine/[id]",
-                  params: { id: String(myActiveSession.equipment.id) },
-                })
-              }
-            >
-              <Text style={styles.activeSessionButtonText}>Resume Session</Text>
-            </TouchableOpacity>
+      {showBusySummary && (
+        <View style={[styles.busySummaryCard, busyCardStyle]}>
+          <View style={styles.busySummaryGlow} />
+          <View style={styles.busySummaryHeader}>
+            <View style={styles.busySummaryTitleRow}>
+              <View style={styles.busySummaryIcon}>
+                <MaterialCommunityIcons name="chart-line" size={16} color="#1a1a1a" />
+              </View>
+              <Text style={styles.busySummaryTitle}>Busy Now</Text>
+              <Text style={styles.busySummaryRange}>(15 min)</Text>
+            </View>
+            <View style={[styles.busySummaryBadge, overallBusyInfo?.style, styles.busySummaryBadgeStrong]}>
+              <View
+                style={[
+                  styles.busySummaryBadgeDot,
+                  overallUtilization == null ? styles.busySummaryBadgeDotMuted : styles.busySummaryBadgeDotLive,
+                ]}
+              />
+              <Text style={[styles.busySummaryBadgeText, busyAccentStyle]}>{busyPillText}</Text>
+            </View>
+          </View>
+          <View style={styles.busySummaryRow}>
+            <Text style={styles.busySummaryPercent}>
+              {overallUtilization == null ? "--" : Math.round(overallUtilization)}%
+            </Text>
+            <Text style={styles.busySummarySub}>{busySummarySubtitle}</Text>
+          </View>
+          <View style={styles.busyMeterTrack}>
+            <View
+              style={[
+                styles.busyMeterFill,
+                overallFillStyle,
+                { width: `${Math.min(100, Math.max(0, overallUtilization ?? 0))}%` },
+              ]}
+            />
+          </View>
+          {(showBusySummaryHint || lastUpdatedLabel) && (
+            <View style={styles.busySummaryMetaRow}>
+              {showBusySummaryHint && (
+                <Text style={styles.busySummaryHint}>{busySummaryHintText}</Text>
+              )}
+              {lastUpdatedLabel && (
+                <Text style={styles.busySummaryUpdated}>{lastUpdatedLabel}</Text>
+              )}
+            </View>
           )}
         </View>
       )}
       <TouchableOpacity
-        style={[styles.scanButton, isGuest && styles.scanButtonDisabled]}
-        onPress={() => {
-          if (isGuest) {
-            Alert.alert("Guest Mode", "Sign in to scan and check in to equipment.");
-            return;
-          }
-          router.push("/scan");
-        }}
+        style={[
+          styles.scanButton,
+          showBusySummary ? styles.scanButtonOutline : styles.scanButtonSolid,
+          isGuest && styles.scanButtonDisabled,
+        ]}
+        onPress={handleScanPress}
       >
-        <Text style={styles.scanButtonText}>Scan QR to Check In</Text>
+        <Text
+          style={[
+            styles.scanButtonText,
+            showBusySummary ? styles.scanButtonTextOutline : styles.scanButtonTextSolid,
+          ]}
+        >
+          {hasActiveSession ? "Return to Session" : "Scan QR to Check In"}
+        </Text>
       </TouchableOpacity>
 
       <FlatList
         data={visibleMachines}
         keyExtractor={(item) => item.code}
-        contentContainerStyle={{ margin: 0 }}
+        contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={() => (
           <View style={styles.emptyContainer}>
@@ -219,6 +400,8 @@ export default function Equipment() {
           const isAvailable = statusUpper === "AVAILABLE";
           const exercises = exercisesByEquipment[item.id] || [];
           const muscleGroups = [...new Set(exercises.map(e => e.muscleGroup))].join(", ");
+          const busyInfo = getBusyLabel(utilizationByEquipmentId[item.id]);
+          const waitTimeLabel = isAvailable ? null : formatWaitTime(waitTimeByEquipmentId[item.id]);
           
           return (
             <TouchableOpacity
@@ -235,26 +418,36 @@ export default function Equipment() {
               ]}>
                 <MaterialCommunityIcons
                   name="dumbbell"
-                  size={28}
+                  size={24}
                   color={isAvailable ? "#4CAF50" : "#FF5722"}
                 />
               </View>
               <View style={styles.cardContent}>
                 <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-                <View style={[
-                  styles.statusBadge,
-                  isAvailable ? styles.availableBadge : styles.inUseBadge
-                ]}>
+                <View style={styles.badgeRow}>
                   <View style={[
-                    styles.statusDot,
-                    isAvailable ? styles.availableDot : styles.inUseDot
-                  ]} />
-                  <Text style={[
-                    styles.statusText,
-                    isAvailable ? styles.availableText : styles.inUseText
+                    styles.statusBadge,
+                    isAvailable ? styles.availableBadge : styles.inUseBadge
                   ]}>
-                    {isAvailable ? "Available" : "In Use"}
-                  </Text>
+                    <View style={[
+                      styles.statusDot,
+                      isAvailable ? styles.availableDot : styles.inUseDot
+                    ]} />
+                    <Text style={[
+                      styles.statusText,
+                      isAvailable ? styles.availableText : styles.inUseText
+                    ]}>
+                      {isAvailable ? "Available" : "In Use"}
+                    </Text>
+                  </View>
+                  {busyInfo && (
+                    <View style={[styles.busyBadge, busyInfo.style]}>
+                      <Text style={[styles.busyText, busyInfo.textStyle]}>Busy: {busyInfo.label}</Text>
+                    </View>
+                  )}
+                  {waitTimeLabel && (
+                    <Text style={styles.waitTimeText}>{waitTimeLabel}</Text>
+                  )}
                 </View>
                 {exercises.length > 0 && (
                   <View style={styles.exercisesContainer}>
@@ -287,38 +480,41 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
-    padding: 20,
-    paddingTop: 50,
+    padding: 14,
+    paddingTop: 20,
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
     marginBottom: 12,
   },
   title: {
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: "900",
     color: "#1a1a1a",
-    textAlign: "center",
-    letterSpacing: 1,
-    textTransform: "uppercase",
+    textAlign: "left",
+    letterSpacing: 0.6,
+  },
+  headerActions: {
+    alignItems: "flex-end",
   },
   showAllButton: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#4CAF50",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    borderColor: "#2f8f45",
+    paddingVertical: 5,
+    paddingHorizontal: 14,
   },
   showAllButtonActive: {
     backgroundColor: "#4CAF50",
   },
   showAllButtonText: {
-    color: "#4CAF50",
-    fontWeight: "700",
-    fontSize: 12,
+    color: "#2f8f45",
+    fontWeight: "800",
+    fontSize: 11,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
   showAllButtonTextActive: {
     color: "#ffffff",
@@ -327,40 +523,41 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#ffffff",
-    padding: 16,
-    marginBottom: 12,
-    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+    borderRadius: 18,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.05,
     shadowRadius: 8,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
+    elevation: 2,
+    borderWidth: 0.5,
+    borderColor: "#e4e8e5",
   },
   availableCard: {
-    backgroundColor: "#f1f8f4",
-    borderLeftWidth: 4,
+    backgroundColor: "#f7fbf9",
+    borderLeftWidth: 2,
     borderLeftColor: "#4CAF50",
   },
   inUseCard: {
-    backgroundColor: "#fff5f2",
-    borderLeftWidth: 4,
+    backgroundColor: "#fff7f4",
+    borderLeftWidth: 2,
     borderLeftColor: "#FF5722",
   },
   iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 16,
+    marginRight: 12,
   },
   availableIconBg: {
-    backgroundColor: "#e8f5e9",
+    backgroundColor: "#eef7f1",
   },
   inUseIconBg: {
-    backgroundColor: "#ffebee",
+    backgroundColor: "#fff0f0",
   },
   cardContent: {
     flex: 1,
@@ -368,24 +565,24 @@ const styles = StyleSheet.create({
   },
   name: {
     color: "#1a1a1a",
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: "700",
-    marginBottom: 6,
+    marginBottom: 4,
   },
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 4,
-    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    gap: 5,
   },
   availableBadge: {
-    backgroundColor: "#e8f5e9",
+    backgroundColor: "#eef7f1",
   },
   inUseBadge: {
-    backgroundColor: "#ffebee",
+    backgroundColor: "#fff0f0",
   },
   statusDot: {
     width: 8,
@@ -399,10 +596,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#FF5722",
   },
   statusText: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   availableText: {
     color: "#2e7d32",
@@ -410,8 +607,211 @@ const styles = StyleSheet.create({
   inUseText: {
     color: "#d32f2f",
   },
+  busyBadge: {
+    marginTop: 0,
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  busyLow: {
+    backgroundColor: "#eff7f2",
+  },
+  busyMedium: {
+    backgroundColor: "#fff6e8",
+  },
+  busyHigh: {
+    backgroundColor: "#fff0f0",
+  },
+  busyText: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  busyTextLow: {
+    color: "#2e7d32",
+  },
+  busyTextMedium: {
+    color: "#ef6c00",
+  },
+  busyTextHigh: {
+    color: "#c62828",
+  },
+  busyTextNeutral: {
+    color: "#1a1a1a",
+  },
+  busySummaryCard: {
+    backgroundColor: "#fcfefd",
+    borderRadius: 18,
+    padding: 12,
+    borderWidth: 0.5,
+    borderColor: "#e2e6e3",
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 7,
+    elevation: 2,
+    overflow: "hidden",
+  },
+  busySummaryGlow: {
+    position: "absolute",
+    top: -55,
+    right: -70,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: "#e0f2e9",
+    opacity: 0.45,
+  },
+  busySummaryCardNeutral: {
+    borderLeftWidth: 2,
+    borderLeftColor: "#cfd8dc",
+  },
+  busySummaryCardLow: {
+    borderLeftWidth: 2,
+    borderLeftColor: "#2e7d32",
+  },
+  busySummaryCardMedium: {
+    borderLeftWidth: 2,
+    borderLeftColor: "#ef6c00",
+  },
+  busySummaryCardHigh: {
+    borderLeftWidth: 2,
+    borderLeftColor: "#c62828",
+  },
+  busySummaryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  busySummaryTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  busySummaryIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e8f5e9",
+  },
+  busySummaryTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#1a1a1a",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  busySummaryRange: {
+    fontSize: 10,
+    color: "#7a7a7a",
+    fontWeight: "600",
+  },
+  busySummaryBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#f1f8f4",
+  },
+  busySummaryBadgeStrong: {
+    borderWidth: 1,
+    borderColor: "#cfe8d6",
+  },
+  busySummaryBadgeText: {
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  busySummaryBadgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+  },
+  busySummaryBadgeDotLive: {
+    backgroundColor: "#2e7d32",
+  },
+  busySummaryBadgeDotMuted: {
+    backgroundColor: "#9e9e9e",
+  },
+  busySummaryRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 8,
+    flexWrap: "wrap",
+    marginBottom: 6,
+  },
+  busySummaryPercent: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#1a1a1a",
+  },
+  busySummarySub: {
+    fontSize: 11,
+    color: "#7a7a7a",
+    fontWeight: "600",
+    flexShrink: 1,
+    lineHeight: 16,
+  },
+  busyMeterTrack: {
+    height: 10,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  busyMeterFill: {
+    height: "100%",
+    borderRadius: 999,
+  },
+  busyFillLow: {
+    backgroundColor: "#00c853",
+  },
+  busyFillMedium: {
+    backgroundColor: "#ff9800",
+  },
+  busyFillHigh: {
+    backgroundColor: "#ff3d00",
+  },
+  busyFillNeutral: {
+    backgroundColor: "#cfd8dc",
+  },
+  busySummaryMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 6,
+    gap: 10,
+  },
+  busySummaryHint: {
+    fontSize: 9,
+    color: "#8c8c8c",
+    fontWeight: "600",
+    letterSpacing: 0.2,
+    flex: 1,
+  },
+  busySummaryUpdated: {
+    fontSize: 9,
+    color: "#4f6b5a",
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
+  waitTimeText: {
+    fontSize: 10,
+    color: "#6b6b6b",
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.2,
+  },
   exercisesContainer: {
-    marginTop: 8,
+    marginTop: 6,
   },
   muscleGroupText: {
     fontSize: 12,
@@ -422,27 +822,45 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   exercisesText: {
-    fontSize: 13,
+    fontSize: 12,
     color: "#888",
     lineHeight: 16,
   },
   scanButton: {
+    alignSelf: "flex-end",
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  scanButtonSolid: {
     backgroundColor: "#4CAF50",
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderWidth: 2,
-    borderColor: "#2e7d32",
-    marginBottom: 16,
-    alignItems: "center",
+    borderColor: "#2f8f45",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  scanButtonOutline: {
+    backgroundColor: "#f4fbf7",
+    borderColor: "#b9ddc6",
   },
   scanButtonDisabled: {
     opacity: 0.5,
   },
   scanButtonText: {
-    color: "#ffffff",
     fontWeight: "900",
-    fontSize: 14,
+    fontSize: 12,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  scanButtonTextSolid: {
+    color: "#ffffff",
+  },
+  scanButtonTextOutline: {
+    color: "#2f8f45",
   },
   centered: {
     justifyContent: "center",
@@ -458,49 +876,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   emptyText: {
-    color: "#666",
-    fontSize: 18,
+    color: "#4d4d4d",
+    fontSize: 16,
     fontWeight: "700",
   },
   emptySubtext: {
-    color: "#999",
-    fontSize: 14,
-    marginTop: 8,
+    color: "#7a7a7a",
+    fontSize: 13,
+    marginTop: 6,
   },
-  activeSessionBanner: {
-    borderWidth: 1,
-    borderColor: "#1b5e20",
-    backgroundColor: "#e8f5e9",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
+  listContent: {
+    paddingBottom: 96,
   },
-  activeSessionTitle: {
-    color: "#1b5e20",
-    fontWeight: "800",
-    textTransform: "uppercase",
-    fontSize: 12,
-    letterSpacing: 0.6,
-    marginBottom: 4,
-  },
-  activeSessionText: {
-    color: "#1a1a1a",
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  activeSessionButton: {
-    marginTop: 10,
-    alignSelf: "flex-start",
-    backgroundColor: "#1b5e20",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  activeSessionButtonText: {
-    color: "#ffffff",
-    fontWeight: "800",
-    fontSize: 12,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
+  badgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 4,
+    flexWrap: "wrap",
   },
 });

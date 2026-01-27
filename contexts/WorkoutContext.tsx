@@ -1,6 +1,9 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import { Alert, AppState } from "react-native";
 import { useAuth } from "@/contexts/AuthContext";
 import { workoutAPI } from "@/services/workoutAPI";
+import { machineAPI } from "@/services/machineAPI";
+import websocketService from "@/services/websocketService";
 
 export interface WorkoutSession {
   exerciseName: string;
@@ -8,6 +11,13 @@ export interface WorkoutSession {
   muscleGroup: string;
   startTime: number;
   endTime?: number;
+}
+
+interface ActiveSessionMeta {
+  sessionId: number;
+  equipmentId: number;
+  equipmentCode: string;
+  startedAt: string;
 }
 
 export interface CheckedInMachine {
@@ -32,7 +42,7 @@ interface WorkoutContextType {
   todayWorkouts: WorkoutSession[];
   workoutHistory: DailyWorkout[];
   reservedMachineId: string | null;
-  checkIn: (exerciseName: string, machineId: string, muscleGroup: string) => void;
+  checkIn: (exerciseName: string, machineId: string, muscleGroup: string) => Promise<void>;
   checkOut: () => Promise<void>;
   startRest: () => void;
   endRest: () => void;
@@ -44,13 +54,19 @@ interface WorkoutContextType {
 }
 
 const WorkoutContext = createContext<WorkoutContextType | undefined>(undefined);
+const HEARTBEAT_INTERVAL_MS = 60_000;
+const DISABLE_HEARTBEAT = process.env.EXPO_PUBLIC_DISABLE_HEARTBEAT === "true";
+const ENV_HEARTBEAT_INTERVAL = Number(process.env.EXPO_PUBLIC_HEARTBEAT_INTERVAL_MS);
+const HEARTBEAT_INTERVAL_EFFECTIVE_MS =
+  Number.isFinite(ENV_HEARTBEAT_INTERVAL) && ENV_HEARTBEAT_INTERVAL > 0
+    ? ENV_HEARTBEAT_INTERVAL
+    : HEARTBEAT_INTERVAL_MS;
 
 export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }: { children: React.ReactNode }) => {
   const { user } = useAuth();
-  // Mock current user ID (in real app, get from auth)
-  const currentUserId = "user123";
+  const currentUserId = user?.username ?? "guest";
 
   // Track which machines are checked in by which users
   const [checkedInMachines, setCheckedInMachines] = useState<
@@ -75,6 +91,11 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
   // Historical workouts
   const [workoutHistory, setWorkoutHistory] = useState<DailyWorkout[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [activeSessionMeta, setActiveSessionMeta] = useState<ActiveSessionMeta | null>(null);
+  const activeSessionMetaRef = useRef<ActiveSessionMeta | null>(null);
+  const lastWarningSessionRef = useRef<number | null>(null);
+  const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const heartbeatPendingRef = useRef(false);
 
   const getTodayKey = () => new Date().toISOString().split("T")[0];
 
@@ -99,7 +120,7 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const checkIn = (
+  const checkIn = async (
     exerciseName: string,
     machineId: string,
     muscleGroup: string
@@ -127,6 +148,28 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
       });
       return updated;
     });
+
+    if (user) {
+      try {
+        const active = await machineAPI.getMyActiveSession();
+        if (active) {
+          setActiveSessionMeta({
+            sessionId: active.id,
+            equipmentId: active.equipment.id,
+            equipmentCode: active.equipment.code,
+            startedAt: active.startedAt,
+          });
+          activeSessionMetaRef.current = {
+            sessionId: active.id,
+            equipmentId: active.equipment.id,
+            equipmentCode: active.equipment.code,
+            startedAt: active.startedAt,
+          };
+        }
+      } catch (error) {
+        console.error("Failed to load active session after check-in:", error);
+      }
+    }
   };
 
   const checkOut = async () => {
@@ -154,6 +197,9 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
       setExerciseStartTime(null);
       setRestStartTime(null);
       setReservedMachineId(null);
+      setActiveSessionMeta(null);
+      activeSessionMetaRef.current = null;
+      lastWarningSessionRef.current = null;
 
       if (user) {
         try {
@@ -169,6 +215,77 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
           console.error("Failed to save workout session:", error);
         }
       }
+    }
+  };
+
+  const syncActiveSession = async () => {
+    if (!user) {
+      setCurrentSession(null);
+      setExerciseStartTime(null);
+      setRestStartTime(null);
+      setCheckedInMachines(new Map());
+      setActiveSessionMeta(null);
+      activeSessionMetaRef.current = null;
+      lastWarningSessionRef.current = null;
+      return;
+    }
+
+    try {
+      const active = await machineAPI.getMyActiveSession();
+      if (!active) {
+        setCurrentSession(null);
+        setExerciseStartTime(null);
+        setRestStartTime(null);
+        setCheckedInMachines(new Map());
+        setActiveSessionMeta(null);
+        activeSessionMetaRef.current = null;
+        lastWarningSessionRef.current = null;
+        return;
+      }
+
+      const machineCode = active.equipment.code;
+      let exerciseName = active.equipment.name;
+      let muscleGroup = "General";
+
+      try {
+        const exercises = await machineAPI.getExercisesByEquipmentCode(machineCode);
+        if (exercises.length > 0) {
+          exerciseName = exercises[0].name;
+          muscleGroup = exercises[0].muscleGroup;
+        }
+      } catch (error) {
+        console.error("Failed to load exercises for active session:", error);
+      }
+
+      const startTime = Date.parse(active.startedAt);
+      setCurrentSession({
+        exerciseName,
+        machineId: machineCode,
+        muscleGroup,
+        startTime: Number.isNaN(startTime) ? Date.now() : startTime,
+      });
+      setExerciseStartTime(Number.isNaN(startTime) ? Date.now() : startTime);
+      setRestStartTime(null);
+      const meta = {
+        sessionId: active.id,
+        equipmentId: active.equipment.id,
+        equipmentCode: active.equipment.code,
+        startedAt: active.startedAt,
+      };
+      setActiveSessionMeta(meta);
+      activeSessionMetaRef.current = meta;
+      setCheckedInMachines(() => {
+        const updated = new Map<string, CheckedInMachine>();
+        updated.set(machineCode, {
+          exerciseName,
+          machineId: machineCode,
+          muscleGroup,
+          userId: currentUserId,
+        });
+        return updated;
+      });
+    } catch (error) {
+      console.error("Failed to sync active session:", error);
     }
   };
 
@@ -253,7 +370,106 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     refreshHistory();
+    syncActiveSession();
   }, [user]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        syncActiveSession();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [user]);
+
+  useEffect(() => {
+    activeSessionMetaRef.current = activeSessionMeta;
+  }, [activeSessionMeta]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+    websocketService.connect();
+    const unsubscribe = websocketService.subscribe((update) => {
+      if (update.status !== "TIMEOUT_WARNING") {
+        return;
+      }
+      const meta = activeSessionMetaRef.current;
+      if (!meta || !currentSession) {
+        return;
+      }
+      if (update.sessionId !== meta.sessionId) {
+        return;
+      }
+      if (lastWarningSessionRef.current === meta.sessionId) {
+        return;
+      }
+      lastWarningSessionRef.current = meta.sessionId;
+
+      Alert.alert(
+        "Session about to end",
+        "We haven't heard from your device in a while. Tap Keep Alive to continue your session.",
+        [
+          {
+            text: "Keep Alive",
+            onPress: async () => {
+              try {
+                await machineAPI.heartbeat(meta.equipmentId);
+              } catch (error) {
+                console.error("Failed to send heartbeat from alert:", error);
+              }
+            },
+          },
+          { text: "Dismiss", style: "cancel" },
+        ]
+      );
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [user, currentSession]);
+
+  useEffect(() => {
+    if (heartbeatTimerRef.current) {
+      clearInterval(heartbeatTimerRef.current);
+      heartbeatTimerRef.current = null;
+    }
+    if (DISABLE_HEARTBEAT || !user || !activeSessionMeta) {
+      return;
+    }
+
+    const sendHeartbeat = async () => {
+      if (heartbeatPendingRef.current) {
+        return;
+      }
+      if (AppState.currentState !== "active") {
+        return;
+      }
+      heartbeatPendingRef.current = true;
+      try {
+        await machineAPI.heartbeat(activeSessionMeta.equipmentId);
+      } catch (error) {
+        console.error("Failed to send heartbeat:", error);
+      } finally {
+        heartbeatPendingRef.current = false;
+      }
+    };
+
+    sendHeartbeat();
+    heartbeatTimerRef.current = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_EFFECTIVE_MS);
+
+    return () => {
+      if (heartbeatTimerRef.current) {
+        clearInterval(heartbeatTimerRef.current);
+        heartbeatTimerRef.current = null;
+      }
+    };
+  }, [user, activeSessionMeta]);
 
   return (
     <WorkoutContext.Provider value={value}>{children}</WorkoutContext.Provider>

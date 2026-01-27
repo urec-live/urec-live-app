@@ -1,16 +1,13 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef } from 'react';
 import 'react-native-reanimated';
 import { Platform, ToastAndroid } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { machineAPI } from '@/services/machineAPI';
-import ActiveExerciseTracker from '../components/ActiveExerciseTracker';
-import ActiveSessionBanner from '../components/ActiveSessionBanner';
-import DailyWorkoutSummary from '../components/DailyWorkoutSummary';
+import { configureForegroundNotifications } from '@/services/pushNotifications';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { SplitProvider } from '../contexts/SplitContext';
 import { useWorkout, WorkoutProvider } from '../contexts/WorkoutContext';
@@ -29,6 +26,23 @@ function RootLayoutNav() {
   useEffect(() => {
     didAutoResume.current = false;
   }, [user?.username, isGuest]);
+
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+
+    const isInAuthFlow = segments.includes('(auth)');
+
+    if (!user && !isGuest && !isInAuthFlow) {
+      router.replace('/(auth)/login');
+      return;
+    }
+
+    if ((user || isGuest) && isInAuthFlow) {
+      router.replace('/(tabs)');
+    }
+  }, [loading, user, isGuest, segments, router]);
 
   useEffect(() => {
     if (loading || !user || isGuest) {
@@ -51,10 +65,28 @@ function RootLayoutNav() {
       try {
         const session = await machineAPI.getMyActiveSession();
         if (session?.equipment?.id) {
-          router.replace({
-            pathname: '/machine/[id]',
-            params: { id: String(session.equipment.id) },
-          });
+          try {
+            const exercises = await machineAPI.getExercisesByEquipmentCode(session.equipment.code);
+            if (exercises.length > 0) {
+              router.replace({
+                pathname: '/workout/equipment/[exercise]',
+                params: {
+                  exercise: exercises[0].name,
+                  muscle: exercises[0].muscleGroup,
+                },
+              });
+            } else {
+              router.replace({
+                pathname: '/machine/[id]',
+                params: { id: String(session.equipment.id) },
+              });
+            }
+          } catch {
+            router.replace({
+              pathname: '/machine/[id]',
+              params: { id: String(session.equipment.id) },
+            });
+          }
           if (Platform.OS === 'android') {
             ToastAndroid.show('Resumed your active session', ToastAndroid.SHORT);
           } else {
@@ -70,26 +102,20 @@ function RootLayoutNav() {
   }, [loading, user, isGuest, currentSession, segments, router]);
 
   return (
-    <>
-      <DailyWorkoutSummary />
-      <ActiveSessionBanner />
-      <Stack screenOptions={{ headerShown: false }}>
-        {user || isGuest ? (
-          <>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-          </>
-        ) : (
-          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        )}
-      </Stack>
-      <ActiveExerciseTracker />
-    </>
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+    </Stack>
   );
 }
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+
+  useEffect(() => {
+    configureForegroundNotifications();
+  }, []);
 
   return (
     <AuthProvider>
@@ -97,10 +123,7 @@ export default function RootLayout() {
         <SplitProvider>
           <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
             <SafeAreaProvider>
-              <SafeAreaView style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-                <RootLayoutNav />
-                <StatusBar style="auto" />
-              </SafeAreaView>
+              <RootLayoutNav />
             </SafeAreaProvider>
           </ThemeProvider>
         </SplitProvider>

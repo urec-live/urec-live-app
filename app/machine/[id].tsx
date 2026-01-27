@@ -2,10 +2,12 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { machineAPI, Machine, Exercise } from "@/services/machineAPI";
+import { useWorkout } from "@/contexts/WorkoutContext";
 
 export default function MachineDetails() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { currentSession } = useWorkout();
   const [machine, setMachine] = useState<Machine | null>(null);
   const [status, setStatus] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -82,6 +84,7 @@ export default function MachineDetails() {
   }
 
   const statusLower = status.toLowerCase();
+  const hasActiveSession = Boolean(currentSession);
 
   return (
     <View style={styles.container}>
@@ -94,8 +97,25 @@ export default function MachineDetails() {
         {status.toUpperCase()}
       </Text>
 
-      <TouchableOpacity style={styles.scanButton} onPress={() => router.push("/scan")}>
-        <Text style={styles.scanButtonText}>Scan QR to Check In</Text>
+      <TouchableOpacity
+        style={styles.scanButton}
+        onPress={() => {
+          if (hasActiveSession && currentSession) {
+            router.push({
+              pathname: "/workout/equipment/[exercise]",
+              params: {
+                exercise: currentSession.exerciseName,
+                muscle: currentSession.muscleGroup,
+              },
+            });
+            return;
+          }
+          router.push("/scan");
+        }}
+      >
+        <Text style={styles.scanButtonText}>
+          {hasActiveSession ? "Return to Session" : "Scan QR to Check In"}
+        </Text>
       </TouchableOpacity>
 
       {exercises.length > 0 && (

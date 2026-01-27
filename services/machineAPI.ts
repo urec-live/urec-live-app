@@ -129,6 +129,13 @@ export const machineAPI = {
     return response.data;
   },
 
+  // Heartbeat an active session by equipment id
+  heartbeat: async (equipmentId: number): Promise<EquipmentSessionResponse> => {
+    const headers = await machineAPI.authHeaders();
+    const response = await api.post(`/equipment-sessions/heartbeat/${equipmentId}`, undefined, { headers });
+    return response.data;
+  },
+
   // Update machine status
   updateMachineStatus: async (id: number, status: string): Promise<Machine> => {
     const response = await api.put(`/machines/${id}/status`, { status });

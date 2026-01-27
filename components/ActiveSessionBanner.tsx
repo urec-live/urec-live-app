@@ -68,6 +68,41 @@ export default function ActiveSessionBanner() {
     );
   };
 
+  const handleResume = async () => {
+    const equipmentCode = activeSession.equipment.code;
+    if (currentSession?.machineId === equipmentCode) {
+      router.push({
+        pathname: "/workout/equipment/[exercise]",
+        params: {
+          exercise: currentSession.exerciseName,
+          muscle: currentSession.muscleGroup,
+        },
+      });
+      return;
+    }
+
+    try {
+      const exercises = await machineAPI.getExercisesByEquipmentCode(equipmentCode);
+      if (exercises.length > 0) {
+        router.push({
+          pathname: "/workout/equipment/[exercise]",
+          params: {
+            exercise: exercises[0].name,
+            muscle: exercises[0].muscleGroup,
+          },
+        });
+        return;
+      }
+    } catch {
+      // Fall back to machine detail when we cannot resolve an exercise.
+    }
+
+    router.push({
+      pathname: "/machine/[id]",
+      params: { id: String(activeSession.equipment.id) },
+    });
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.textBlock}>
@@ -82,12 +117,7 @@ export default function ActiveSessionBanner() {
       <View style={styles.actions}>
         <TouchableOpacity
           style={styles.resumeButton}
-          onPress={() =>
-            router.push({
-              pathname: "/machine/[id]",
-              params: { id: String(activeSession.equipment.id) },
-            })
-          }
+          onPress={handleResume}
         >
           <Text style={styles.resumeText}>Resume</Text>
         </TouchableOpacity>

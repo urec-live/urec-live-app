@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { authAPI, setAuthToken } from '../services/authAPI';
+import { registerForPushNotificationsAsync } from '@/services/pushNotifications';
 
 interface User {
   username: string;
@@ -45,6 +46,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setUser(JSON.parse(userData));
         setIsSignedIn(true);
         setIsGuest(false);
+        registerForPushNotificationsAsync().catch((error) =>
+          console.error("Push registration failed:", error)
+        );
       } else if (guestFlag === 'true') {
         setAuthToken(null);
         setUser(null);
@@ -88,6 +92,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsSignedIn(true);
       setIsGuest(false);
       await AsyncStorage.removeItem('guest');
+      registerForPushNotificationsAsync().catch((error) =>
+        console.error("Push registration failed:", error)
+      );
     } catch (error) {
       console.error("Sign in error:", error);
       throw error;
@@ -117,6 +124,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsSignedIn(true);
       setIsGuest(false);
       await AsyncStorage.removeItem('guest');
+      registerForPushNotificationsAsync().catch((error) =>
+        console.error("Push registration failed:", error)
+      );
     } catch (error) {
       console.error('Sign up error:', error);
       throw error;

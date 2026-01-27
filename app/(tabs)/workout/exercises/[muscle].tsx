@@ -90,15 +90,23 @@ export default function MuscleExercises() {
     if (exercises.length > 0) {
       loadAvailability();
 
+      // Ensure WebSocket is connected for real-time updates
+      websocketService.connect();
+
       // Subscribe to WebSocket updates
       const unsubscribe = websocketService.subscribe((update) => {
         console.log('[Exercise List] Received equipment status update:', update);
         // Reload availability when any machine is updated
         loadAvailability();
       });
+      const unsubscribeConnection = websocketService.subscribeConnection(() => {
+        console.log("[Exercise List] WebSocket reconnected, refreshing availability.");
+        loadAvailability();
+      });
 
       return () => {
         unsubscribe();
+        unsubscribeConnection();
       };
     }
   }, [exercises]);

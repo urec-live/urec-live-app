@@ -16,7 +16,7 @@ type BarCodeScannedData = {
 
 export default function ScanScreen() {
   const router = useRouter();
-  const { checkIn } = useWorkout();
+  const { checkIn, currentSession } = useWorkout();
   const { isGuest } = useAuth();
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -25,6 +25,7 @@ export default function ScanScreen() {
   const [parsed, setParsed] = useState<ParsedMachineScan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleScan = (result: BarCodeScannedData) => {
     if (scanned) return; // throttle double-fires
@@ -54,13 +55,17 @@ export default function ScanScreen() {
       setError("No machine ID found in QR code.");
       return;
     }
+    if (isSubmitting) {
+      return;
+    }
 
     const exerciseName = parsed.exercise || parsed.machineId;
     const muscleGroup = parsed.muscle || "General";
 
     try {
+      setIsSubmitting(true);
       await machineAPI.checkIn(parsed.machineId);
-      checkIn(exerciseName, parsed.machineId, muscleGroup);
+      await checkIn(exerciseName, parsed.machineId, muscleGroup);
       setMessage(`Checked into ${parsed.machineId}`);
     } catch (e: any) {
       const status = e?.response?.status;
@@ -70,6 +75,8 @@ export default function ScanScreen() {
       else if (status === 404) setError("Machine not found.");
       else setError(String(msg || "Unable to check in right now."));
       return;
+    } finally {
+      setIsSubmitting(false);
     }
 
     // Navigate to the related equipment list if we know the exercise
@@ -88,6 +95,31 @@ export default function ScanScreen() {
         <Text style={styles.subtitle}>Sign in to scan and check in to equipment.</Text>
         <Pressable style={styles.button} onPress={() => router.replace("/(auth)/login")}>
           <Text style={styles.buttonText}>Go to Login</Text>
+        </Pressable>
+      </CenteredScreen>
+    );
+  }
+
+  if (currentSession) {
+    return (
+      <CenteredScreen>
+        <Text style={styles.title}>Session Active</Text>
+        <Text style={styles.subtitle}>
+          You&apos;re already checked in. Return to your session to continue.
+        </Text>
+        <Pressable
+          style={styles.button}
+          onPress={() =>
+            router.replace({
+              pathname: "/workout/equipment/[exercise]",
+              params: {
+                exercise: currentSession.exerciseName,
+                muscle: currentSession.muscleGroup,
+              },
+            })
+          }
+        >
+          <Text style={styles.buttonText}>Return to Session</Text>
         </Pressable>
       </CenteredScreen>
     );
@@ -141,8 +173,8 @@ export default function ScanScreen() {
                   <Text style={styles.metaText}>Machine: {parsed.machineId}</Text>
                   {parsed.exercise && <Text style={styles.metaText}>Exercise: {parsed.exercise}</Text>}
                   {parsed.muscle && <Text style={styles.metaText}>Muscle: {parsed.muscle}</Text>}
-                  <Pressable style={styles.button} onPress={handleConfirmCheckIn}>
-                    <Text style={styles.buttonText}>Confirm Check-In</Text>
+                  <Pressable style={[styles.button, isSubmitting && styles.buttonDisabled]} onPress={handleConfirmCheckIn} disabled={isSubmitting}>
+                    <Text style={styles.buttonText}>{isSubmitting ? "Checking In..." : "Confirm Check-In"}</Text>
                   </Pressable>
                 </>
               )}
@@ -222,6 +254,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 2,
     borderColor: "#00ff88",
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   buttonText: { color: "#001a14", fontWeight: "900" },
   metaBox: {

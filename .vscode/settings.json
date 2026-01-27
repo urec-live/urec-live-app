@@ -1,7 +1,12 @@
 {
-  "editor.codeActionsOnSave": {
-    "source.fixAll": "explicit",
-    "source.organizeImports": "explicit",
-    "source.sortMembers": "explicit"
-  }
+  "java.project.explorer.showNonJavaResources": false,
+  "java.import.exclusions": [
+    "**/node_modules/**",
+    "**/.expo/**",
+    "**/android/**/build/**",
+    "**/ios/**/build/**"
+  ],
+  "java.project.resourceFilters": [
+    "**/node_modules/**"
+  ]
 }
