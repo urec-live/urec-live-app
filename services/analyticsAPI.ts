@@ -37,12 +37,26 @@ export interface WaitTimeSummaryDTO {
   longestWaitSeconds: number | null;
 }
 
+export interface UserStats {
+  currentStreak: number;
+  totalWorkoutsThisWeek: number;
+  totalHoursThisWeek: number;
+  weeklySplit: Record<string, number>;
+}
+
 export const analyticsAPI = {
   getMyUsage: async (days = 7): Promise<SessionUsageSummary> => {
     const headers = await machineAPI.authHeaders();
-    const response = await api.get(`/analytics/usage/me?days=${days}`, { headers });
+    const response = await api.get<SessionUsageSummary>(`/analytics/usage/me?days=${days}`, { headers });
     return response.data;
   },
+
+  getMyStats: async (): Promise<UserStats> => {
+    const headers = await machineAPI.authHeaders();
+    const response = await api.get<UserStats>('/analytics/my-stats', { headers });
+    return response.data;
+  },
+
   getOverallUsage: async (days = 7): Promise<SessionUsageSummary> => {
     const headers = await machineAPI.authHeaders();
     const response = await api.get(`/analytics/usage/overall?days=${days}`, { headers });

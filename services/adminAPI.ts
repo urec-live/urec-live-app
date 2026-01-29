@@ -56,4 +56,13 @@ export const adminAPI = {
         const headers = await machineAPI.authHeaders();
         await api.patch(`/equipment/${id}/status`, { status }, { headers });
     },
+
+    exportSessions: async (): Promise<string> => {
+        const headers = await machineAPI.authHeaders();
+        const response = await api.get('/admin/export/sessions', {
+            headers,
+            responseType: 'text' // We expect CSV text
+        });
+        return response.data;
+    },
 };

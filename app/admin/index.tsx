@@ -5,6 +5,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { adminAPI, Machine } from '../../services/adminAPI';
 import { userAPI } from '../../services/userAPI';
 import { ThemedView } from '@/components/themed-view';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 
 interface UserResult {
     id: number;
@@ -73,6 +75,71 @@ export default function AdminDashboard() {
         }
     };
 
+    const handleExport = async () => {
+        try {
+            setLoading(true);
+            const csvData = await adminAPI.exportSessions();
+
+            // Ask user for preference
+            Alert.alert(
+                'Export Ready',
+                'How would you like to export the file?',
+                [
+                    {
+                        text: 'Share',
+                        onPress: async () => await shareFile(csvData)
+                    },
+                    {
+                        text: 'Save to Device',
+                        onPress: async () => await saveToDevice(csvData)
+                    },
+                    {
+                        text: 'Cancel',
+                        style: 'cancel'
+                    }
+                ]
+            );
+        } catch (error: any) {
+            console.error(error);
+            Alert.alert('Export Failed', 'Could not export data: ' + error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const shareFile = async (data: string) => {
+        const fileUri = (FileSystem.cacheDirectory || FileSystem.documentDirectory) + 'equipment_sessions.csv';
+        await FileSystem.writeAsStringAsync(fileUri, data, { encoding: 'utf8' });
+
+        if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(fileUri, {
+                mimeType: 'text/csv',
+                dialogTitle: 'Export Equipment Sessions'
+            });
+        } else {
+            Alert.alert('Error', 'Sharing is not available on this device');
+        }
+    };
+
+    const saveToDevice = async (data: string) => {
+        try {
+            const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+            if (permissions.granted) {
+                const uri = await FileSystem.StorageAccessFramework.createFileAsync(
+                    permissions.directoryUri,
+                    'equipment_sessions.csv',
+                    'text/csv'
+                );
+                await FileSystem.writeAsStringAsync(uri, data, { encoding: 'utf8' });
+                Alert.alert('Success', 'File saved successfully!');
+            } else {
+                // User cancelled or denied
+            }
+        } catch (e: any) {
+            Alert.alert('Error', 'Failed to save file: ' + e.message);
+        }
+    };
+
     const handleSearch = async () => {
         if (!searchQuery.trim()) return;
         try {
@@ -132,6 +199,16 @@ export default function AdminDashboard() {
                 </Pressable>
             </View>
 
+            <View style={{ marginBottom: 20 }}>
+                <Pressable
+                    style={[styles.addButton, { backgroundColor: '#2196F3', alignSelf: 'flex-start' }]}
+                    onPress={handleExport}
+                >
+                    <MaterialCommunityIcons name="download" size={20} color="#fff" />
+                    <Text style={styles.addButtonText}>Export Data (CSV)</Text>
+                </Pressable>
+            </View>
+
             <View style={styles.sectionHeader}>
                 <MaterialCommunityIcons name="account-search" size={20} color="#666" />
                 <Text style={styles.sectionTitle}>User Search</Text>
@@ -153,33 +230,37 @@ export default function AdminDashboard() {
                 </Pressable>
             </View>
 
-            {searchResults.length > 0 && (
-                <View style={styles.resultsList}>
-                    {searchResults.map(user => (
-                        <View key={user.id} style={styles.userRow}>
-                            <Text style={styles.username}>{user.username}</Text>
-                            <Text style={styles.email}>{user.email}</Text>
-                        </View>
-                    ))}
-                </View>
-            )}
+            {
+                searchResults.length > 0 && (
+                    <View style={styles.resultsList}>
+                        {searchResults.map(user => (
+                            <View key={user.id} style={styles.userRow}>
+                                <Text style={styles.username}>{user.username}</Text>
+                                <Text style={styles.email}>{user.email}</Text>
+                            </View>
+                        ))}
+                    </View>
+                )
+            }
 
             <View style={[styles.sectionHeader, { marginTop: 20 }]}>
                 <MaterialCommunityIcons name="dumbbell" size={20} color="#666" />
                 <Text style={styles.sectionTitle}>Equipment</Text>
             </View>
 
-            {loading ? (
-                <ActivityIndicator size="large" color="#4CAF50" style={{ marginTop: 50 }} />
-            ) : (
-                <FlatList
-                    data={machines}
-                    keyExtractor={(item) => item.id.toString()}
-                    renderItem={renderItem}
-                    contentContainerStyle={styles.list}
-                    ListEmptyComponent={<Text style={styles.emptyText}>No machines found.</Text>}
-                />
-            )}
+            {
+                loading ? (
+                    <ActivityIndicator size="large" color="#4CAF50" style={{ marginTop: 50 }} />
+                ) : (
+                    <FlatList
+                        data={machines}
+                        keyExtractor={(item) => item.id.toString()}
+                        renderItem={renderItem}
+                        contentContainerStyle={styles.list}
+                        ListEmptyComponent={<Text style={styles.emptyText}>No machines found.</Text>}
+                    />
+                )
+            }
 
             <Modal visible={statusModalVisible} transparent animationType="fade">
                 <Pressable style={styles.modalOverlay} onPress={() => setStatusModalVisible(false)}>
@@ -197,7 +278,7 @@ export default function AdminDashboard() {
                     </View>
                 </Pressable>
             </Modal>
-        </ThemedView>
+        </ThemedView >
     );
 }
 
