@@ -89,6 +89,13 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // Inject Gym Context
+    const gymId = await AsyncStorage.getItem('currentGymId');
+    if (gymId) {
+      config.headers['X-Gym-Id'] = gymId;
+    }
+
     return config;
   },
   (error) => Promise.reject(error)

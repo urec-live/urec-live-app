@@ -7,6 +7,7 @@ import { registerForPushNotificationsAsync } from '@/services/pushNotifications'
 interface User {
   username: string;
   email: string;
+  roles: string[];
   pushNotificationsEnabled?: boolean;
 }
 
@@ -47,17 +48,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (userData && accessToken) {
         setAuthToken(accessToken);
         // Optimistically set user
-        setUser(JSON.parse(userData));
+        const parsedUser = JSON.parse(userData);
+        // Ensure roles is at least empty array if missing (migration)
+        if (!parsedUser.roles) parsedUser.roles = [];
+        setUser(parsedUser);
         setIsSignedIn(true);
         setIsGuest(false);
 
         // Verify validity in background
         try {
+          // Profile refresh logic might need update if API doesn't return roles in /me
+          // For now, rely on stored roles or re-login for role update
           await userAPI.getProfile();
           registerForPushNotificationsAsync().catch((e) => console.log(e));
         } catch (e: any) {
-          // Only log out if explicitly unauthorized (401)
-          // If it's a network error (status undefined) or other error, keep the local session.
+          // ... existing error handling
           if (e.response && e.response.status === 401) {
             console.log("Token invalid (401), logging out:", e);
             await AsyncStorage.removeItem('accessToken');
@@ -71,6 +76,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         }
       } else if (guestFlag === 'true') {
+        // ... existing guest logic
         setAuthToken(null);
         setUser(null);
         setIsSignedIn(true);
@@ -82,6 +88,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setIsGuest(false);
       }
     } catch (error) {
+      // ... existing error handling
       console.error('Error restoring token:', error);
       setAuthToken(null);
       setUser(null);
@@ -106,6 +113,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const userData: User = {
         username: response.username || username,
         email: response.email || "",
+        roles: response.roles || [],
       };
       await AsyncStorage.setItem('user', JSON.stringify(userData));
 
@@ -138,6 +146,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const userData: User = {
         username: response.username || username,
         email: response.email || email,
+        roles: response.roles || [],
       };
       await AsyncStorage.setItem('user', JSON.stringify(userData));
 
@@ -156,89 +165,104 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const signOut = async () => {
-    try {
-      setLoading(true);
-      // Clear stored tokens and user data
-      await AsyncStorage.removeItem('accessToken');
-      await AsyncStorage.removeItem('refreshToken');
-      await AsyncStorage.removeItem('user');
-      await AsyncStorage.removeItem('guest');
-      setAuthToken(null);
-
-      setUser(null);
-      setIsSignedIn(false);
-      setIsGuest(false);
-    } catch (error) {
-      console.error('Sign out error:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const startGuest = async () => {
-    try {
-      setLoading(true);
-      await AsyncStorage.setItem('guest', 'true');
-      setAuthToken(null);
-      setUser(null);
-      setIsSignedIn(true);
-      setIsGuest(true);
-    } catch (error) {
-      console.error('Start guest error:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const endGuest = async () => {
-    try {
-      setLoading(true);
-      await AsyncStorage.removeItem('guest');
-      setAuthToken(null);
-      setUser(null);
-      setIsSignedIn(false);
-      setIsGuest(false);
-    } catch (error) {
-      console.error('End guest error:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const refreshUser = async () => {
-    try {
-      const profile = await userAPI.getProfile();
-      const updatedUser: User = {
-        username: profile.username,
-        email: profile.email,
-      };
-      setUser(updatedUser);
-      await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
-    } catch (error) {
-      console.error('Failed to refresh user profile:', error);
-    }
-  };
-
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        signIn,
-        signUp,
-        signOut,
-        restoreToken,
-        isSignedIn,
-        isGuest,
-        startGuest,
-        endGuest,
-        refreshUser,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  setUser(userData);
+  setIsSignedIn(true);
+  setIsGuest(false);
+  await AsyncStorage.removeItem('guest');
+  registerForPushNotificationsAsync().catch((error) =>
+    console.error("Push registration failed:", error)
   );
+} catch (error) {
+  console.error('Sign up error:', error);
+  throw error;
+} finally {
+  setLoading(false);
+}
+  };
+
+const signOut = async () => {
+  try {
+    setLoading(true);
+    // Clear stored tokens and user data
+    await AsyncStorage.removeItem('accessToken');
+    await AsyncStorage.removeItem('refreshToken');
+    await AsyncStorage.removeItem('user');
+    await AsyncStorage.removeItem('guest');
+    setAuthToken(null);
+
+    setUser(null);
+    setIsSignedIn(false);
+    setIsGuest(false);
+  } catch (error) {
+    console.error('Sign out error:', error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+const startGuest = async () => {
+  try {
+    setLoading(true);
+    await AsyncStorage.setItem('guest', 'true');
+    setAuthToken(null);
+    setUser(null);
+    setIsSignedIn(true);
+    setIsGuest(true);
+  } catch (error) {
+    console.error('Start guest error:', error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+const endGuest = async () => {
+  try {
+    setLoading(true);
+    await AsyncStorage.removeItem('guest');
+    setAuthToken(null);
+    setUser(null);
+    setIsSignedIn(false);
+    setIsGuest(false);
+  } catch (error) {
+    console.error('End guest error:', error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+const refreshUser = async () => {
+  try {
+    const profile = await userAPI.getProfile();
+    const updatedUser: User = {
+      username: profile.username,
+      email: profile.email,
+    };
+    setUser(updatedUser);
+    await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+  } catch (error) {
+    console.error('Failed to refresh user profile:', error);
+  }
+};
+
+return (
+  <AuthContext.Provider
+    value={{
+      user,
+      loading,
+      signIn,
+      signUp,
+      signOut,
+      restoreToken,
+      isSignedIn,
+      isGuest,
+      startGuest,
+      endGuest,
+      refreshUser,
+    }}
+  >
+    {children}
+  </AuthContext.Provider>
+);
 };
 
 export const useAuth = () => {

@@ -1,7 +1,8 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { machineAPI, Machine, Exercise } from "@/services/machineAPI";
+import { ScrollView, ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { machineAPI, Machine, Exercise, EquipmentWaitTimeEstimate } from "@/services/machineAPI";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useWorkout } from "@/contexts/WorkoutContext";
 
 export default function MachineDetails() {
@@ -13,6 +14,7 @@ export default function MachineDetails() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [recommendations, setRecommendations] = useState<EquipmentWaitTimeEstimate[]>([]);
 
   useEffect(() => {
     loadMachine();
@@ -24,14 +26,17 @@ export default function MachineDetails() {
       const data = await machineAPI.getMachineById(Number(id));
       setMachine(data);
       setStatus(data.status);
-      
-      // Fetch exercises for this machine
+
+      // Load exercises and recommendations
       try {
-        const machineExercises = await machineAPI.getExercisesByEquipmentId(Number(id));
-        setExercises(machineExercises);
+        const [examData, recData] = await Promise.all([
+          machineAPI.getExercisesByEquipmentId(Number(id)),
+          machineAPI.getRecommendations(Number(id))
+        ]);
+        setExercises(examData);
+        setRecommendations(recData);
       } catch (err) {
-        console.error("Error loading exercises:", err);
-        setExercises([]);
+        console.error("Error loading details:", err);
       }
     } catch (error) {
       console.error("Error loading machine:", error);
@@ -124,11 +129,34 @@ export default function MachineDetails() {
           <Text style={styles.muscleGroupText}>
             {[...new Set(exercises.map(e => e.muscleGroup))].join(", ")}
           </Text>
-          
+
           <Text style={styles.relatedExercisesTitle}>EXERCISES</Text>
           <Text style={styles.relatedExercisesText}>
             {exercises.map(e => e.name).join(", ")}
           </Text>
+        </View>
+      )}
+
+      {recommendations.length > 0 && statusLower !== "available" && (
+        <View style={styles.recContainer}>
+          <Text style={styles.recTitle}>Try These Instead (Same Muscle Group)</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.recList}>
+            {recommendations.map((rec) => (
+              <TouchableOpacity
+                key={rec.equipmentId}
+                style={styles.recCard}
+                onPress={() => router.push(`/machine/${rec.equipmentId}`)}
+              >
+                <View style={[styles.recBadge, { backgroundColor: !rec.inUse ? '#E8F5E9' : '#FFEBEE' }]}>
+                  <Text style={[styles.recBadgeText, { color: !rec.inUse ? '#2E7D32' : '#C62828' }]}>
+                    {!rec.inUse ? 'OPEN' : `${Math.ceil((rec.estimatedWaitSeconds || 0) / 60)}m Wait`}
+                  </Text>
+                </View>
+                <Text style={styles.recName} numberOfLines={2}>{rec.name}</Text>
+                <MaterialCommunityIcons name="arrow-right-circle" size={24} color="#4CAF50" style={{ marginTop: 'auto', alignSelf: 'flex-end' }} />
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
       )}
 
@@ -292,4 +320,52 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 14,
   },
+  recContainer: {
+    marginTop: 10,
+    marginBottom: 30,
+  },
+  recTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#666",
+    marginBottom: 10,
+    textTransform: "uppercase",
+  },
+  recList: {
+    flexDirection: "row",
+    overflow: "visible",
+  },
+  recCard: {
+    width: 140,
+    height: 120,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 12,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    justifyContent: 'space-between'
+  },
+  recBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginBottom: 6
+  },
+  recBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  recName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1a1a1a",
+    marginBottom: 4,
+  }
 });

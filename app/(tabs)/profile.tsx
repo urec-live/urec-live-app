@@ -88,7 +88,82 @@ export default function Profile() {
     loadUsage();
   }, [authLoading, isSignedIn, isGuest, user, user?.username]);
 
-  // ... (keep existing handlers)
+
+  const handleDeleteAccountPress = () => {
+    Alert.alert(
+      "Delete Account",
+      "Are you sure? This action cannot be undone. All your history will be lost.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem("accessToken");
+              if (!token) return;
+              await userAPI.deleteAccount();
+              await signOut();
+            } catch (error) {
+              Alert.alert("Error", "Failed to delete account");
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleLogoutPress = () => {
+    Alert.alert(
+      isGuest ? "Exit Guest Mode" : "Logout",
+      isGuest
+        ? "Return to login to use a full account."
+        : "Are you sure you want to log out?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: isGuest ? "Exit" : "Logout",
+          onPress: () => {
+            if (isGuest) {
+              endGuest();
+            } else {
+              signOut();
+            }
+          },
+          style: "destructive",
+        },
+      ]
+    );
+  };
+
+  const dayLabels: Record<DayKey, string> = {
+    Mon: "Monday",
+    Tue: "Tuesday",
+    Wed: "Wednesday",
+    Thu: "Thursday",
+    Fri: "Friday",
+    Sat: "Saturday",
+    Sun: "Sunday",
+  };
+
+  const openEditor = (day: DayKey) => {
+    setEditingDay(day);
+    setDraftGroups(mode === "manual" ? manualSplit[day] || [] : []);
+  };
+
+  const toggleGroup = (group: string) => {
+    setDraftGroups((prev) =>
+      prev.includes(group) ? prev.filter((g) => g !== group) : [...prev, group]
+    );
+  };
+
+  const saveDay = async () => {
+    if (!editingDay) return;
+    await updateDaySplit(editingDay, draftGroups);
+    setEditingDay(null);
+  };
+
+  const activeSplit = mode === "manual" ? manualSplit : autoSplit;
 
   return (
     <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
@@ -329,16 +404,18 @@ export default function Profile() {
 
               <View style={styles.separator} />
 
-              <Pressable
-                style={styles.settingRow}
-                onPress={() => router.push("/admin" as any)}
-              >
-                <View style={styles.settingContent}>
-                  <MaterialCommunityIcons name="shield-account" size={24} color="#4CAF50" />
-                  <Text style={[styles.settingLabel, { color: "#4CAF50" }]}>Admin Dashboard</Text>
-                </View>
-                <MaterialCommunityIcons name="chevron-right" size={24} color="#ccc" />
-              </Pressable>
+              {user?.roles?.includes('ROLE_ADMIN') && (
+                <Pressable
+                  style={styles.settingRow}
+                  onPress={() => router.push("/admin" as any)}
+                >
+                  <View style={styles.settingContent}>
+                    <MaterialCommunityIcons name="shield-account" size={24} color="#4CAF50" />
+                    <Text style={[styles.settingLabel, { color: "#4CAF50" }]}>Admin Dashboard</Text>
+                  </View>
+                  <MaterialCommunityIcons name="chevron-right" size={24} color="#ccc" />
+                </Pressable>
+              )}
             </View>
           </View>
         )}

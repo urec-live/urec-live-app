@@ -71,7 +71,7 @@ function RootLayoutNav() {
         const session = await machineAPI.getMyActiveSession();
         if (session?.equipment?.id) {
           try {
-            const exercises = await machineAPI.getExercisesByEquipmentCode(session.equipment.code);
+            const exercises = await machineAPI.getExercisesByEquipmentId(session.equipment.id);
             if (exercises.length > 0) {
               router.replace({
                 pathname: '/workout/equipment/[exercise]',
@@ -127,6 +127,10 @@ function RootLayoutNav() {
   );
 }
 
+import { GymProvider } from '../context/GymContext';
+
+// ...
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
@@ -136,18 +140,20 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <OfflineProvider>
-        <WorkoutProvider>
-          <SplitProvider>
-            <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-              <SafeAreaProvider>
-                <RootLayoutNav />
-                <OfflineBanner />
-              </SafeAreaProvider>
-            </ThemeProvider>
-          </SplitProvider>
-        </WorkoutProvider>
-      </OfflineProvider>
+      <GymProvider>
+        <OfflineProvider>
+          <WorkoutProvider>
+            <SplitProvider>
+              <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+                <SafeAreaProvider>
+                  <RootLayoutNav />
+                  <OfflineBanner />
+                </SafeAreaProvider>
+              </ThemeProvider>
+            </SplitProvider>
+          </WorkoutProvider>
+        </OfflineProvider>
+      </GymProvider>
     </AuthProvider>
   );
 }

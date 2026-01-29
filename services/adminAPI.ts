@@ -65,4 +65,16 @@ export const adminAPI = {
         });
         return response.data;
     },
+
+    getBottlenecks: async (days: number = 7): Promise<any[]> => {
+        const headers = await machineAPI.authHeaders();
+        const response = await api.get(`/analytics/dashboard/bottlenecks?days=${days}`, { headers });
+        return response.data;
+    },
+
+    getUtilizationTrends: async (days: number = 7): Promise<Record<string, number>> => {
+        const headers = await machineAPI.authHeaders();
+        const response = await api.get(`/analytics/dashboard/utilization-trends?days=${days}`, { headers });
+        return response.data;
+    },
 };

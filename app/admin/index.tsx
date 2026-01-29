@@ -199,13 +199,20 @@ export default function AdminDashboard() {
                 </Pressable>
             </View>
 
-            <View style={{ marginBottom: 20 }}>
+            <View style={{ marginBottom: 20, flexDirection: 'row', gap: 10 }}>
                 <Pressable
                     style={[styles.addButton, { backgroundColor: '#2196F3', alignSelf: 'flex-start' }]}
                     onPress={handleExport}
                 >
                     <MaterialCommunityIcons name="download" size={20} color="#fff" />
-                    <Text style={styles.addButtonText}>Export Data (CSV)</Text>
+                    <Text style={styles.addButtonText}>Export Data</Text>
+                </Pressable>
+                <Pressable
+                    style={[styles.addButton, { backgroundColor: '#9C27B0', alignSelf: 'flex-start' }]}
+                    onPress={() => router.push('/admin/analytics')}
+                >
+                    <MaterialCommunityIcons name="chart-bar" size={20} color="#fff" />
+                    <Text style={styles.addButtonText}>Analytics</Text>
                 </Pressable>
             </View>
 

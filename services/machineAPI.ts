@@ -198,11 +198,22 @@ export const machineAPI = {
     return response.data;
   },
 
-  // Get exercises for a specific equipment by code
-  getExercisesByEquipmentCode: async (code: string): Promise<Exercise[]> => {
-    const response = await api.get(`/machines/code/${code}/exercises`);
+  // ... existing methods
+
+  // Get recommendations for equipment
+  getRecommendations: async (id: number): Promise<EquipmentWaitTimeEstimate[]> => {
+    const headers = await machineAPI.authHeaders();
+    const response = await api.get<EquipmentWaitTimeEstimate[]>(`/equipment/${id}/recommendations`, { headers });
     return response.data;
   },
 };
+
+export interface EquipmentWaitTimeEstimate {
+  equipmentId: number;
+  name: string;
+  inUse: boolean;
+  estimatedWaitSeconds?: number;
+  averageDurationSeconds?: number;
+}
 
 
