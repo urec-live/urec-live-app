@@ -1,6 +1,7 @@
 import { MachineDto, machineAPI } from "@/services/machineAPI";
 import { useWorkout } from "@/contexts/WorkoutContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOffline } from "@/contexts/OfflineContext";
 import { analyticsAPI } from "@/services/analyticsAPI";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -26,6 +27,7 @@ export default function EquipmentAvailability() {
   const router = useRouter();
 
   const { checkIn, checkOut, currentSession } = useWorkout();
+  const { addToQueue } = useOffline();
   const { isGuest, isSignedIn, loading: authLoading } = useAuth();
 
   const [machines, setMachines] = useState<MachineDto[]>([]);
@@ -191,7 +193,15 @@ export default function EquipmentAvailability() {
   const handleCheckOut = async (code: string) => {
     setBusyCode(code);
     try {
-      await machineAPI.checkOut(code);
+      try {
+        await machineAPI.checkOut(code);
+      } catch (error) {
+        await addToQueue({
+          url: `/api/equipment/${code}/checkout`,
+          method: 'POST',
+          body: {}
+        });
+      }
       await checkOut();
       await refresh();
       router.back();
@@ -276,96 +286,96 @@ export default function EquipmentAvailability() {
             <Text style={styles.loadingText}>Loading machines...</Text>
           </View>
         ) : (
-        <FlatList
-          data={machines}
-          keyExtractor={(item) => item.code}
-          style={{ flex: 1 }}
-          contentContainerStyle={{ margin: 4, flexGrow: 1 }}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={refresh}
-              tintColor="#4CAF50"
-              colors={["#4CAF50", "#66BB6A", "#81C784"]}
-              progressBackgroundColor="#ffffff"
-              title="Pull to refresh"
-              titleColor="#4CAF50"
-            />
-          }
-          renderItem={({ item }) => {
-            const isMyEngagement = myEngagement?.code === item.code;
-            const userHoldingOther = myEngagement && !isMyEngagement;
-            const statusUpper = item.status.toUpperCase();
-            const lockedByOther = !item.heldByMe && (statusUpper === "IN_USE" || statusUpper === "IN USE");
-            const isClickable = !lockedByOther && !userHoldingOther;
-            const shouldBeVisuallyDisabled = !isClickable;
+          <FlatList
+            data={machines}
+            keyExtractor={(item) => item.code}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ margin: 4, flexGrow: 1 }}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={refresh}
+                tintColor="#4CAF50"
+                colors={["#4CAF50", "#66BB6A", "#81C784"]}
+                progressBackgroundColor="#ffffff"
+                title="Pull to refresh"
+                titleColor="#4CAF50"
+              />
+            }
+            renderItem={({ item }) => {
+              const isMyEngagement = myEngagement?.code === item.code;
+              const userHoldingOther = myEngagement && !isMyEngagement;
+              const statusUpper = item.status.toUpperCase();
+              const lockedByOther = !item.heldByMe && (statusUpper === "IN_USE" || statusUpper === "IN USE");
+              const isClickable = !lockedByOther && !userHoldingOther;
+              const shouldBeVisuallyDisabled = !isClickable;
 
-            const statusLabel =
-              statusUpper === "AVAILABLE" ? "Available" : "In Use";
+              const statusLabel =
+                statusUpper === "AVAILABLE" ? "Available" : "In Use";
 
-            return (
-              <TouchableOpacity
-                style={[
-                  styles.card,
-                  statusUpper === "AVAILABLE"
-                    ? styles.available
-                    : item.heldByMe
-                      ? styles.myMachine
-                      : styles.inUse,
-                  shouldBeVisuallyDisabled && styles.disabled,
-                ]}
-                onPress={() => openModal(item)}
-                disabled={!isClickable} 
-              >
-                <MaterialCommunityIcons
-                  name="weight-lifter"
-                  size={32}
-                  color={
-                    item.status === "AVAILABLE"
-                      ? "#4CAF50"
+              return (
+                <TouchableOpacity
+                  style={[
+                    styles.card,
+                    statusUpper === "AVAILABLE"
+                      ? styles.available
                       : item.heldByMe
-                      ? "#4CAF50"
-                      : "#FF5722"
-                  }
-                />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.machineText}>{item.name}</Text>
-                <View style={styles.statusRow}>
-                  <Text style={styles.statusText}>
-                    {item.heldByMe && item.status === "IN_USE"
-                      ? "Your Machine"
-                      : statusLabel}
-                  </Text>
-                  {showInsights && (() => {
-                    const busyInfo = getBusyLabel(utilizationByEquipmentId[item.id]);
-                    if (!busyInfo) {
-                      return null;
+                        ? styles.myMachine
+                        : styles.inUse,
+                    shouldBeVisuallyDisabled && styles.disabled,
+                  ]}
+                  onPress={() => openModal(item)}
+                  disabled={!isClickable}
+                >
+                  <MaterialCommunityIcons
+                    name="weight-lifter"
+                    size={32}
+                    color={
+                      item.status === "AVAILABLE"
+                        ? "#4CAF50"
+                        : item.heldByMe
+                          ? "#4CAF50"
+                          : "#FF5722"
                     }
-                    return (
-                      <View style={[styles.busyBadge, busyInfo.style]}>
-                        <Text style={[styles.busyText, busyInfo.textStyle]}>
-                          Busy: {busyInfo.label}
-                        </Text>
-                      </View>
-                    );
-                  })()}
-                  {showInsights && (() => {
-                    const waitTimeLabel = isClickable ? null : formatWaitTime(waitTimeByEquipmentId[item.id]);
-                    if (!waitTimeLabel) {
-                      return null;
-                    }
-                    return <Text style={styles.waitTimeText}>{waitTimeLabel}</Text>;
-                  })()}
-                </View>
-              </View>
-                {lockedByOther && (
-                  <MaterialCommunityIcons name="lock" size={24} color="#FF4500" />
-                )}
-              </TouchableOpacity>
-            );
-          }}
-        />
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.machineText}>{item.name}</Text>
+                    <View style={styles.statusRow}>
+                      <Text style={styles.statusText}>
+                        {item.heldByMe && item.status === "IN_USE"
+                          ? "Your Machine"
+                          : statusLabel}
+                      </Text>
+                      {showInsights && (() => {
+                        const busyInfo = getBusyLabel(utilizationByEquipmentId[item.id]);
+                        if (!busyInfo) {
+                          return null;
+                        }
+                        return (
+                          <View style={[styles.busyBadge, busyInfo.style]}>
+                            <Text style={[styles.busyText, busyInfo.textStyle]}>
+                              Busy: {busyInfo.label}
+                            </Text>
+                          </View>
+                        );
+                      })()}
+                      {showInsights && (() => {
+                        const waitTimeLabel = isClickable ? null : formatWaitTime(waitTimeByEquipmentId[item.id]);
+                        if (!waitTimeLabel) {
+                          return null;
+                        }
+                        return <Text style={styles.waitTimeText}>{waitTimeLabel}</Text>;
+                      })()}
+                    </View>
+                  </View>
+                  {lockedByOther && (
+                    <MaterialCommunityIcons name="lock" size={24} color="#FF4500" />
+                  )}
+                </TouchableOpacity>
+              );
+            }}
+          />
         )}
 
         {/* Modal */}
@@ -392,22 +402,22 @@ export default function EquipmentAvailability() {
 
               {/* Logic for an AVAILABLE machine, but user is checked into *another* machine */}
               {selected?.status === "AVAILABLE" && myEngagement && myEngagement.code !== selected?.code && (
-                  <Text style={styles.modalSubtitle}>
-                    You are already using equipment.
-                  </Text>
+                <Text style={styles.modalSubtitle}>
+                  You are already using equipment.
+                </Text>
               )}
 
 
               {/* Logic for MY CHECKED-IN machine */}
               {selected?.status === "IN_USE" && selected?.heldByMe && (
-                  <Pressable
-                    style={styles.button}
-                    onPress={() => handleCheckOut(selected!.code)}
-                    disabled={busyCode === selected?.code}
-                  >
-                    <Text style={styles.buttonText}>End Exercise / Check Out</Text>
-                  </Pressable>
-                )}
+                <Pressable
+                  style={styles.button}
+                  onPress={() => handleCheckOut(selected!.code)}
+                  disabled={busyCode === selected?.code}
+                >
+                  <Text style={styles.buttonText}>End Exercise / Check Out</Text>
+                </Pressable>
+              )}
 
               <Pressable
                 style={[styles.button, styles.cancelButton]}

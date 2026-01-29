@@ -5,14 +5,12 @@ import { BlurView } from "expo-blur";
 import { Tabs } from "expo-router";
 import { StyleSheet } from "react-native";
 import ActiveExerciseTracker from "@/components/ActiveExerciseTracker";
-import ActiveSessionBanner from "@/components/ActiveSessionBanner";
 import DailyWorkoutSummary from "@/components/DailyWorkoutSummary";
 
 export default function TabLayout() {
   return (
     <>
       <DailyWorkoutSummary />
-      <ActiveSessionBanner />
       <Tabs
         screenOptions={{
           headerShown: false,

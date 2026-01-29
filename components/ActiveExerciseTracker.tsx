@@ -1,3 +1,4 @@
+import { useOffline } from "@/contexts/OfflineContext";
 import { useWorkout } from "@/contexts/WorkoutContext";
 import { machineAPI } from "@/services/machineAPI";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -8,6 +9,8 @@ import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 export default function ActiveExerciseTracker() {
   const { currentSession, exerciseStartTime, restStartTime, startRest, endRest, checkOut } =
     useWorkout();
+  const { addToQueue } = useOffline();
+
   const router = useRouter();
 
   const [exerciseElapsed, setExerciseElapsed] = useState(0);
@@ -83,16 +86,20 @@ export default function ActiveExerciseTracker() {
             "Are you sure you want to end this workout?",
             [
               { text: "Cancel", style: "cancel" },
-              { 
-                text: "End", 
-                onPress: async () => { 
+              {
+                text: "End",
+                onPress: async () => {
                   const targetMuscleGroup = currentSession.muscleGroup;
 
                   try {
                     await machineAPI.checkOut(currentSession.machineId);
-                  } catch {
-                    // If checkout fails (offline/conflict), keep local flow usable.
-                    // User can retry from the machine list later.
+                  } catch (error) {
+                    console.log(error);
+                    await addToQueue({
+                      url: `/api/equipment/${currentSession.machineId}/checkout`,
+                      method: 'POST',
+                      body: {}
+                    });
                   }
 
                   checkOut();

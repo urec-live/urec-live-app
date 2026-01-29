@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api, { getAuthHeader } from './authAPI';
+import { apiCache } from './apiCache';
 
 export interface MachineDto {
   id: number;
@@ -60,24 +61,49 @@ export const machineAPI = {
   },
   // Get all machines
   listAll: async (): Promise<MachineDto[]> => {
-    const response = await api.get('/machines');
-    return response.data;
+    const CACHE_KEY = 'machines_all';
+    try {
+      const response = await api.get('/machines');
+      // Update cache in background
+      apiCache.set(CACHE_KEY, response.data);
+      return response.data;
+    } catch (error) {
+      console.log('Fetching machines failed, trying cache...');
+      const cached = await apiCache.get<MachineDto[]>(CACHE_KEY);
+      if (cached) return cached;
+      throw error;
+    }
   },
 
   getAllMachines: async (): Promise<Machine[]> => {
-    const response = await api.get('/machines');
-    return response.data;
+    const CACHE_KEY = 'machines_all_v2';
+    try {
+      const response = await api.get('/machines');
+      apiCache.set(CACHE_KEY, response.data);
+      return response.data;
+    } catch (error) {
+      const cached = await apiCache.get<Machine[]>(CACHE_KEY);
+      if (cached) return cached;
+      throw error;
+    }
   },
 
   // Get machines by exercise
   byExercise: async (exercise: string): Promise<MachineDto[]> => {
-    const response = await api.get(`/machines/exercise/${exercise}`);
-    return response.data;
+    const CACHE_KEY = `machines_exercise_${exercise}`;
+    try {
+      const response = await api.get(`/machines/exercise/${exercise}`);
+      apiCache.set(CACHE_KEY, response.data);
+      return response.data;
+    } catch (error) {
+      const cached = await apiCache.get<MachineDto[]>(CACHE_KEY);
+      if (cached) return cached;
+      throw error;
+    }
   },
 
   getByExercise: async (exercise: string): Promise<MachineDto[]> => {
-    const response = await api.get(`/machines/exercise/${exercise}`);
-    return response.data;
+    return machineAPI.byExercise(exercise);
   },
 
   getMachinesByExercise: async (exercise: string): Promise<Machine[]> => {
@@ -93,11 +119,17 @@ export const machineAPI = {
 
   // Get current user's engagement (machine they're using)
   getMyEngagement: async (): Promise<MachineDto | null> => {
+    const CACHE_KEY = 'my_engagement';
     try {
       const response = await api.get('/machines/my-engagement');
+      apiCache.set(CACHE_KEY, response.data);
       return response.data;
     } catch (error) {
-      // If endpoint doesn't exist, return null
+      // If offline, check cache
+      const cached = await apiCache.get<MachineDto | null>(CACHE_KEY);
+      // CAUTION: Cached engagement might be stale (e.g. if auto-ended).
+      // However, for "offline view", showing last known state is usually better.
+      if (cached !== undefined && cached !== null) return cached;
       return null;
     }
   },

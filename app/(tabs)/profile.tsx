@@ -7,6 +7,7 @@ import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "rea
 import { useAuth } from "../../contexts/AuthContext";
 import { DayKey, DAY_KEYS, useSplit } from "../../contexts/SplitContext";
 import { analyticsAPI, SessionUsageSummary } from "../../services/analyticsAPI";
+import { userAPI } from "../../services/userAPI";
 
 export default function Profile() {
   const { signOut, endGuest, isGuest, user, isSignedIn, loading: authLoading } = useAuth();
@@ -81,7 +82,31 @@ export default function Profile() {
     };
 
     loadUsage();
-  }, [authLoading, isSignedIn, isGuest, user?.username]);
+  }, [authLoading, isSignedIn, isGuest, user, user?.username]);
+
+  const handleDeleteAccountPress = () => {
+    Alert.alert(
+      "Delete Account",
+      "Are you sure? This action cannot be undone. All your history will be lost.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem("accessToken");
+              if (!token) return;
+              await userAPI.deleteAccount();
+              await signOut();
+            } catch (error) {
+              Alert.alert("Error", "Failed to delete account");
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const handleLogoutPress = () => {
     Alert.alert(
@@ -99,7 +124,6 @@ export default function Profile() {
             } else {
               signOut();
             }
-            router.replace("/(auth)/login");
           },
           style: "destructive",
         },
@@ -260,11 +284,111 @@ export default function Profile() {
           </View>
         </View>
 
+        {!isGuest && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Account Settings</Text>
+            <View style={styles.settingsList}>
+              <Pressable
+                style={styles.settingRow}
+                onPress={() => router.push("/modal/change-password")}
+              >
+                <View style={styles.settingContent}>
+                  <MaterialCommunityIcons name="lock-reset" size={24} color="#666" />
+                  <Text style={styles.settingLabel}>Change Password</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={24} color="#ccc" />
+              </Pressable>
+
+              <View style={styles.separator} />
+
+              <View style={styles.settingRow}>
+                <View style={styles.settingContent}>
+                  <MaterialCommunityIcons
+                    name={user?.pushNotificationsEnabled ? "bell-ring" : "bell-off"}
+                    size={24}
+                    color="#666"
+                  />
+                  <Text style={styles.settingLabel}>Push Notifications</Text>
+                </View>
+                <Pressable
+                  onPress={async () => {
+                    try {
+                      const newValue = !user?.pushNotificationsEnabled;
+                      // Optimistic update
+                      // You might want to update context here, but simplified:
+                      await userAPI.updateSettings({ pushNotificationsEnabled: newValue });
+                      // Refresh user to get definitive state
+                      if (useAuth().refreshUser) {
+                        await useAuth().refreshUser();
+                      }
+                    } catch (e) {
+                      Alert.alert("Error", "Failed to update notification settings");
+                    }
+                  }}
+                  style={[
+                    styles.toggleSwitch,
+                    user?.pushNotificationsEnabled && styles.toggleSwitchActive
+                  ]}
+                >
+                  <View style={[
+                    styles.toggleKnob,
+                    user?.pushNotificationsEnabled && styles.toggleKnobActive
+                  ]} />
+                </Pressable>
+              </View>
+
+              <View style={styles.separator} />
+
+              <Pressable
+                style={styles.settingRow}
+                onPress={() => router.push("/modal/update-email")}
+              >
+                <View style={styles.settingContent}>
+                  <MaterialCommunityIcons name="email-edit" size={24} color="#666" />
+                  <Text style={styles.settingLabel}>Update Email</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={24} color="#ccc" />
+              </Pressable>
+
+              <View style={styles.separator} />
+
+              <Pressable
+                style={styles.settingRow}
+                onPress={() => router.push("/admin" as any)}
+              >
+                <View style={styles.settingContent}>
+                  <MaterialCommunityIcons name="shield-account" size={24} color="#4CAF50" />
+                  <Text style={[styles.settingLabel, { color: "#4CAF50" }]}>Admin Dashboard</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={24} color="#ccc" />
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {!isGuest && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Danger Zone</Text>
+            <View style={[styles.settingsList, { borderColor: '#ff4444' }]}>
+              <Pressable
+                style={styles.settingRow}
+                onPress={handleDeleteAccountPress}
+              >
+                <View style={styles.settingContent}>
+                  <MaterialCommunityIcons name="delete-forever" size={24} color="#ff4444" />
+                  <Text style={[styles.settingLabel, { color: "#ff4444" }]}>Delete Account</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={24} color="#ccc" />
+              </Pressable>
+            </View>
+          </View>
+        )}
+
         <Pressable style={styles.logoutButton} onPress={handleLogoutPress}>
           <MaterialCommunityIcons name="logout" size={20} color="#fff" />
           <Text style={styles.logoutButtonText}>{isGuest ? "Exit Guest" : "Logout"}</Text>
         </Pressable>
-      </ScrollView>
+      </ScrollView >
 
       <Modal visible={!!editingDay} transparent animationType="slide">
         <View style={styles.modalOverlay}>
@@ -302,7 +426,7 @@ export default function Profile() {
           </View>
         </View>
       </Modal>
-    </LinearGradient>
+    </LinearGradient >
   );
 }
 
@@ -566,5 +690,55 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: "#ffffff",
     fontWeight: "800",
+  },
+  settingsList: {
+    marginTop: 15,
+    backgroundColor: "#f9f9f9",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    overflow: "hidden",
+  },
+  settingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+    backgroundColor: "#fff",
+  },
+  settingContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  settingLabel: {
+    fontSize: 16,
+    color: "#333",
+    fontWeight: "600",
+  },
+  separator: {
+    height: 1,
+    backgroundColor: "#e0e0e0",
+    marginLeft: 52, // Align with text
+  },
+  toggleSwitch: {
+    width: 44,
+    height: 24,
+    borderRadius: 999,
+    backgroundColor: "#ccc",
+    justifyContent: "center",
+    padding: 2,
+  },
+  toggleSwitchActive: {
+    backgroundColor: "#4CAF50",
+  },
+  toggleKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+  },
+  toggleKnobActive: {
+    alignSelf: "flex-end",
   },
 });

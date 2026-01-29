@@ -1,11 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { authAPI, setAuthToken } from '../services/authAPI';
+import { userAPI } from '../services/userAPI';
 import { registerForPushNotificationsAsync } from '@/services/pushNotifications';
 
 interface User {
   username: string;
   email: string;
+  pushNotificationsEnabled?: boolean;
 }
 
 interface AuthContextType {
@@ -19,6 +21,7 @@ interface AuthContextType {
   isGuest: boolean;
   startGuest: () => Promise<void>;
   endGuest: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,12 +46,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (userData && accessToken) {
         setAuthToken(accessToken);
+        // Optimistically set user
         setUser(JSON.parse(userData));
         setIsSignedIn(true);
         setIsGuest(false);
-        registerForPushNotificationsAsync().catch((error) =>
-          console.error("Push registration failed:", error)
-        );
+
+        // Verify validity in background
+        try {
+          await userAPI.getProfile();
+          registerForPushNotificationsAsync().catch((e) => console.log(e));
+        } catch (e: any) {
+          // Only log out if explicitly unauthorized (401)
+          // If it's a network error (status undefined) or other error, keep the local session.
+          if (e.response && e.response.status === 401) {
+            console.log("Token invalid (401), logging out:", e);
+            await AsyncStorage.removeItem('accessToken');
+            await AsyncStorage.removeItem('refreshToken');
+            await AsyncStorage.removeItem('user');
+            setAuthToken(null);
+            setUser(null);
+            setIsSignedIn(false);
+          } else {
+            console.log("Failed to verify profile (likely offline), keeping optimistic session.", e);
+          }
+        }
       } else if (guestFlag === 'true') {
         setAuthToken(null);
         setUser(null);
@@ -185,6 +206,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const refreshUser = async () => {
+    try {
+      const profile = await userAPI.getProfile();
+      const updatedUser: User = {
+        username: profile.username,
+        email: profile.email,
+      };
+      setUser(updatedUser);
+      await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+    } catch (error) {
+      console.error('Failed to refresh user profile:', error);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -198,6 +233,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isGuest,
         startGuest,
         endGuest,
+        refreshUser,
       }}
     >
       {children}

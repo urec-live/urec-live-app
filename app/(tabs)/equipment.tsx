@@ -15,7 +15,7 @@ import { MachineDto, machineAPI, Exercise } from "@/services/machineAPI";
 import websocketService from "@/services/websocketService";
 import { useSplit } from "@/contexts/SplitContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { analyticsAPI, EquipmentUtilizationSnapshot } from "@/services/analyticsAPI";
+import { analyticsAPI, EquipmentUtilizationSnapshot, WaitTimeSummaryDTO } from "@/services/analyticsAPI";
 import { useWorkout } from "@/contexts/WorkoutContext";
 
 
@@ -33,6 +33,7 @@ export default function Equipment() {
   const [rollingUtilization, setRollingUtilization] = useState<EquipmentUtilizationSnapshot[]>([]);
   const [utilizationUpdatedAt, setUtilizationUpdatedAt] = useState<number | null>(null);
   const [waitTimeByEquipmentId, setWaitTimeByEquipmentId] = useState<Record<number, number | null>>({});
+  const [waitTimeSummary, setWaitTimeSummary] = useState<WaitTimeSummaryDTO | null>(null);
   const machinesRef = useRef<MachineDto[]>([]);
   const realtimeRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -40,20 +41,26 @@ export default function Equipment() {
     if (isGuest || !isSignedIn || authLoading) {
       setUtilizationByEquipmentId({});
       setRollingUtilization([]);
+      setWaitTimeSummary(null);
       return;
     }
 
     try {
-      const utilization = await analyticsAPI.getRollingUtilization(15);
+      const [utilization, summary] = await Promise.all([
+        analyticsAPI.getRollingUtilization(15),
+        analyticsAPI.getWaitTimeSummary()
+      ]);
       const map: Record<number, number> = {};
       utilization.forEach((item) => {
         map[item.equipmentId] = item.utilizationPercent;
       });
       setUtilizationByEquipmentId(map);
       setRollingUtilization(utilization);
+      setWaitTimeSummary(summary);
       setUtilizationUpdatedAt(Date.now());
     } catch (err) {
-      console.error("[Equipment] Error loading rolling utilization:", err);
+      console.error("[Equipment] Error loading analytics:", err);
+      // Don't clear everything on partial failure if possible, but for MVP safer to clear
       setUtilizationByEquipmentId({});
       setRollingUtilization([]);
       setUtilizationUpdatedAt(null);
@@ -105,7 +112,7 @@ export default function Equipment() {
       const res = await machineAPI.listAll();
       console.log('[Equipment] Machines received:', res.length);
       setMachines(res);
-      
+
       // Fetch exercises for each machine
       const exercisesMap: Record<number, Exercise[]> = {};
       await Promise.all(
@@ -155,7 +162,7 @@ export default function Equipment() {
 
     // Connect to WebSocket for real-time updates
     websocketService.connect();
-    
+
     const unsubscribe = websocketService.subscribe((update) => {
       console.log('[Equipment] Received equipment status update via WebSocket:', update);
       setMachines(prev => {
@@ -205,7 +212,7 @@ export default function Equipment() {
 
   const overallUtilization = rollingUtilization.length
     ? rollingUtilization.reduce((sum, item) => sum + item.utilizationPercent, 0) /
-      rollingUtilization.length
+    rollingUtilization.length
     : null;
   const overallBusyInfo = getBusyLabel(overallUtilization ?? undefined);
   const overallFillStyle =
@@ -270,9 +277,9 @@ export default function Equipment() {
   const visibleMachines = showAll
     ? machines
     : machines.filter((machine) => {
-        const exercises = exercisesByEquipment[machine.id] || [];
-        return exercises.some((exercise) => todayExpandedGroups.includes(exercise.muscleGroup));
-      });
+      const exercises = exercisesByEquipment[machine.id] || [];
+      return exercises.some((exercise) => todayExpandedGroups.includes(exercise.muscleGroup));
+    });
 
   if (loading) {
     return (
@@ -299,70 +306,105 @@ export default function Equipment() {
         </View>
       </View>
       {showBusySummary && (
-        <View style={[styles.busySummaryCard, busyCardStyle]}>
-          <View style={styles.busySummaryGlow} />
-          <View style={styles.busySummaryHeader}>
-            <View style={styles.busySummaryTitleRow}>
-              <View style={styles.busySummaryIcon}>
-                <MaterialCommunityIcons name="chart-line" size={16} color="#1a1a1a" />
+        <>
+          <View style={[styles.busySummaryCard, busyCardStyle]}>
+            <View style={styles.busySummaryGlow} />
+            <View style={styles.busySummaryHeader}>
+              <View style={styles.busySummaryTitleRow}>
+                <View style={styles.busySummaryIcon}>
+                  <MaterialCommunityIcons name="chart-line" size={16} color="#1a1a1a" />
+                </View>
+                <Text style={styles.busySummaryTitle}>Busy Now</Text>
+                <Text style={styles.busySummaryRange}>(15 min)</Text>
               </View>
-              <Text style={styles.busySummaryTitle}>Busy Now</Text>
-              <Text style={styles.busySummaryRange}>(15 min)</Text>
+              <View style={[styles.busySummaryBadge, overallBusyInfo?.style, styles.busySummaryBadgeStrong]}>
+                <View
+                  style={[
+                    styles.busySummaryBadgeDot,
+                    overallUtilization == null ? styles.busySummaryBadgeDotMuted : styles.busySummaryBadgeDotLive,
+                  ]}
+                />
+                <Text style={[styles.busySummaryBadgeText, busyAccentStyle]}>{busyPillText}</Text>
+              </View>
             </View>
-            <View style={[styles.busySummaryBadge, overallBusyInfo?.style, styles.busySummaryBadgeStrong]}>
+            <View style={styles.busySummaryRow}>
+              <Text style={styles.busySummaryPercent}>
+                {overallUtilization == null ? "--" : Math.round(overallUtilization)}%
+              </Text>
+              <Text style={styles.busySummarySub}>{busySummarySubtitle}</Text>
+            </View>
+            <View style={styles.busyMeterTrack}>
               <View
                 style={[
-                  styles.busySummaryBadgeDot,
-                  overallUtilization == null ? styles.busySummaryBadgeDotMuted : styles.busySummaryBadgeDotLive,
+                  styles.busyMeterFill,
+                  overallFillStyle,
+                  { width: `${Math.min(100, Math.max(0, overallUtilization ?? 0))}%` },
                 ]}
               />
-              <Text style={[styles.busySummaryBadgeText, busyAccentStyle]}>{busyPillText}</Text>
             </View>
+            {(showBusySummaryHint || lastUpdatedLabel) && (
+              <View style={styles.busySummaryMetaRow}>
+                {showBusySummaryHint && (
+                  <Text style={styles.busySummaryHint}>{busySummaryHintText}</Text>
+                )}
+                {lastUpdatedLabel && (
+                  <Text style={styles.busySummaryUpdated}>{lastUpdatedLabel}</Text>
+                )}
+              </View>
+            )}
           </View>
-          <View style={styles.busySummaryRow}>
-            <Text style={styles.busySummaryPercent}>
-              {overallUtilization == null ? "--" : Math.round(overallUtilization)}%
-            </Text>
-            <Text style={styles.busySummarySub}>{busySummarySubtitle}</Text>
-          </View>
-          <View style={styles.busyMeterTrack}>
-            <View
-              style={[
-                styles.busyMeterFill,
-                overallFillStyle,
-                { width: `${Math.min(100, Math.max(0, overallUtilization ?? 0))}%` },
-              ]}
-            />
-          </View>
-          {(showBusySummaryHint || lastUpdatedLabel) && (
-            <View style={styles.busySummaryMetaRow}>
-              {showBusySummaryHint && (
-                <Text style={styles.busySummaryHint}>{busySummaryHintText}</Text>
-              )}
-              {lastUpdatedLabel && (
-                <Text style={styles.busySummaryUpdated}>{lastUpdatedLabel}</Text>
-              )}
+
+          {waitTimeSummary && waitTimeSummary.busyCount > 0 && (
+            <View style={styles.waitSummaryCard}>
+              <View style={styles.waitSummaryHeader}>
+                <View style={styles.waitSummaryIcon}>
+                  <MaterialCommunityIcons name="clock-outline" size={16} color="#1a1a1a" />
+                </View>
+                <Text style={styles.waitSummaryTitle}>Wait Times</Text>
+              </View>
+              <View style={styles.waitSummaryRow}>
+                <View style={styles.waitSummaryItem}>
+                  <Text style={styles.waitSummaryValue}>
+                    {waitTimeSummary.averageWaitMinutes != null
+                      ? `${Math.round(waitTimeSummary.averageWaitMinutes)}m`
+                      : "?"}
+                  </Text>
+                  <Text style={styles.waitSummaryLabel}>Avg Wait</Text>
+                </View>
+
+                {waitTimeSummary.longestWaitSeconds != null && (
+                  <>
+                    <View style={styles.waitSummaryDivider} />
+                    <View style={styles.waitSummaryItem}>
+                      <Text style={styles.waitSummaryValue}>{Math.round(waitTimeSummary.longestWaitSeconds / 60)}m</Text>
+                      <Text style={styles.waitSummaryLabel}>Max ({waitTimeSummary.longestWaitMachineName})</Text>
+                    </View>
+                  </>
+                )}
+              </View>
             </View>
           )}
-        </View>
+        </>
       )}
-      <TouchableOpacity
-        style={[
-          styles.scanButton,
-          showBusySummary ? styles.scanButtonOutline : styles.scanButtonSolid,
-          isGuest && styles.scanButtonDisabled,
-        ]}
-        onPress={handleScanPress}
-      >
-        <Text
+      {!hasActiveSession && (
+        <TouchableOpacity
           style={[
-            styles.scanButtonText,
-            showBusySummary ? styles.scanButtonTextOutline : styles.scanButtonTextSolid,
+            styles.scanButton,
+            showBusySummary ? styles.scanButtonOutline : styles.scanButtonSolid,
+            isGuest && styles.scanButtonDisabled,
           ]}
+          onPress={handleScanPress}
         >
-          {hasActiveSession ? "Return to Session" : "Scan QR to Check In"}
-        </Text>
-      </TouchableOpacity>
+          <Text
+            style={[
+              styles.scanButtonText,
+              showBusySummary ? styles.scanButtonTextOutline : styles.scanButtonTextSolid,
+            ]}
+          >
+            Scan QR to Check In
+          </Text>
+        </TouchableOpacity>
+      )}
 
       <FlatList
         data={visibleMachines}
@@ -402,7 +444,7 @@ export default function Equipment() {
           const muscleGroups = [...new Set(exercises.map(e => e.muscleGroup))].join(", ");
           const busyInfo = getBusyLabel(utilizationByEquipmentId[item.id]);
           const waitTimeLabel = isAvailable ? null : formatWaitTime(waitTimeByEquipmentId[item.id]);
-          
+
           return (
             <TouchableOpacity
               onPress={() => router.push({ pathname: "/machine/[id]", params: { id: String(item.id) } })}
@@ -437,7 +479,7 @@ export default function Equipment() {
                       styles.statusText,
                       isAvailable ? styles.availableText : styles.inUseText
                     ]}>
-                      {isAvailable ? "Available" : "In Use"}
+                      {isAvailable ? "Available" : (statusUpper === "IN_USE" ? "In Use" : item.status)}
                     </Text>
                   </View>
                   {busyInfo && (
@@ -796,6 +838,66 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: 0.2,
     flex: 1,
+  },
+  waitSummaryCard: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    padding: 12,
+    borderWidth: 0.5,
+    borderColor: "#e2e6e3",
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 7,
+    elevation: 2,
+  },
+  waitSummaryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+    gap: 6,
+  },
+  waitSummaryIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff3e0",
+  },
+  waitSummaryTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#1a1a1a",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  waitSummaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+  },
+  waitSummaryItem: {
+    alignItems: "center",
+  },
+  waitSummaryValue: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#1a1a1a",
+    marginBottom: 2,
+  },
+  waitSummaryLabel: {
+    fontSize: 10,
+    color: "#7a7a7a",
+    fontWeight: "600",
+    maxWidth: 100,
+    textAlign: "center",
+  },
+  waitSummaryDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: "#f0f0f0",
   },
   busySummaryUpdated: {
     fontSize: 9,

@@ -6,6 +6,11 @@ import Constants from 'expo-constants';
 // API URL based on platform
 let API_BASE_URL = 'http://localhost:8080/api';
 
+export interface ApiError {
+  status: number;
+  message: string;
+}
+
 const getDevHost = (): string | null => {
   const hostUri =
     Constants.expoConfig?.hostUri ||
@@ -45,6 +50,20 @@ if (envApiBaseUrl) {
 }
 
 let currentAuthHeader: string | null = null;
+let isRefreshing = false;
+let failedQueue: any[] = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+
+  failedQueue = [];
+};
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -81,8 +100,21 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        try {
+          const token = await new Promise(function (resolve, reject) {
+            failedQueue.push({ resolve, reject });
+          });
+          originalRequest.headers.Authorization = `Bearer ${token}`;
+          return api(originalRequest);
+        } catch (err) {
+          return Promise.reject(err);
+        }
+      }
+
       originalRequest._retry = true;
-      
+      isRefreshing = true;
+
       try {
         const refreshToken = await AsyncStorage.getItem('refreshToken');
         if (refreshToken) {
@@ -94,15 +126,26 @@ api.interceptors.response.use(
           await AsyncStorage.setItem('accessToken', accessToken);
           await AsyncStorage.setItem('refreshToken', newRefreshToken);
 
-          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
           setAuthToken(accessToken);
+          processQueue(null, accessToken);
+
+          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
           return api(originalRequest);
         }
-      } catch {
+      } catch (err) {
+        processQueue(err, null);
         // Refresh failed; keep current token so we don't force logout on a single 401.
+      } finally {
+        isRefreshing = false;
       }
     }
 
+    const apiError = error.response?.data;
+    if (apiError && typeof apiError === 'object' && 'message' in apiError) {
+      // Propagate the clean message from backend
+      // We can attach it to the error object so UI components find it easily
+      error.message = apiError.message;
+    }
     return Promise.reject(error);
   }
 );
@@ -139,6 +182,14 @@ export const authAPI = {
 
   forgotPassword: async (email: string) => {
     const response = await api.post('/auth/forgot-password', { email });
+    return response.data;
+  },
+
+  resetPassword: async (token: string, newPassword: string) => {
+    const response = await api.post('/auth/reset-password', {
+      token,
+      newPassword,
+    });
     return response.data;
   },
 };

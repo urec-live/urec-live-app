@@ -30,6 +30,13 @@ export interface EquipmentWaitTimeEstimate {
   activeSessionStartedAt: string | null;
 }
 
+export interface WaitTimeSummaryDTO {
+  averageWaitMinutes: number | null;
+  busyCount: number;
+  longestWaitMachineName: string | null;
+  longestWaitSeconds: number | null;
+}
+
 export const analyticsAPI = {
   getMyUsage: async (days = 7): Promise<SessionUsageSummary> => {
     const headers = await machineAPI.authHeaders();
@@ -49,6 +56,11 @@ export const analyticsAPI = {
   getWaitTimeEstimate: async (code: string, days = 7): Promise<EquipmentWaitTimeEstimate> => {
     const headers = await machineAPI.authHeaders();
     const response = await api.get(`/analytics/wait-time/${code}?days=${days}`, { headers });
+    return response.data;
+  },
+  getWaitTimeSummary: async (days = 7): Promise<WaitTimeSummaryDTO> => {
+    const headers = await machineAPI.authHeaders();
+    const response = await api.get(`/analytics/wait-time/summary?days=${days}`, { headers });
     return response.data;
   },
 };

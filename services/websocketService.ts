@@ -88,7 +88,7 @@ class WebSocketService {
         heartbeatIncoming: 4000,
         heartbeatOutgoing: 4000,
         debug: (str) => {
-          console.log('[WebSocket Debug]', str);
+          // console.log('[WebSocket Debug]', str);
         },
         onConnect: () => {
           console.log('[WebSocket] Connected successfully');
@@ -101,7 +101,7 @@ class WebSocketService {
             try {
               const update = JSON.parse(message.body) as EquipmentStatusUpdate;
               console.log('[WebSocket] Received equipment status update:', update);
-              
+
               // Notify all subscribers
               this.subscribers.forEach(callback => callback(update));
             } catch (error) {
@@ -123,7 +123,7 @@ class WebSocketService {
         onWebSocketClose: () => {
           console.log('[WebSocket] WebSocket closed');
           this.isConnected = false;
-          
+
           if (this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++;
             console.log(`[WebSocket] Reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
@@ -148,7 +148,7 @@ class WebSocketService {
 
   subscribe(callback: EquipmentStatusUpdateCallback) {
     this.subscribers.push(callback);
-    
+
     // Return unsubscribe function
     return () => {
       this.subscribers = this.subscribers.filter(cb => cb !== callback);

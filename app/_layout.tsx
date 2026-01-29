@@ -1,8 +1,8 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
 import 'react-native-reanimated';
-import { Platform, ToastAndroid } from 'react-native';
+import { Platform, ToastAndroid, View, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -11,6 +11,8 @@ import { configureForegroundNotifications } from '@/services/pushNotifications';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { SplitProvider } from '../contexts/SplitContext';
 import { useWorkout, WorkoutProvider } from '../contexts/WorkoutContext';
+import { OfflineProvider } from '@/contexts/OfflineContext';
+import OfflineBanner from '@/components/OfflineBanner';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -20,7 +22,8 @@ function RootLayoutNav() {
   const { user, isGuest, loading } = useAuth();
   const { currentSession } = useWorkout();
   const router = useRouter();
-  const segments = useSegments();
+  const segments: any = useSegments();
+  const rootNavigationState = useRootNavigationState();
   const didAutoResume = useRef(false);
 
   useEffect(() => {
@@ -28,7 +31,7 @@ function RootLayoutNav() {
   }, [user?.username, isGuest]);
 
   useEffect(() => {
-    if (loading) {
+    if (loading || !rootNavigationState?.key) {
       return;
     }
 
@@ -42,7 +45,9 @@ function RootLayoutNav() {
     if ((user || isGuest) && isInAuthFlow) {
       router.replace('/(tabs)');
     }
-  }, [loading, user, isGuest, segments, router]);
+  }, [loading, user, isGuest, segments, router, rootNavigationState?.key]);
+
+
 
   useEffect(() => {
     if (loading || !user || isGuest) {
@@ -101,10 +106,22 @@ function RootLayoutNav() {
     autoResume();
   }, [loading, user, isGuest, currentSession, segments, router]);
 
+
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
+        <ActivityIndicator size="large" color="#ffffff" />
+      </View>
+    );
+  }
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+      <Stack.Screen name="modal/change-password" options={{ presentation: 'modal', headerShown: false }} />
+      <Stack.Screen name="modal/update-email" options={{ presentation: 'modal', headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
     </Stack>
   );
@@ -119,15 +136,18 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <WorkoutProvider>
-        <SplitProvider>
-          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-            <SafeAreaProvider>
-              <RootLayoutNav />
-            </SafeAreaProvider>
-          </ThemeProvider>
-        </SplitProvider>
-      </WorkoutProvider>
+      <OfflineProvider>
+        <WorkoutProvider>
+          <SplitProvider>
+            <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+              <SafeAreaProvider>
+                <RootLayoutNav />
+                <OfflineBanner />
+              </SafeAreaProvider>
+            </ThemeProvider>
+          </SplitProvider>
+        </WorkoutProvider>
+      </OfflineProvider>
     </AuthProvider>
   );
 }
