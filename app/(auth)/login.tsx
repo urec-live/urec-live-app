@@ -1,18 +1,18 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { useAuth } from "../../contexts/AuthContext";
 import { authAPI } from "../../services/authAPI";
+import { Colors } from "../../constants/theme";
 
 export default function LoginScreen() {
   const [isRegistering, setIsRegistering] = useState(false);
@@ -42,7 +42,7 @@ export default function LoginScreen() {
         Alert.alert("Error", "Passwords do not match.");
         return;
       }
-      
+
       try {
         setLoading(true);
         await signUp(username, email, password);
@@ -88,9 +88,11 @@ export default function LoginScreen() {
   };
 
   return (
-    <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
-      <View style={styles.container}>
-        <MaterialCommunityIcons name="dumbbell" size={64} color="#00ff88" />
+    <View style={styles.container}>
+      <View style={styles.contentContainer}>
+        <View style={styles.iconContainer}>
+          <MaterialCommunityIcons name="dumbbell" size={48} color={Colors.light.primary} />
+        </View>
         <Text style={styles.title}>UREC Live</Text>
 
         <TextInput
@@ -138,8 +140,8 @@ export default function LoginScreen() {
           />
         )}
 
-        <Pressable 
-          style={[styles.button, loading && styles.buttonDisabled]} 
+        <Pressable
+          style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleAuth}
           disabled={loading}
         >
@@ -218,74 +220,106 @@ export default function LoginScreen() {
           <Text style={styles.guestButtonText}>Continue as Guest</Text>
         </Pressable>
       </View>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: Colors.light.background,
+    justifyContent: "center",
+  },
+  contentContainer: {
+    padding: 24,
+    alignItems: "center",
+  },
+  iconContainer: {
+    width: 80,
+    height: 80,
+    backgroundColor: Colors.light.primaryLight,
+    borderRadius: 24,
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    marginBottom: 24,
+    shadowColor: Colors.light.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 4,
   },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: "900",
-    color: "#1a1a1a",
-    marginBottom: 30,
+    color: Colors.light.text,
+    marginBottom: 32,
+    letterSpacing: 0.5,
   },
   input: {
-    width: "90%",
-    backgroundColor: "#ffffff",
-    color: "#1a1a1a",
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
+    width: "100%",
+    backgroundColor: Colors.light.surface,
+    color: Colors.light.text,
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 16,
+    borderWidth: 0,
+    shadowColor: Colors.light.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   button: {
-    width: "90%",
-    backgroundColor: "#4CAF50",
-    padding: 15,
-    borderRadius: 10,
+    width: "100%",
+    backgroundColor: Colors.light.primary,
+    padding: 16,
+    borderRadius: 16,
     alignItems: "center",
-    marginTop: 10,
+    marginTop: 12,
+    shadowColor: Colors.light.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.7,
   },
   buttonText: {
     color: "#fff",
     fontWeight: "700",
     fontSize: 16,
+    letterSpacing: 0.5,
   },
   toggleText: {
-    color: "#4CAF50",
-    marginTop: 20,
+    color: Colors.light.primary,
+    marginTop: 24,
+    fontWeight: "600",
   },
   forgotText: {
-    color: "#1b5e20",
-    marginTop: 12,
-    fontWeight: "700",
+    color: Colors.light.textSecondary,
+    marginTop: 16,
+    fontWeight: "600",
+    fontSize: 13,
   },
   forgotContainer: {
     width: "100%",
     alignItems: "center",
-    marginTop: 12,
+    marginTop: 16,
   },
   guestButton: {
-    marginTop: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
+    marginTop: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#4CAF50",
+    borderColor: Colors.light.secondary,
+    backgroundColor: "transparent",
   },
   guestButtonText: {
-    color: "#4CAF50",
-    fontWeight: "700",
+    color: Colors.light.textSecondary,
+    fontWeight: "600",
+    fontSize: 13,
   },
 });
 

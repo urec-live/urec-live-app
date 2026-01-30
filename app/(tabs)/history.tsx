@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { useWorkout } from "../../contexts/WorkoutContext";
+import { Colors } from "@/constants/theme";
 
 export default function HistoryScreen() {
   const { workoutHistory } = useWorkout();
@@ -25,7 +25,7 @@ export default function HistoryScreen() {
   };
 
   return (
-    <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: Colors.light.backgroundSecondary }}>
       <View style={styles.container}>
         <Text style={styles.title}>Workout History</Text>
 
@@ -49,7 +49,7 @@ export default function HistoryScreen() {
                   <MaterialCommunityIcons
                     name="calendar"
                     size={20}
-                    color="#00ff88"
+                    color={Colors.light.primary}
                   />
                   <Text style={styles.dateText}>{formatDate(item.date)}</Text>
                 </View>
@@ -71,7 +71,7 @@ export default function HistoryScreen() {
                       <MaterialCommunityIcons
                         name="dumbbell"
                         size={16}
-                        color="#00FF7F"
+                        color={Colors.light.primary}
                       />
                       <Text style={styles.exerciseName}>
                         {session.exerciseName}
@@ -88,7 +88,7 @@ export default function HistoryScreen() {
           />
         )}
       </View>
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -96,10 +96,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, paddingTop: 60 },
   title: {
     fontSize: 26,
-    color: "#1a1a1a",
+    color: Colors.light.text,
     fontWeight: "900",
     textAlign: "center",
     marginBottom: 20,
+    letterSpacing: -0.5,
   },
   emptyState: {
     flex: 1,
@@ -109,81 +110,83 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 20,
-    color: "#777",
+    color: Colors.light.textSecondary,
     fontWeight: "700",
     marginTop: 20,
     textAlign: "center",
   },
   emptySubtext: {
     fontSize: 14,
-    color: "#555",
+    color: Colors.light.icon,
     marginTop: 10,
     textAlign: "center",
+    lineHeight: 20,
   },
   dayCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 15,
-    padding: 15,
-    marginBottom: 15,
-    borderWidth: 2,
-    borderColor: "#4CAF50",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: Colors.light.surface,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    // Soft shadow instead of border
+    shadowColor: Colors.light.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "transparent",
   },
   dayHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   dateText: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#4CAF50",
+    color: Colors.light.text,
   },
   summaryRow: {
     flexDirection: "row",
     gap: 10,
-    marginBottom: 15,
-    paddingBottom: 10,
+    marginBottom: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+    borderBottomColor: Colors.light.secondary,
   },
   summaryText: {
     fontSize: 14,
-    color: "#666",
+    color: Colors.light.textSecondary,
+    fontWeight: "500",
   },
   sessionCard: {
-    backgroundColor: "#E8F5E9",
-    borderRadius: 10,
+    backgroundColor: Colors.light.backgroundSecondary,
+    borderRadius: 12,
     padding: 12,
-    marginTop: 10,
+    marginTop: 8,
     borderLeftWidth: 4,
-    borderLeftColor: "#4CAF50",
-    borderWidth: 1,
-    borderColor: "#4CAF50",
+    borderLeftColor: Colors.light.primary,
   },
   sessionHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   exerciseName: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#4CAF50",
+    color: Colors.light.text,
   },
   machineText: {
-    fontSize: 14,
-    color: "#666",
+    fontSize: 13,
+    color: Colors.light.textSecondary,
     marginBottom: 4,
   },
   durationText: {
     fontSize: 12,
-    color: "#4CAF50",
+    color: Colors.light.primary,
     fontWeight: "600",
   },
 });

@@ -1,10 +1,10 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSplit } from "@/contexts/SplitContext";
 import React from "react";
+import { Colors } from "@/constants/theme";
 
 // ✅ Define type-safe route literals
 // UPDATED: Removed "/(tabs)" prefix as these routes are relative to the tab's root.
@@ -35,7 +35,7 @@ export default function Dashboard() {
   };
 
   return (
-    <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: Colors.light.backgroundSecondary }}>
       <View style={styles.container}>
         <View style={styles.splitCard}>
           <View style={styles.splitHeader}>
@@ -65,139 +65,131 @@ export default function Dashboard() {
               (item.name === "Strength Training"
                 ? hasStrength
                 : item.name === "Cardio"
-                ? hasCardio
-                : hasPilates));
+                  ? hasCardio
+                  : hasPilates));
           return (
             <Pressable
               key={index}
-            onPressIn={() =>
-              Animated.spring(scale, { toValue: 0.95, useNativeDriver: true }).start()
-            }
-            onPressOut={() =>
-              Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start()
-            }
-            onPress={() => handlePress(item.route)}
-            disabled={!isEnabled}
-          >
-            <Animated.View
-              style={[
-                styles.option,
-                !isEnabled && styles.optionDisabled,
-                { transform: [{ scale }] },
-              ]}
+              onPressIn={() =>
+                Animated.spring(scale, { toValue: 0.95, useNativeDriver: true }).start()
+              }
+              onPressOut={() =>
+                Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start()
+              }
+              onPress={() => handlePress(item.route)}
+              disabled={!isEnabled}
             >
-              <MaterialCommunityIcons
-                name={item.icon as any}
-                size={32}
-                color={isEnabled ? "#4CAF50" : "#bdbdbd"}
-              />
-              <View>
-                <Text style={[styles.optionText, !isEnabled && styles.optionTextDisabled]}>
-                  {item.name}
-                </Text>
-                {!isEnabled && <Text style={styles.optionSubText}>Not scheduled today</Text>}
-              </View>
-            </Animated.View>
-          </Pressable>
-        );
+              <Animated.View
+                style={[
+                  styles.option,
+                  !isEnabled && styles.optionDisabled,
+                  { transform: [{ scale }] },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name={item.icon as any}
+                  size={32}
+                  color={isEnabled ? Colors.light.primary : Colors.light.icon}
+                />
+                <View>
+                  <Text style={[styles.optionText, !isEnabled && styles.optionTextDisabled]}>
+                    {item.name}
+                  </Text>
+                  {!isEnabled && <Text style={styles.optionSubText}>Not scheduled today</Text>}
+                </View>
+              </Animated.View>
+            </Pressable>
+          );
         })}
       </View>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 20 },
-  title: {
-    fontSize: 30,
-    fontWeight: "900",
-    color: "#1a1a1a",
-    textTransform: "uppercase",
-    marginBottom: 30,
-  },
-  subtitle: {
-    color: "#666",
-    fontSize: 18,
-    marginBottom: 40,
-  },
-  option: {
-    width: 280,
-    padding: 15,
-    marginVertical: 6,
-    borderRadius: 10,
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "flex-start",
-    gap: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-  },
-  optionText: {
-    color: "#4CAF50",
-    fontWeight: "700",
-    fontSize: 18,
-  },
-  optionSubText: {
-    color: "#9e9e9e",
-    fontSize: 12,
-    marginTop: 2,
-  },
-  optionDisabled: {
-    opacity: 0.5,
-  },
-  optionTextDisabled: {
-    color: "#9e9e9e",
-  },
   splitCard: {
     width: "100%",
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    padding: 16,
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: Colors.light.surface,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    shadowColor: Colors.light.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
   },
   splitHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 6,
+    marginBottom: 8,
   },
   splitTitle: {
-    color: "#1a1a1a",
+    color: Colors.light.text,
+    fontSize: 18,
     fontWeight: "800",
+    letterSpacing: -0.5,
   },
   showAllButton: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#4CAF50",
-    paddingVertical: 4,
-    paddingHorizontal: 10,
+    borderRadius: 20,
+    backgroundColor: Colors.light.primaryLight,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
   },
   showAllButtonActive: {
-    backgroundColor: "#4CAF50",
+    backgroundColor: Colors.light.primary,
   },
   showAllText: {
-    color: "#4CAF50",
+    color: Colors.light.primary,
     fontWeight: "700",
     fontSize: 12,
   },
   showAllTextActive: {
-    color: "#ffffff",
+    color: "#fff",
   },
   splitText: {
-    color: "#666",
-    lineHeight: 20,
+    color: Colors.light.textSecondary,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  option: {
+    width: "100%",
+    height: 80,
+    paddingHorizontal: 20,
+    marginVertical: 6,
+    borderRadius: 16,
+    backgroundColor: Colors.light.surface,
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 16,
+    shadowColor: Colors.light.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "transparent", // Placeholder for cleaner look
+  },
+  optionDisabled: {
+    opacity: 0.6,
+    backgroundColor: Colors.light.backgroundSecondary,
+    shadowOpacity: 0,
+    borderWidth: 0,
+  },
+  optionText: {
+    color: Colors.light.text,
+    fontWeight: "700",
+    fontSize: 18,
+    letterSpacing: -0.5,
+  },
+  optionTextDisabled: {
+    color: Colors.light.icon,
+  },
+  optionSubText: {
+    color: Colors.light.textSecondary,
+    fontSize: 13,
+    marginTop: 2,
   },
 });

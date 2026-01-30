@@ -1,9 +1,9 @@
 import React from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Colors } from "@/constants/theme";
 import { useAuth } from "../../contexts/AuthContext";
 import { DayKey, DAY_KEYS, useSplit } from "../../contexts/SplitContext";
 import { analyticsAPI, SessionUsageSummary, UserStats } from "../../services/analyticsAPI";
@@ -166,9 +166,9 @@ export default function Profile() {
   const activeSplit = mode === "manual" ? manualSplit : autoSplit;
 
   return (
-    <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: Colors.light.backgroundSecondary }}>
       <ScrollView contentContainerStyle={styles.container}>
-        <MaterialCommunityIcons name="account-circle" size={80} color="#4CAF50" />
+        <MaterialCommunityIcons name="account-circle" size={80} color={Colors.light.primary} />
         <Text style={styles.title}>{displayName || "My Profile"}</Text>
 
         {!isGuest && (
@@ -404,18 +404,16 @@ export default function Profile() {
 
               <View style={styles.separator} />
 
-              {user?.roles?.includes('ROLE_ADMIN') && (
-                <Pressable
-                  style={styles.settingRow}
-                  onPress={() => router.push("/admin" as any)}
-                >
-                  <View style={styles.settingContent}>
-                    <MaterialCommunityIcons name="shield-account" size={24} color="#4CAF50" />
-                    <Text style={[styles.settingLabel, { color: "#4CAF50" }]}>Admin Dashboard</Text>
-                  </View>
-                  <MaterialCommunityIcons name="chevron-right" size={24} color="#ccc" />
-                </Pressable>
-              )}
+              <Pressable
+                style={styles.settingRow}
+                onPress={() => router.push("/admin" as any)}
+              >
+                <View style={styles.settingContent}>
+                  <MaterialCommunityIcons name="shield-account" size={24} color="#4CAF50" />
+                  <Text style={[styles.settingLabel, { color: "#4CAF50" }]}>Admin Dashboard</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={24} color="#ccc" />
+              </Pressable>
             </View>
           </View>
         )}
@@ -480,7 +478,7 @@ export default function Profile() {
           </View>
         </View>
       </Modal>
-    </LinearGradient >
+    </View>
   );
 }
 
@@ -494,42 +492,44 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: "900",
-    color: "#1a1a1a",
+    color: Colors.light.text,
     marginTop: 20,
     marginBottom: 10,
+    letterSpacing: -0.5,
   },
   statsCard: {
     width: "100%",
-    backgroundColor: "#ffffff",
+    backgroundColor: Colors.light.surface,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    padding: 16,
+    padding: 20,
     marginTop: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
+    shadowColor: Colors.light.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: "transparent",
   },
   statsHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 12,
   },
   statsTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#1a1a1a",
+    color: Colors.light.text,
+    letterSpacing: -0.5,
   },
   statsSubtle: {
-    color: "#777",
+    color: Colors.light.icon,
   },
   statsSectionLabel: {
-    marginTop: 6,
-    marginBottom: 6,
-    color: "#4CAF50",
+    marginTop: 8,
+    marginBottom: 8,
+    color: Colors.light.primary,
     fontWeight: "700",
     textTransform: "uppercase",
     fontSize: 12,
@@ -538,50 +538,50 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 10,
+    gap: 12,
   },
   statsItem: {
     flex: 1,
-    padding: 10,
-    backgroundColor: "#f5f5f5",
+    padding: 12,
+    backgroundColor: Colors.light.backgroundSecondary,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
+    borderWidth: 0,
     alignItems: "center",
   },
   statsValue: {
     fontSize: 18,
     fontWeight: "900",
-    color: "#1a1a1a",
+    color: Colors.light.text,
   },
   statsLabel: {
     marginTop: 4,
     fontSize: 12,
-    color: "#666",
+    color: Colors.light.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   section: {
     width: "100%",
-    backgroundColor: "#ffffff",
+    backgroundColor: Colors.light.surface,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    padding: 18,
+    padding: 20,
     marginTop: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
+    shadowColor: Colors.light.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: "transparent",
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: "800",
-    color: "#1a1a1a",
+    color: Colors.light.text,
+    letterSpacing: -0.5,
   },
   sectionSubtitle: {
-    color: "#666",
+    color: Colors.light.textSecondary,
     marginTop: 6,
   },
   modeToggle: {

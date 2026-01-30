@@ -1,6 +1,7 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
+import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { Platform, ToastAndroid, View, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -13,6 +14,33 @@ import { SplitProvider } from '../contexts/SplitContext';
 import { useWorkout, WorkoutProvider } from '../contexts/WorkoutContext';
 import { OfflineProvider } from '@/contexts/OfflineContext';
 import OfflineBanner from '@/components/OfflineBanner';
+import { Colors } from '@/constants/theme';
+
+const LightAppTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    primary: Colors.light.primary,
+    background: Colors.light.background,
+    card: Colors.light.background,
+    text: Colors.light.text,
+    border: Colors.light.secondary,
+    notification: Colors.light.error,
+  },
+};
+
+const DarkAppTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    primary: Colors.dark.primary,
+    background: Colors.dark.background,
+    card: Colors.dark.background,
+    text: Colors.dark.text,
+    border: Colors.dark.secondary,
+    notification: Colors.dark.error,
+  },
+};
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -110,8 +138,8 @@ function RootLayoutNav() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
-        <ActivityIndicator size="large" color="#ffffff" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.light.background }}>
+        <ActivityIndicator size="large" color={Colors.light.primary} />
       </View>
     );
   }
@@ -144,8 +172,9 @@ export default function RootLayout() {
         <OfflineProvider>
           <WorkoutProvider>
             <SplitProvider>
-              <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+              <ThemeProvider value={colorScheme === 'dark' ? DarkAppTheme : LightAppTheme}>
                 <SafeAreaProvider>
+                  <StatusBar style="dark" />
                   <RootLayoutNav />
                   <OfflineBanner />
                 </SafeAreaProvider>

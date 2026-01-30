@@ -14,10 +14,20 @@ export default function TabLayout() {
       <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarStyle: { backgroundColor: "transparent", borderTopWidth: 0, elevation: 0 },
-          tabBarBackground: () => <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />,
-          tabBarActiveTintColor: "#00ff88",
-          tabBarInactiveTintColor: "#777",
+          tabBarStyle: {
+            backgroundColor: "#ffffff",
+            borderTopWidth: 0,
+            elevation: 8, // Soft shadow for floating effect
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: -4 },
+            shadowOpacity: 0.05,
+            shadowRadius: 10,
+            height: 60,
+            paddingBottom: 8,
+          },
+          tabBarBackground: () => <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />,
+          tabBarActiveTintColor: "#4CAF50",
+          tabBarInactiveTintColor: "#B0BEC5",
         }}
       >
         <Tabs.Screen

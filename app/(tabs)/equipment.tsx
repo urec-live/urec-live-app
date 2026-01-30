@@ -8,6 +8,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  StatusBar,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
@@ -17,6 +18,7 @@ import { useSplit } from "@/contexts/SplitContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { analyticsAPI, EquipmentUtilizationSnapshot, WaitTimeSummaryDTO } from "@/services/analyticsAPI";
 import { useWorkout } from "@/contexts/WorkoutContext";
+import { Colors } from "@/constants/theme";
 
 
 export default function Equipment() {
@@ -284,7 +286,7 @@ export default function Equipment() {
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#4CAF50" />
+        <ActivityIndicator size="large" color={Colors.light.primary} />
         <Text style={styles.loadingText}>Loading machines...</Text>
       </View>
     );
@@ -292,6 +294,7 @@ export default function Equipment() {
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="dark-content" />
       <View style={styles.headerRow}>
         <Text style={styles.title}>Equipment Availability</Text>
         <View style={styles.headerActions}>
@@ -430,8 +433,8 @@ export default function Equipment() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#4CAF50"
-            colors={["#4CAF50", "#66BB6A", "#81C784"]}
+            tintColor={Colors.light.primary}
+            colors={[Colors.light.primary, "#66BB6A", "#81C784"]}
             progressBackgroundColor="#ffffff"
             title="Pull to refresh"
             titleColor="#4CAF50"
@@ -461,7 +464,7 @@ export default function Equipment() {
                 <MaterialCommunityIcons
                   name="dumbbell"
                   size={24}
-                  color={isAvailable ? "#4CAF50" : "#FF5722"}
+                  color={isAvailable ? Colors.light.primary : Colors.light.error}
                 />
               </View>
               <View style={styles.cardContent}>
@@ -521,41 +524,52 @@ export default function Equipment() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
-    padding: 14,
-    paddingTop: 20,
+    backgroundColor: Colors.light.backgroundSecondary,
+    padding: 16,
+    paddingTop: 24,
+  },
+  centered: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 12,
+    color: Colors.light.textSecondary,
+    fontSize: 14,
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: 20,
+    marginTop: 20,
   },
   title: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: "#1a1a1a",
+    fontSize: 28,
+    fontWeight: "800",
+    color: Colors.light.text,
     textAlign: "left",
-    letterSpacing: 0.6,
+    letterSpacing: -0.5,
   },
   headerActions: {
     alignItems: "flex-end",
   },
   showAllButton: {
-    borderRadius: 999,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#2f8f45",
-    paddingVertical: 5,
-    paddingHorizontal: 14,
+    borderColor: Colors.light.primary,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    backgroundColor: "transparent",
   },
   showAllButtonActive: {
-    backgroundColor: "#4CAF50",
+    backgroundColor: Colors.light.primary,
   },
   showAllButtonText: {
-    color: "#2f8f45",
-    fontWeight: "800",
-    fontSize: 11,
-    letterSpacing: 0.4,
+    color: Colors.light.primary,
+    fontWeight: "700",
+    fontSize: 12,
+    letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   showAllButtonTextActive: {
@@ -564,90 +578,85 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#ffffff",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    marginBottom: 10,
-    borderRadius: 18,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    borderWidth: 0.5,
-    borderColor: "#e4e8e5",
+    backgroundColor: Colors.light.surface,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 20,
+    shadowColor: Colors.light.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 0, // Removed border for floating effect
   },
   availableCard: {
-    backgroundColor: "#f7fbf9",
-    borderLeftWidth: 2,
-    borderLeftColor: "#4CAF50",
+    // No specific change needed, cleaner without colored border
   },
   inUseCard: {
-    backgroundColor: "#fff7f4",
-    borderLeftWidth: 2,
-    borderLeftColor: "#FF5722",
+    // No specific change needed
   },
   iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 16,
   },
   availableIconBg: {
-    backgroundColor: "#eef7f1",
+    backgroundColor: Colors.light.primaryLight,
   },
   inUseIconBg: {
-    backgroundColor: "#fff0f0",
+    backgroundColor: "#FFEBEE", // Soft Red
   },
   cardContent: {
     flex: 1,
     justifyContent: "center",
   },
   name: {
-    color: "#1a1a1a",
-    fontSize: 15,
+    color: Colors.light.text,
+    fontSize: 16,
     fontWeight: "700",
-    marginBottom: 4,
+    marginBottom: 6,
   },
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 6,
   },
   availableBadge: {
-    backgroundColor: "#eef7f1",
+    backgroundColor: Colors.light.primaryLight,
   },
   inUseBadge: {
-    backgroundColor: "#fff0f0",
+    backgroundColor: "#FFEBEE",
   },
   statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   availableDot: {
-    backgroundColor: "#4CAF50",
+    backgroundColor: Colors.light.primary,
   },
   inUseDot: {
-    backgroundColor: "#FF5722",
+    backgroundColor: Colors.light.error,
   },
   statusText: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "700",
     textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
   },
   availableText: {
-    color: "#2e7d32",
+    color: Colors.light.primary,
   },
   inUseText: {
-    color: "#d32f2f",
+    color: Colors.light.error,
   },
   busyBadge: {
     marginTop: 0,
@@ -964,15 +973,7 @@ const styles = StyleSheet.create({
   scanButtonTextOutline: {
     color: "#2f8f45",
   },
-  centered: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    color: "#4CAF50",
-    fontSize: 16,
-    marginTop: 10,
-  },
+
   emptyContainer: {
     padding: 40,
     alignItems: "center",
