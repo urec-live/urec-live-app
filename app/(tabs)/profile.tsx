@@ -2,12 +2,14 @@ import React from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View, StatusBar } from "react-native";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "../../contexts/AuthContext";
 import { DayKey, DAY_KEYS, useSplit } from "../../contexts/SplitContext";
 import { analyticsAPI, SessionUsageSummary, UserStats } from "../../services/analyticsAPI";
 import { userAPI } from "../../services/userAPI";
+import { LinearGradient } from "expo-linear-gradient";
+import { BlurView } from "expo-blur";
 
 export default function Profile() {
   const { signOut, endGuest, isGuest, user, isSignedIn, loading: authLoading } = useAuth();
@@ -166,122 +168,81 @@ export default function Profile() {
   const activeSplit = mode === "manual" ? manualSplit : autoSplit;
 
   return (
-    <View style={{ flex: 1, backgroundColor: Colors.light.backgroundSecondary }}>
-      <ScrollView contentContainerStyle={styles.container}>
-        <MaterialCommunityIcons name="account-circle" size={80} color={Colors.light.primary} />
-        <Text style={styles.title}>{displayName || "My Profile"}</Text>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+        {/* Profile Header */}
+        <View style={styles.profileHeader}>
+          <LinearGradient
+            colors={[Colors.dark.primary, Colors.dark.secondary]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.avatarBorder}
+          >
+            <View style={styles.avatarInner}>
+              <MaterialCommunityIcons name="account" size={48} color={Colors.dark.text} />
+            </View>
+          </LinearGradient>
+          <Text style={styles.title}>{displayName || "Guest User"}</Text>
+          <Text style={styles.subtitle}>{isGuest ? "Guest Mode" : "Premium Member"}</Text>
+        </View>
 
         {!isGuest && (
-          <View style={styles.statsCard}>
-            <View style={styles.statsHeader}>
-              <Text style={styles.statsTitle}>Personal Insights</Text>
-              <MaterialCommunityIcons name="fire" size={24} color={userStats?.currentStreak ? "#FF5722" : "#ccc"} />
-            </View>
-
-            {usageLoading ? (
-              <Text style={styles.statsSubtle}>Crunching numbers...</Text>
-            ) : userStats ? (
-              <View>
-                <View style={styles.statsRow}>
-                  <View style={[styles.statsItem, { backgroundColor: '#FFF3E0', borderColor: '#FFE0B2' }]}>
-                    <Text style={[styles.statsValue, { color: '#E65100' }]}>{userStats.currentStreak} Days</Text>
-                    <Text style={styles.statsLabel}>Current Streak</Text>
-                  </View>
-                  <View style={styles.statsItem}>
-                    <Text style={styles.statsValue}>{userStats.totalWorkoutsThisWeek}</Text>
-                    <Text style={styles.statsLabel}>Workouts This Week</Text>
-                  </View>
-                  <View style={styles.statsItem}>
-                    <Text style={styles.statsValue}>{userStats.totalHoursThisWeek}h</Text>
-                    <Text style={styles.statsLabel}>Time Spent</Text>
-                  </View>
-                </View>
-
-                <Text style={[styles.statsSectionLabel, { marginTop: 15 }]}>Weekly Muscle Split</Text>
-                <View style={styles.splitRow}>
-                  {Object.entries(userStats.weeklySplit).length > 0 ? (
-                    Object.entries(userStats.weeklySplit)
-                      .sort(([, a], [, b]) => b - a)
-                      .map(([group, count]) => (
-                        <View key={group} style={styles.splitTag}>
-                          <Text style={styles.splitTagText}>{group}: {count}</Text>
-                        </View>
-                      ))
-                  ) : (
-                    <Text style={styles.statsSubtle}>No specific muscle groups yet.</Text>
-                  )}
-                </View>
+          <View style={styles.statsCardWrapper}>
+            <LinearGradient
+              colors={[Colors.dark.surface, 'rgba(30, 41, 59, 0.4)']}
+              style={styles.statsCard}
+            >
+              <View style={styles.statsHeader}>
+                <Text style={styles.statsTitle}>PERSONAL INSIGHTS</Text>
+                <MaterialCommunityIcons name="fire" size={24} color={userStats?.currentStreak ? Colors.dark.accentAmber : Colors.dark.icon} />
               </View>
-            ) : (
-              <Text style={styles.statsSubtle}>No stats available.</Text>
-            )}
-          </View>
-        )}
 
-        {!isGuest && (
-          <View style={[styles.statsCard, { marginTop: 20 }]}>
-            <View style={styles.statsHeader}>
-              <Text style={styles.statsTitle}>Usage Stats (7 days)</Text>
-              <MaterialCommunityIcons name="chart-line" size={20} color="#4CAF50" />
-            </View>
-            {usageLoading ? (
-              <Text style={styles.statsSubtle}>Loading stats...</Text>
-            ) : usageSummary ? (
-              <>
-                <Text style={styles.statsSectionLabel}>You</Text>
-                <View style={styles.statsRow}>
-                  <View style={styles.statsItem}>
-                    <Text style={styles.statsValue}>{usageSummary.totalSessions}</Text>
-                    <Text style={styles.statsLabel}>Sessions</Text>
+              {usageLoading ? (
+                <Text style={styles.statsSubtle}>Crunching numbers...</Text>
+              ) : userStats ? (
+                <View>
+                  <View style={styles.statsRow}>
+                    <View style={[styles.statsItem, { borderColor: Colors.dark.accentAmber }]}>
+                      <Text style={[styles.statsValue, { color: Colors.dark.accentAmber }]}>{userStats.currentStreak}</Text>
+                      <Text style={styles.statsLabel}>Streak Days</Text>
+                    </View>
+                    <View style={styles.statsItem}>
+                      <Text style={styles.statsValue}>{userStats.totalWorkoutsThisWeek}</Text>
+                      <Text style={styles.statsLabel}>Workouts</Text>
+                    </View>
+                    <View style={styles.statsItem}>
+                      <Text style={styles.statsValue}>{userStats.totalHoursThisWeek}h</Text>
+                      <Text style={styles.statsLabel}>Time</Text>
+                    </View>
                   </View>
-                  <View style={styles.statsItem}>
-                    <Text style={styles.statsValue}>
-                      {formatDuration(usageSummary.averageDurationSeconds)}
-                    </Text>
-                    <Text style={styles.statsLabel}>Avg</Text>
-                  </View>
-                  <View style={styles.statsItem}>
-                    <Text style={styles.statsValue}>{formatPeakHour(usageSummary.peakStartHour)}</Text>
-                    <Text style={styles.statsLabel}>Peak</Text>
+
+                  <Text style={[styles.statsSectionLabel, { marginTop: 16 }]}>Weekly Focus</Text>
+                  <View style={styles.splitRow}>
+                    {Object.entries(userStats.weeklySplit).length > 0 ? (
+                      Object.entries(userStats.weeklySplit)
+                        .sort(([, a], [, b]) => b - a)
+                        .map(([group, count]) => (
+                          <View key={group} style={styles.splitTag}>
+                            <Text style={styles.splitTagText}>{group}: {count}</Text>
+                          </View>
+                        ))
+                    ) : (
+                      <Text style={styles.statsSubtle}>No data yet.</Text>
+                    )}
                   </View>
                 </View>
-                {overallSummary && (
-                  <>
-                    <Text style={styles.statsSectionLabel}>Overall</Text>
-                    <View style={styles.statsRow}>
-                      <View style={styles.statsItem}>
-                        <Text style={styles.statsValue}>{overallSummary.totalSessions}</Text>
-                        <Text style={styles.statsLabel}>Sessions</Text>
-                      </View>
-                      <View style={styles.statsItem}>
-                        <Text style={styles.statsValue}>
-                          {formatDuration(overallSummary.averageDurationSeconds)}
-                        </Text>
-                        <Text style={styles.statsLabel}>Avg</Text>
-                      </View>
-                      <View style={styles.statsItem}>
-                        <Text style={styles.statsValue}>
-                          {formatPeakHour(overallSummary.peakStartHour)}
-                        </Text>
-                        <Text style={styles.statsLabel}>Peak</Text>
-                      </View>
-                    </View>
-                  </>
-                )}
-              </>
-            ) : (
-              <Text style={styles.statsSubtle}>No usage data yet.</Text>
-            )}
+              ) : (
+                <Text style={styles.statsSubtle}>No stats available.</Text>
+              )}
+            </LinearGradient>
           </View>
         )}
 
+        {/* Weekly Split Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Weekly Split</Text>
-          <Text style={styles.sectionSubtitle}>
-            {mode === "manual"
-              ? "Set your own plan for each day."
-              : "Auto-suggested from the last 4 weeks of workouts."}
-          </Text>
+          <Text style={styles.sectionTitle}>WEEKLY SPLIT</Text>
 
           <View style={styles.modeToggle}>
             <Pressable
@@ -289,7 +250,7 @@ export default function Profile() {
               onPress={() => setMode("manual")}
             >
               <Text style={[styles.modeButtonText, mode === "manual" && styles.modeButtonTextActive]}>
-                Manual
+                MANUAL
               </Text>
             </Pressable>
             <Pressable
@@ -297,23 +258,23 @@ export default function Profile() {
               onPress={() => setMode("auto")}
             >
               <Text style={[styles.modeButtonText, mode === "auto" && styles.modeButtonTextActive]}>
-                Auto
+                AUTO
               </Text>
             </Pressable>
           </View>
 
-          <View style={styles.todayCard}>
-            <Text style={styles.todayTitle}>Today&apos;s Focus</Text>
+          <LinearGradient
+            colors={[Colors.dark.secondary, Colors.dark.surface]}
+            style={styles.todayCard}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          >
+            <Text style={styles.todayTitle}>TODAY&apos;S FOCUS</Text>
             {isRestDay ? (
-              <Text style={styles.todayText}>
-                Hey looks like it&apos;s your rest day. Consider relaxing today, recovery is as
-                important as working out, otherwise you could burn out and achieve diminishing returns
-                :)
-              </Text>
+              <Text style={styles.todayText}>Rest day. Take it easy.</Text>
             ) : (
-              <Text style={styles.todayText}>{todayGroups.join(", ")}</Text>
+              <Text style={styles.todayText}>{todayGroups.join(" · ")}</Text>
             )}
-          </View>
+          </LinearGradient>
 
           <View style={styles.dayList}>
             {DAY_KEYS.map((day) => (
@@ -329,7 +290,7 @@ export default function Profile() {
                   </Text>
                 </View>
                 {mode === "manual" && (
-                  <MaterialCommunityIcons name="pencil" size={18} color="#4CAF50" />
+                  <MaterialCommunityIcons name="pencil" size={16} color={Colors.dark.primary} />
                 )}
               </Pressable>
             ))}
@@ -338,41 +299,32 @@ export default function Profile() {
 
         {!isGuest && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Account Settings</Text>
+            <Text style={styles.sectionTitle}>SETTINGS</Text>
             <View style={styles.settingsList}>
               <Pressable
                 style={styles.settingRow}
                 onPress={() => router.push("/modal/change-password")}
               >
                 <View style={styles.settingContent}>
-                  <MaterialCommunityIcons name="lock-reset" size={24} color="#666" />
+                  <MaterialCommunityIcons name="lock-reset" size={24} color={Colors.dark.textSecondary} />
                   <Text style={styles.settingLabel}>Change Password</Text>
                 </View>
-                <MaterialCommunityIcons name="chevron-right" size={24} color="#ccc" />
+                <MaterialCommunityIcons name="chevron-right" size={24} color="#666" />
               </Pressable>
 
               <View style={styles.separator} />
 
               <View style={styles.settingRow}>
                 <View style={styles.settingContent}>
-                  <MaterialCommunityIcons
-                    name={user?.pushNotificationsEnabled ? "bell-ring" : "bell-off"}
-                    size={24}
-                    color="#666"
-                  />
+                  <MaterialCommunityIcons name="bell-ring" size={24} color={Colors.dark.textSecondary} />
                   <Text style={styles.settingLabel}>Push Notifications</Text>
                 </View>
                 <Pressable
                   onPress={async () => {
                     try {
                       const newValue = !user?.pushNotificationsEnabled;
-                      // Optimistic update
-                      // You might want to update context here, but simplified:
                       await userAPI.updateSettings({ pushNotificationsEnabled: newValue });
-                      // Refresh user to get definitive state
-                      if (useAuth().refreshUser) {
-                        await useAuth().refreshUser();
-                      }
+                      if (useAuth().refreshUser) await useAuth().refreshUser();
                     } catch (e) {
                       Alert.alert("Error", "Failed to update notification settings");
                     }
@@ -396,10 +348,10 @@ export default function Profile() {
                 onPress={() => router.push("/modal/update-email")}
               >
                 <View style={styles.settingContent}>
-                  <MaterialCommunityIcons name="email-edit" size={24} color="#666" />
+                  <MaterialCommunityIcons name="email-edit" size={24} color={Colors.dark.textSecondary} />
                   <Text style={styles.settingLabel}>Update Email</Text>
                 </View>
-                <MaterialCommunityIcons name="chevron-right" size={24} color="#ccc" />
+                <MaterialCommunityIcons name="chevron-right" size={24} color="#666" />
               </Pressable>
 
               <View style={styles.separator} />
@@ -409,10 +361,10 @@ export default function Profile() {
                 onPress={() => router.push("/admin" as any)}
               >
                 <View style={styles.settingContent}>
-                  <MaterialCommunityIcons name="shield-account" size={24} color="#4CAF50" />
-                  <Text style={[styles.settingLabel, { color: "#4CAF50" }]}>Admin Dashboard</Text>
+                  <MaterialCommunityIcons name="shield-account" size={24} color={Colors.dark.primary} />
+                  <Text style={[styles.settingLabel, { color: Colors.dark.primary }]}>Admin Dashboard</Text>
                 </View>
-                <MaterialCommunityIcons name="chevron-right" size={24} color="#ccc" />
+                <MaterialCommunityIcons name="chevron-right" size={24} color="#666" />
               </Pressable>
             </View>
           </View>
@@ -420,17 +372,16 @@ export default function Profile() {
 
         {!isGuest && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Danger Zone</Text>
-            <View style={[styles.settingsList, { borderColor: '#ff4444' }]}>
+            <Text style={[styles.sectionTitle, { color: Colors.dark.accentRed }]}>DANGER ZONE</Text>
+            <View style={[styles.settingsList, { borderColor: Colors.dark.accentRed }]}>
               <Pressable
                 style={styles.settingRow}
                 onPress={handleDeleteAccountPress}
               >
                 <View style={styles.settingContent}>
-                  <MaterialCommunityIcons name="delete-forever" size={24} color="#ff4444" />
-                  <Text style={[styles.settingLabel, { color: "#ff4444" }]}>Delete Account</Text>
+                  <MaterialCommunityIcons name="delete-forever" size={24} color={Colors.dark.accentRed} />
+                  <Text style={[styles.settingLabel, { color: Colors.dark.accentRed }]}>Delete Account</Text>
                 </View>
-                <MaterialCommunityIcons name="chevron-right" size={24} color="#ccc" />
               </Pressable>
             </View>
           </View>
@@ -442,13 +393,13 @@ export default function Profile() {
         </Pressable>
       </ScrollView >
 
-      <Modal visible={!!editingDay} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+      <Modal visible={!!editingDay} transparent animationType="fade">
+        <BlurView intensity={20} tint="dark" style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>
               {editingDay ? dayLabels[editingDay] : "Edit Day"}
             </Text>
-            <Text style={styles.modalSubtitle}>Pick muscle groups for this day.</Text>
+            <Text style={styles.modalSubtitle}>Select muscle groups</Text>
 
             <View style={styles.chipGrid}>
               {splitOptions.map((group) => {
@@ -476,7 +427,7 @@ export default function Profile() {
               </Pressable>
             </View>
           </View>
-        </View>
+        </BlurView>
       </Modal>
     </View>
   );
@@ -484,114 +435,149 @@ export default function Profile() {
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 25,
-    paddingTop: 40,
+    flex: 1,
+    backgroundColor: Colors.dark.background,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 60,
     paddingBottom: 80,
     alignItems: "center",
   },
+
+  // Header
+  profileHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  avatarBorder: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    padding: 2,
+    marginBottom: 12,
+  },
+  avatarInner: {
+    flex: 1,
+    backgroundColor: Colors.dark.background,
+    borderRadius: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   title: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: "900",
-    color: Colors.light.text,
-    marginTop: 20,
-    marginBottom: 10,
+    color: Colors.dark.text,
     letterSpacing: -0.5,
   },
-  statsCard: {
+  subtitle: {
+    fontSize: 14,
+    color: Colors.dark.textSecondary,
+    marginTop: 4,
+  },
+
+  // Stats
+  statsCardWrapper: {
     width: "100%",
-    backgroundColor: Colors.light.surface,
-    borderRadius: 16,
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginBottom: 24,
+  },
+  statsCard: {
     padding: 20,
-    marginTop: 16,
-    shadowColor: Colors.light.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: "transparent",
+    minHeight: 180,
   },
   statsHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 16,
   },
   statsTitle: {
-    fontSize: 18,
+    fontSize: 12,
     fontWeight: "800",
-    color: Colors.light.text,
-    letterSpacing: -0.5,
+    color: 'rgba(255,255,255,0.7)',
+    letterSpacing: 1,
   },
   statsSubtle: {
-    color: Colors.light.icon,
+    color: Colors.dark.textSecondary,
+    fontSize: 12,
   },
   statsSectionLabel: {
-    marginTop: 8,
-    marginBottom: 8,
-    color: Colors.light.primary,
+    fontSize: 10,
+    color: Colors.dark.primary,
     fontWeight: "700",
     textTransform: "uppercase",
-    fontSize: 12,
-    letterSpacing: 0.6,
+    letterSpacing: 1,
+    marginBottom: 8,
   },
   statsRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     gap: 12,
   },
   statsItem: {
     flex: 1,
     padding: 12,
-    backgroundColor: Colors.light.backgroundSecondary,
+    backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 12,
-    borderWidth: 0,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
     alignItems: "center",
   },
   statsValue: {
     fontSize: 18,
     fontWeight: "900",
-    color: Colors.light.text,
+    color: Colors.dark.text,
   },
   statsLabel: {
     marginTop: 4,
-    fontSize: 12,
-    color: Colors.light.textSecondary,
+    fontSize: 10,
+    color: Colors.dark.textSecondary,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    fontWeight: '600',
   },
+  splitRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  splitTag: {
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  splitTagText: {
+    color: Colors.dark.textSecondary,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+
+  // Sections
   section: {
     width: "100%",
-    backgroundColor: Colors.light.surface,
-    borderRadius: 16,
-    padding: 20,
-    marginTop: 20,
-    shadowColor: Colors.light.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: "transparent",
+    marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 12,
     fontWeight: "800",
-    color: Colors.light.text,
-    letterSpacing: -0.5,
+    color: Colors.dark.textSecondary,
+    marginBottom: 12,
+    letterSpacing: 1,
+    paddingLeft: 4,
   },
-  sectionSubtitle: {
-    color: Colors.light.textSecondary,
-    marginTop: 6,
-  },
+
+  // Weekly Split
   modeToggle: {
     flexDirection: "row",
-    marginTop: 16,
-    backgroundColor: "#f5f5f5",
-    borderRadius: 999,
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e0e0e0",
+    borderColor: 'rgba(255,255,255,0.1)',
     overflow: "hidden",
+    marginBottom: 12,
   },
   modeButton: {
     flex: 1,
@@ -599,158 +585,64 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modeButtonActive: {
-    backgroundColor: "#4CAF50",
+    backgroundColor: Colors.dark.primary, // active bg
   },
   modeButtonText: {
-    color: "#4CAF50",
+    color: Colors.dark.textSecondary,
     fontWeight: "700",
+    fontSize: 12,
+    letterSpacing: 0.5,
   },
   modeButtonTextActive: {
-    color: "#ffffff",
+    color: '#000', // black on neon
   },
+
   todayCard: {
-    marginTop: 16,
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: "#f5f5f5",
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 16,
   },
   todayTitle: {
-    color: "#1a1a1a",
+    color: Colors.dark.text,
     fontWeight: "800",
-    marginBottom: 6,
+    fontSize: 12,
+    marginBottom: 4,
+    letterSpacing: 0.5,
   },
   todayText: {
-    color: "#666",
-    lineHeight: 20,
+    color: Colors.dark.textSecondary,
+    fontSize: 14,
   },
   dayList: {
-    marginTop: 16,
-    gap: 10,
+    gap: 8,
   },
   dayRow: {
-    backgroundColor: "#ffffff",
+    backgroundColor: 'rgba(255,255,255,0.03)',
     borderRadius: 12,
     padding: 14,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#e0e0e0",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
   },
   dayLabel: {
-    color: "#1a1a1a",
+    color: Colors.dark.text,
     fontWeight: "700",
-    marginBottom: 4,
+    fontSize: 14,
+    marginBottom: 2,
   },
   dayValue: {
-    color: "#666",
+    color: Colors.dark.textSecondary,
+    fontSize: 12,
   },
-  logoutButton: {
-    backgroundColor: "#ff4444",
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    borderWidth: 2,
-    borderColor: "#ff6666",
-    marginTop: 30,
-  },
-  logoutButtonText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 16,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "flex-end",
-  },
-  modalCard: {
-    backgroundColor: "#ffffff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-    borderTopWidth: 1,
-    borderColor: "#e0e0e0",
-  },
-  modalTitle: {
-    color: "#1a1a1a",
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  modalSubtitle: {
-    color: "#666",
-    marginTop: 6,
-    marginBottom: 12,
-  },
-  chipGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  chip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    backgroundColor: "#f5f5f5",
-  },
-  chipSelected: {
-    backgroundColor: "#4CAF50",
-  },
-  chipText: {
-    color: "#4CAF50",
-    fontWeight: "600",
-  },
-  chipTextSelected: {
-    color: "#ffffff",
-    fontWeight: "700",
-  },
-  modalActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 20,
-    gap: 12,
-  },
-  secondaryButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    alignItems: "center",
-  },
-  secondaryButtonText: {
-    color: "#4CAF50",
-    fontWeight: "700",
-  },
-  primaryButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: "#4CAF50",
-    alignItems: "center",
-  },
-  primaryButtonText: {
-    color: "#ffffff",
-    fontWeight: "800",
-  },
+
+  // Settings
   settingsList: {
-    marginTop: 15,
-    backgroundColor: "#f9f9f9",
-    borderRadius: 12,
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#e0e0e0",
+    borderColor: 'rgba(255,255,255,0.05)',
     overflow: "hidden",
   },
   settingRow: {
@@ -758,7 +650,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     padding: 16,
-    backgroundColor: "#fff",
+    backgroundColor: 'transparent', // inherited
   },
   settingContent: {
     flexDirection: "row",
@@ -766,52 +658,143 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   settingLabel: {
-    fontSize: 16,
-    color: "#333",
+    fontSize: 14,
+    color: Colors.dark.text,
     fontWeight: "600",
   },
   separator: {
     height: 1,
-    backgroundColor: "#e0e0e0",
-    marginLeft: 52, // Align with text
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    marginLeft: 52,
   },
   toggleSwitch: {
     width: 44,
     height: 24,
     borderRadius: 999,
-    backgroundColor: "#ccc",
+    backgroundColor: '#333',
     justifyContent: "center",
     padding: 2,
   },
   toggleSwitchActive: {
-    backgroundColor: "#4CAF50",
+    backgroundColor: Colors.dark.primary,
   },
   toggleKnob: {
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: "#fff",
+    backgroundColor: '#FFF',
   },
   toggleKnobActive: {
     alignSelf: "flex-end",
   },
-  splitRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 8
+
+  // Logout
+  logoutButton: {
+    backgroundColor: Colors.dark.accentRed,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 30,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 20,
+    shadowColor: Colors.dark.accentRed,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  splitTag: {
-    backgroundColor: '#E8F5E9',
-    borderRadius: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
+  logoutButtonText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 14,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    backgroundColor: '#1E293B',
+    borderRadius: 24,
+    padding: 24,
     borderWidth: 1,
-    borderColor: '#C8E6C9'
+    borderColor: 'rgba(255,255,255,0.1)',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.5,
+    shadowRadius: 30,
+    elevation: 10,
   },
-  splitTagText: {
-    color: '#2E7D32',
-    fontWeight: '600',
-    fontSize: 12
-  }
+  modalTitle: {
+    color: Colors.dark.text,
+    fontSize: 20,
+    fontWeight: "800",
+  },
+  modalSubtitle: {
+    color: Colors.dark.textSecondary,
+    marginTop: 4,
+    marginBottom: 20,
+  },
+  chipGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  chip: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  chipSelected: {
+    backgroundColor: Colors.dark.primary,
+    borderColor: Colors.dark.primary,
+  },
+  chipText: {
+    color: Colors.dark.textSecondary,
+    fontWeight: "600",
+    fontSize: 12,
+  },
+  chipTextSelected: {
+    color: '#000',
+    fontWeight: "800",
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 24,
+    gap: 12,
+  },
+  secondaryButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    alignItems: "center",
+  },
+  secondaryButtonText: {
+    color: Colors.dark.text,
+    fontWeight: "700",
+  },
+  primaryButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.dark.primary,
+    alignItems: "center",
+  },
+  primaryButtonText: {
+    color: "#000",
+    fontWeight: "800",
+  },
 });

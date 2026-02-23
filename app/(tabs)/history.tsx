@@ -1,7 +1,8 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { FlatList, StyleSheet, Text, View, StatusBar } from "react-native";
 import { useWorkout } from "../../contexts/WorkoutContext";
 import { Colors } from "@/constants/theme";
+import { LinearGradient } from "expo-linear-gradient";
 
 export default function HistoryScreen() {
   const { workoutHistory } = useWorkout();
@@ -25,13 +26,20 @@ export default function HistoryScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: Colors.light.backgroundSecondary }}>
-      <View style={styles.container}>
-        <Text style={styles.title}>Workout History</Text>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      <View style={styles.header}>
+        <View style={styles.headerTitleRow}>
+          <Text style={styles.headerTitle}>History</Text>
+        </View>
+      </View>
 
+      <View style={styles.content}>
         {workoutHistory.length === 0 ? (
           <View style={styles.emptyState}>
-            <MaterialCommunityIcons name="history" size={64} color="#555" />
+            <View style={styles.emptyIconContainer}>
+              <MaterialCommunityIcons name="history" size={48} color={Colors.dark.textSecondary} />
+            </View>
             <Text style={styles.emptyText}>No workout history yet</Text>
             <Text style={styles.emptySubtext}>
               Complete your first workout to see it here!
@@ -41,49 +49,51 @@ export default function HistoryScreen() {
           <FlatList
             data={workoutHistory}
             keyExtractor={(item) => item.date}
-            contentContainerStyle={{ paddingRight: 8 }}
+            contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => (
-              <View style={styles.dayCard}>
+              <LinearGradient
+                colors={[Colors.dark.surface, 'rgba(10, 14, 39, 0.6)']}
+                style={styles.dayCard}
+              >
                 <View style={styles.dayHeader}>
-                  <MaterialCommunityIcons
-                    name="calendar"
-                    size={20}
-                    color={Colors.light.primary}
-                  />
-                  <Text style={styles.dateText}>{formatDate(item.date)}</Text>
+                  <View style={styles.dateRow}>
+                    <MaterialCommunityIcons
+                      name="calendar-month"
+                      size={20}
+                      color={Colors.dark.primary}
+                    />
+                    <Text style={styles.dateText}>{formatDate(item.date)}</Text>
+                  </View>
                 </View>
 
                 <View style={styles.summaryRow}>
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>
+                      {item.sessions.length} EXERCISES
+                    </Text>
+                  </View>
                   <Text style={styles.summaryText}>
-                    {item.sessions.length} exercise
-                    {item.sessions.length !== 1 ? "s" : ""}
-                  </Text>
-                  <Text style={styles.summaryText}>•</Text>
-                  <Text style={styles.summaryText}>
-                    {item.muscleGroups.join(", ")}
+                    {item.muscleGroups.join(" · ")}
                   </Text>
                 </View>
 
-                {item.sessions.map((session, index) => (
-                  <View key={index} style={styles.sessionCard}>
-                    <View style={styles.sessionHeader}>
-                      <MaterialCommunityIcons
-                        name="dumbbell"
-                        size={16}
-                        color={Colors.light.primary}
-                      />
-                      <Text style={styles.exerciseName}>
-                        {session.exerciseName}
-                      </Text>
+                <View style={styles.sessionList}>
+                  {item.sessions.map((session, index) => (
+                    <View key={index} style={styles.sessionCard}>
+                      <View style={styles.sessionHeader}>
+                        <Text style={styles.exerciseName}>
+                          {session.exerciseName}
+                        </Text>
+                        <Text style={styles.durationText}>
+                          {formatDuration(session.startTime, session.endTime)}
+                        </Text>
+                      </View>
+                      <Text style={styles.machineText}>{session.machineId}</Text>
                     </View>
-                    <Text style={styles.machineText}>{session.machineId}</Text>
-                    <Text style={styles.durationText}>
-                      Duration: {formatDuration(session.startTime, session.endTime)}
-                    </Text>
-                  </View>
-                ))}
-              </View>
+                  ))}
+                </View>
+              </LinearGradient>
             )}
           />
         )}
@@ -93,100 +103,137 @@ export default function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, paddingTop: 60 },
-  title: {
-    fontSize: 26,
-    color: Colors.light.text,
-    fontWeight: "900",
-    textAlign: "center",
-    marginBottom: 20,
+  container: {
+    flex: 1,
+    backgroundColor: Colors.dark.background,
+    paddingTop: 60,
+  },
+  header: {
+    paddingHorizontal: 24,
+    marginBottom: 24,
+  },
+  headerTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: Colors.dark.text,
     letterSpacing: -0.5,
+  },
+  content: {
+    flex: 1,
+  },
+  listContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 100,
   },
   emptyState: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 40,
+    marginTop: 100,
+  },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   emptyText: {
     fontSize: 20,
-    color: Colors.light.textSecondary,
+    color: Colors.dark.text,
     fontWeight: "700",
-    marginTop: 20,
-    textAlign: "center",
+    marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: Colors.light.icon,
-    marginTop: 10,
+    color: Colors.dark.textSecondary,
     textAlign: "center",
     lineHeight: 20,
   },
   dayCard: {
-    backgroundColor: Colors.light.surface,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 24,
+    padding: 20,
     marginBottom: 16,
-    // Soft shadow instead of border
-    shadowColor: Colors.light.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
     borderWidth: 1,
-    borderColor: "transparent",
+    borderColor: 'rgba(255,255,255,0.05)',
   },
   dayHeader: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 8,
     marginBottom: 12,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   dateText: {
     fontSize: 18,
     fontWeight: "700",
-    color: Colors.light.text,
+    color: Colors.dark.text,
   },
   summaryRow: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 10,
     marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.light.secondary,
+    flexWrap: 'wrap',
+  },
+  badge: {
+    backgroundColor: 'rgba(0, 245, 255, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 245, 255, 0.2)',
+  },
+  badgeText: {
+    color: Colors.dark.primary,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.5,
   },
   summaryText: {
-    fontSize: 14,
-    color: Colors.light.textSecondary,
-    fontWeight: "500",
+    fontSize: 12,
+    color: Colors.dark.textSecondary,
+    fontWeight: "600",
+    textTransform: 'uppercase',
+  },
+  sessionList: {
+    gap: 8,
   },
   sessionCard: {
-    backgroundColor: Colors.light.backgroundSecondary,
+    backgroundColor: 'rgba(255,255,255,0.03)',
     borderRadius: 12,
     padding: 12,
-    marginTop: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: Colors.light.primary,
   },
   sessionHeader: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 8,
     marginBottom: 4,
   },
   exerciseName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "700",
-    color: Colors.light.text,
+    color: Colors.dark.text,
   },
   machineText: {
-    fontSize: 13,
-    color: Colors.light.textSecondary,
-    marginBottom: 4,
+    fontSize: 12,
+    color: Colors.dark.textSecondary,
   },
   durationText: {
     fontSize: 12,
-    color: Colors.light.primary,
-    fontWeight: "600",
+    color: Colors.dark.accentAmber,
+    fontWeight: "700",
+    fontFamily: "monospace", // JetBrains Mono feel
   },
 });

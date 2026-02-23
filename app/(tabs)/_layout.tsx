@@ -1,11 +1,10 @@
-// urec-live-app/app/(tabs)/_layout.tsx
-
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Tabs } from "expo-router";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 import ActiveExerciseTracker from "@/components/ActiveExerciseTracker";
 import DailyWorkoutSummary from "@/components/DailyWorkoutSummary";
+import { Colors } from "@/constants/theme";
 
 export default function TabLayout() {
   return (
@@ -15,34 +14,41 @@ export default function TabLayout() {
         screenOptions={{
           headerShown: false,
           tabBarStyle: {
-            backgroundColor: "#ffffff",
+            backgroundColor: 'transparent',
             borderTopWidth: 0,
-            elevation: 8, // Soft shadow for floating effect
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: -4 },
-            shadowOpacity: 0.05,
-            shadowRadius: 10,
+            elevation: 0,
             height: 60,
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+          },
+          tabBarBackground: () => (
+            <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+          ),
+          tabBarItemStyle: {
+            paddingTop: 8,
             paddingBottom: 8,
           },
-          tabBarBackground: () => <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />,
-          tabBarActiveTintColor: "#4CAF50",
-          tabBarInactiveTintColor: "#B0BEC5",
+          tabBarActiveTintColor: Colors.dark.primary, // Neon Cyan
+          tabBarInactiveTintColor: Colors.dark.icon,
         }}
       >
         <Tabs.Screen
           name="index" // This is the redirect file
           options={{
-            title: "Home Redirect", // Temporary title for clarity
-            href: null, // FIX: This hides the tab from the tab bar.
+            title: "Home Redirect",
+            href: null,
           }}
         />
         <Tabs.Screen
           name="workout"
           options={{
             title: "Workout",
-            tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="arm-flex" size={size} color={color} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <View style={focused ? styles.activeTabIcon : null}>
+                <MaterialCommunityIcons name="arm-flex" size={size} color={color} />
+              </View>
             ),
           }}
         />
@@ -50,8 +56,10 @@ export default function TabLayout() {
           name="equipment"
           options={{
             title: "Equipment",
-            tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="dumbbell" size={size} color={color} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <View style={focused ? styles.activeTabIcon : null}>
+                <MaterialCommunityIcons name="dumbbell" size={size} color={color} />
+              </View>
             ),
           }}
         />
@@ -59,8 +67,10 @@ export default function TabLayout() {
           name="history"
           options={{
             title: "History",
-            tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="history" size={size} color={color} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <View style={focused ? styles.activeTabIcon : null}>
+                <MaterialCommunityIcons name="history" size={size} color={color} />
+              </View>
             ),
           }}
         />
@@ -68,8 +78,10 @@ export default function TabLayout() {
           name="profile"
           options={{
             title: "Profile",
-            tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="account-circle" size={size} color={color} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <View style={focused ? styles.activeTabIcon : null}>
+                <MaterialCommunityIcons name="account-circle" size={size} color={color} />
+              </View>
             ),
           }}
         />
@@ -78,3 +90,13 @@ export default function TabLayout() {
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  activeTabIcon: {
+    shadowColor: Colors.dark.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+});

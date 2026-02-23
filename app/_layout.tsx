@@ -138,8 +138,8 @@ function RootLayoutNav() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.light.background }}>
-        <ActivityIndicator size="large" color={Colors.light.primary} />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.dark.background }}>
+        <ActivityIndicator size="large" color={Colors.dark.primary} />
       </View>
     );
   }
@@ -172,9 +172,9 @@ export default function RootLayout() {
         <OfflineProvider>
           <WorkoutProvider>
             <SplitProvider>
-              <ThemeProvider value={colorScheme === 'dark' ? DarkAppTheme : LightAppTheme}>
+              <ThemeProvider value={DarkAppTheme}>
                 <SafeAreaProvider>
-                  <StatusBar style="dark" />
+                  <StatusBar style="light" />
                   <RootLayoutNav />
                   <OfflineBanner />
                 </SafeAreaProvider>

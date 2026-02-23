@@ -5,42 +5,59 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+const tintColorLight = '#00F5FF';
+const tintColorDark = '#00F5FF';
 
 export const Colors = {
   light: {
-    text: '#1A1A1A',
-    textSecondary: '#666666',
-    background: '#FFFFFF',
-    backgroundSecondary: '#F8F9FA',
-    tint: '#00E676', // Vibrant Green for selected states
-    primary: '#4CAF50', // Core Brand Green
-    primaryLight: '#E8F5E9', // Subtle Green Backgrounds
-    secondary: '#E0E0E0', // Borders / Separators
-    icon: '#8F9094',
-    tabIconDefault: '#8F9094',
-    tabIconSelected: '#4CAF50',
-    error: '#FF4444',
+    // Keeping a light theme fallback that maps somewhat to the new system
+    text: '#0A0E27',
+    textSecondary: '#64748B',
+    background: '#F8FAFC',
+    backgroundSecondary: '#FFFFFF',
+    tint: tintColorLight,
+    primary: '#00F5FF', // Neon Cyan
+    primaryLight: 'rgba(0, 245, 255, 0.1)',
+    secondary: '#A259FF', // Electric Purple
+    icon: '#64748B',
+    tabIconDefault: '#94A3B8',
+    tabIconSelected: tintColorLight,
+    error: '#FF3366',
     surface: '#FFFFFF',
     shadow: '#000000',
+    available: '#00FF88',
+    inUse: '#FF3366',
+    reserved: '#FFB800',
   },
-  // Dark mode kept as fallback/alternative, but aligned with new green
   dark: {
-    text: '#ECEDEE',
-    textSecondary: '#9BA1A6',
-    background: '#151718',
-    backgroundSecondary: '#1E1E1E',
-    tint: '#fff',
-    primary: '#4CAF50',
-    primaryLight: 'rgba(76, 175, 80, 0.15)',
-    secondary: '#2C2C2C',
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: '#fff',
-    error: '#FF4444',
-    surface: '#1E1E1E',
+    // "Electric Energy" Palette
+    text: '#F8FAFC', // Soft White
+    textSecondary: '#94A3B8', // Muted Gray
+    background: '#0A0E27', // Deep Navy
+    backgroundSecondary: '#111827', // Slightly lighter navy
+    surface: '#1E293B', // Slate
+    surfaceHighlight: '#334155', // Lighter Slate
+    card: 'rgba(30, 41, 59, 0.6)', // Glassy
+
+    // Accents
+    primary: '#00F5FF', // Neon Cyan
+    type: 'cyan',
+    secondary: '#A259FF', // Electric Purple
+    tertiary: '#00FF88', // Green
+    accentRed: '#FF3366', // Energetic Red
+    accentAmber: '#FFB800', // Amber
+
+    tint: '#00F5FF',
+    icon: '#94A3B8',
+    tabIconDefault: '#64748B',
+    tabIconSelected: '#00F5FF',
+    error: '#FF3366',
     shadow: '#000000',
+
+    // Status
+    available: '#00FF88',
+    inUse: '#FF3366',
+    reserved: '#FFB800',
   },
 };
 
