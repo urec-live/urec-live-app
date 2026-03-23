@@ -24,6 +24,7 @@ function groupSessionsByDate(sessions: SessionResponse[]): DailyWorkout[] {
       muscleGroup,
       startTime: new Date(s.startedAt).getTime(),
       endTime: s.endedAt ? new Date(s.endedAt).getTime() : undefined,
+      setDetails: s.setDetails?.map((d) => ({ reps: d.reps ?? undefined, weightLbs: d.weightLbs ?? undefined })),
     });
     if (!day.muscleGroups.includes(muscleGroup)) {
       day.muscleGroups.push(muscleGroup);
@@ -34,7 +35,7 @@ function groupSessionsByDate(sessions: SessionResponse[]): DailyWorkout[] {
 }
 
 export default function HistoryScreen() {
-  const { workoutHistory: localHistory } = useWorkout();
+  const { workoutHistory: localHistory, flushPendingSessions } = useWorkout();
   const [history, setHistory] = useState<DailyWorkout[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -42,6 +43,7 @@ export default function HistoryScreen() {
 
   const loadHistory = useCallback(async () => {
     try {
+      await flushPendingSessions();
       const page = await sessionAPI.getMyHistory(0, 100);
       setHistory(groupSessionsByDate(page.content));
       setApiError(false);
@@ -155,6 +157,17 @@ export default function HistoryScreen() {
                     <Text style={styles.durationText}>
                       Duration: {formatDuration(session.startTime, session.endTime)}
                     </Text>
+                    {session.setDetails && session.setDetails.length > 0 && (
+                      <View style={{ marginTop: 3, gap: 1 }}>
+                        {session.setDetails.map((s, i) => (
+                          <Text key={i} style={styles.setsText}>
+                            Set {i + 1}
+                            {s.reps != null ? `: ${s.reps} reps` : ""}
+                            {s.weightLbs != null ? ` · ${s.weightLbs} lbs` : ""}
+                          </Text>
+                        ))}
+                      </View>
+                    )}
                   </View>
                 ))}
               </View>
@@ -270,4 +283,5 @@ const styles = StyleSheet.create({
   },
   machineText: { fontSize: 14, color: "#666", marginBottom: 4 },
   durationText: { fontSize: 12, color: "#4CAF50", fontWeight: "600" },
+  setsText: { fontSize: 12, color: "#666", marginTop: 3 },
 });

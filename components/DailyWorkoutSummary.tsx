@@ -9,7 +9,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import { useWorkout } from "../contexts/WorkoutContext";
+import { useWorkout, SetDetail } from "../contexts/WorkoutContext";
 
 export default function DailyWorkoutSummary() {
   const { todayWorkouts } = useWorkout();
@@ -117,6 +117,28 @@ export default function DailyWorkoutSummary() {
                         {formatDuration(workout.startTime, workout.endTime)}
                       </Text>
                     </View>
+
+                    {workout.setDetails && workout.setDetails.length > 0 && (
+                      <View style={styles.setTable}>
+                        {/* Header */}
+                        <View style={styles.setTableHeader}>
+                          <Text style={[styles.setCell, styles.setCellLabel]}>Set</Text>
+                          <Text style={[styles.setCell, styles.setCellValue]}>Reps</Text>
+                          <Text style={[styles.setCell, styles.setCellValue]}>Weight</Text>
+                        </View>
+                        {workout.setDetails.map((s: SetDetail, si: number) => (
+                          <View key={si} style={styles.setTableRow}>
+                            <Text style={[styles.setCell, styles.setCellLabel]}>{si + 1}</Text>
+                            <Text style={[styles.setCell, styles.setCellValue]}>
+                              {s.reps !== undefined ? `${s.reps}` : "—"}
+                            </Text>
+                            <Text style={[styles.setCell, styles.setCellValue]}>
+                              {s.weightLbs !== undefined ? `${s.weightLbs} lbs` : "—"}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
                   </View>
                 </View>
               ))}
@@ -257,6 +279,40 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#00ff88",
     fontWeight: "600",
+  },
+  setTable: {
+    marginTop: 10,
+    borderRadius: 8,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#004d38",
+  },
+  setTableHeader: {
+    flexDirection: "row",
+    backgroundColor: "#004d38",
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+  },
+  setTableRow: {
+    flexDirection: "row",
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#004d38",
+  },
+  setCell: {
+    fontSize: 13,
+  },
+  setCellLabel: {
+    width: 36,
+    color: "#888",
+    fontWeight: "600",
+  },
+  setCellValue: {
+    flex: 1,
+    color: "#00ff88",
+    fontWeight: "600",
+    textAlign: "center",
   },
   closeButton: {
     backgroundColor: "#009c67",

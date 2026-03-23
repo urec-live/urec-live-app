@@ -1,6 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { sessionAPI, CreateSessionRequest } from "@/services/sessionAPI";
+import { useAuth } from "@/contexts/AuthContext";
+
+export interface SetDetail {
+  reps?: number;
+  weightLbs?: number;
+}
 
 export interface WorkoutSession {
   exerciseName: string;
@@ -8,6 +14,7 @@ export interface WorkoutSession {
   muscleGroup: string;
   startTime: number;
   endTime?: number;
+  setDetails?: SetDetail[];
 }
 
 export interface DailyWorkout {
@@ -23,9 +30,11 @@ interface WorkoutContextType {
   todayWorkouts: WorkoutSession[];
   workoutHistory: DailyWorkout[];
   checkIn: (exerciseName: string, machineId: string, muscleGroup: string) => void;
-  checkOut: () => void;
+  checkOut: (details?: { setDetails?: SetDetail[] }) => void;
   startRest: () => void;
   endRest: () => void;
+  resetWorkout: () => void;
+  flushPendingSessions: () => Promise<void>;
 }
 
 const PENDING_SESSIONS_KEY = "pending_workout_sessions";
@@ -35,16 +44,25 @@ const WorkoutContext = createContext<WorkoutContextType | undefined>(undefined);
 export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }: { children: React.ReactNode }) => {
+  const { isSignedIn } = useAuth();
+  const hasFlushed = useRef(false);
+
   const [currentSession, setCurrentSession] = useState<WorkoutSession | null>(null);
   const [exerciseStartTime, setExerciseStartTime] = useState<number | null>(null);
   const [restStartTime, setRestStartTime] = useState<number | null>(null);
   const [todayWorkouts, setTodayWorkouts] = useState<WorkoutSession[]>([]);
   const [workoutHistory, setWorkoutHistory] = useState<DailyWorkout[]>([]);
 
-  // On mount, flush any sessions that failed to persist while offline
+  // Flush pending sessions only after the user is confirmed authenticated
   useEffect(() => {
-    flushPendingSessions();
-  }, []);
+    if (isSignedIn && !hasFlushed.current) {
+      hasFlushed.current = true;
+      flushPendingSessions();
+    }
+    if (!isSignedIn) {
+      hasFlushed.current = false;
+    }
+  }, [isSignedIn]);
 
   const flushPendingSessions = async () => {
     try {
@@ -81,6 +99,7 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
       startTime: session.startTime,
       endTime,
       durationSeconds,
+      setDetails: session.setDetails,
     };
 
     try {
@@ -105,10 +124,10 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
     setExerciseStartTime(now);
   };
 
-  const checkOut = () => {
+  const checkOut = (details?: { setDetails?: SetDetail[] }) => {
     if (currentSession) {
       const endTime = Date.now();
-      const completedSession: WorkoutSession = { ...currentSession, endTime };
+      const completedSession: WorkoutSession = { ...currentSession, endTime, ...details };
 
       setTodayWorkouts((prev) => [...prev, completedSession]);
       updateWorkoutHistory(completedSession);
@@ -117,7 +136,7 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
       setRestStartTime(null);
 
       // Persist to backend (fire and forget — queues on failure)
-      persistSession(currentSession, endTime);
+      persistSession(completedSession, endTime);
     }
   };
 
@@ -146,6 +165,16 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
   const startRest = () => setRestStartTime(Date.now());
   const endRest = () => setRestStartTime(null);
 
+  const resetWorkout = () => {
+    setCurrentSession(null);
+    setExerciseStartTime(null);
+    setRestStartTime(null);
+    setTodayWorkouts([]);
+    setWorkoutHistory([]);
+    // Clear the offline queue so stale sessions don't replay after re-login
+    AsyncStorage.removeItem(PENDING_SESSIONS_KEY).catch(() => {});
+  };
+
   const value: WorkoutContextType = {
     currentSession,
     exerciseStartTime,
@@ -156,6 +185,8 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
     checkOut,
     startRest,
     endRest,
+    resetWorkout,
+    flushPendingSessions,
   };
 
   return (

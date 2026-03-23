@@ -1,14 +1,24 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useAuth } from "../../contexts/AuthContext";
+import { useWorkout } from "../../contexts/WorkoutContext";
 
 export default function Profile() {
   const { signOut } = useAuth();
+  const { resetWorkout } = useWorkout();
   const router = useRouter();
 
   const handleLogoutPress = () => {
+    if (Platform.OS === "web") {
+      if (window.confirm("Are you sure you want to log out?")) {
+        resetWorkout();
+        signOut();
+        router.replace("/(auth)/login");
+      }
+      return;
+    }
     Alert.alert(
       "Logout",
       "Are you sure you want to log out?",
@@ -17,6 +27,7 @@ export default function Profile() {
         {
           text: "Logout",
           onPress: () => {
+            resetWorkout();
             signOut();
             router.replace("/(auth)/login");
           },

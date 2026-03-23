@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "urec-live-app",
-    "slug": "urec-live-app",
+    "slug": "urec-live",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tanboyy.urecliveapp"
+      "bundleIdentifier": "com.tanboyy.urecliveapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -49,6 +52,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2c1f98af-f26b-492d-880c-d5879c4629e5"
+      }
+    },
+    "owner": "urec-live"
   }
 }

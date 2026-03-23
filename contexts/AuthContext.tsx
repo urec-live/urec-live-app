@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
-import { authAPI } from '../services/authAPI';
+import { authAPI, setAuthFailureHandler } from '../services/authAPI';
 
 interface User {
   username: string;
@@ -27,6 +27,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Try to restore token on app load
   useEffect(() => {
     restoreToken();
+    setAuthFailureHandler(() => {
+      setUser(null);
+      setIsSignedIn(false);
+    });
   }, []);
 
   const restoreToken = async () => {

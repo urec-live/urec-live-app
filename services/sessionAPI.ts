@@ -1,5 +1,10 @@
 import api from './authAPI';
 
+export interface SetDetail {
+  reps?: number;
+  weightLbs?: number;
+}
+
 export interface CreateSessionRequest {
   exerciseName: string;
   machineCode: string;
@@ -8,6 +13,13 @@ export interface CreateSessionRequest {
   endTime: number;         // epoch milliseconds
   durationSeconds: number;
   notes?: string;
+  setDetails?: SetDetail[];
+}
+
+export interface SessionSetDetail {
+  setNumber: number;
+  reps: number | null;
+  weightLbs: number | null;
 }
 
 export interface SessionResponse {
@@ -20,6 +32,7 @@ export interface SessionResponse {
   endedAt: string | null;
   durationSeconds: number;
   notes?: string | null;
+  setDetails?: SessionSetDetail[] | null;
 }
 
 export interface SessionPage {
