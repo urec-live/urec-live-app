@@ -2,6 +2,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { Platform } from 'react-native';
 
+// Called when refresh token fails — register via setAuthFailureHandler
+let authFailureHandler: (() => void) | null = null;
+export const setAuthFailureHandler = (handler: () => void) => {
+  authFailureHandler = handler;
+};
+
 // API URL based on platform
 let API_BASE_URL = 'http://localhost:8080/api';
 
@@ -58,10 +64,11 @@ api.interceptors.response.use(
           return api(originalRequest);
         }
       } catch {
-        // Refresh failed, redirect to login
+        // Refresh failed — clear tokens and notify AuthContext
         await AsyncStorage.removeItem('accessToken');
         await AsyncStorage.removeItem('refreshToken');
         await AsyncStorage.removeItem('user');
+        authFailureHandler?.();
       }
     }
 
