@@ -9,6 +9,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import ActiveExerciseTracker from '../components/ActiveExerciseTracker';
 import DailyWorkoutSummary from '../components/DailyWorkoutSummary';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { PlanProvider } from '../contexts/PlanContext';
 import { WorkoutProvider } from '../contexts/WorkoutContext';
 
 export const unstable_settings = {
@@ -25,6 +26,7 @@ function RootLayoutNav() {
         {user ? (
           <>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="settings/plan" options={{ headerShown: false }} />
             <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
           </>
         ) : (
@@ -42,14 +44,16 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <WorkoutProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <SafeAreaProvider>
-            <SafeAreaView style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-              <RootLayoutNav />
-              <StatusBar style="auto" />
-            </SafeAreaView>
-          </SafeAreaProvider>
-        </ThemeProvider>
+        <PlanProvider>
+          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <SafeAreaProvider>
+              <SafeAreaView style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+                <RootLayoutNav />
+                <StatusBar style="auto" />
+              </SafeAreaView>
+            </SafeAreaProvider>
+          </ThemeProvider>
+        </PlanProvider>
       </WorkoutProvider>
     </AuthProvider>
   );
