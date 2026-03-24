@@ -1,10 +1,12 @@
 import { useRouter } from "expo-router";
-import { FlatList, StyleSheet, Text, TouchableOpacity, View, RefreshControl, ActivityIndicator } from "react-native";
+import { FlatList, StyleSheet, Text, TouchableOpacity, View, RefreshControl, ActivityIndicator, Pressable } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import { MachineDto, machineAPI, Exercise } from "@/services/machineAPI";
 import websocketService from "@/services/websocketService";
+import FloorMap from "../../components/FloorMap";
 
+type ViewMode = "list" | "map";
 
 export default function Equipment() {
   const router = useRouter();
@@ -12,6 +14,8 @@ export default function Equipment() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [exercisesByEquipment, setExercisesByEquipment] = useState<Record<number, Exercise[]>>({});
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [floorDimensions, setFloorDimensions] = useState({ width: 800, height: 600 });
 
   const loadMachines = async (isRefresh = false) => {
     try {
@@ -20,7 +24,7 @@ export default function Equipment() {
       const res = await machineAPI.listAll();
       console.log('[Equipment] Machines received:', res.length);
       setMachines(res);
-      
+
       // Fetch exercises for each machine
       const exercisesMap: Record<number, Exercise[]> = {};
       await Promise.all(
@@ -35,6 +39,14 @@ export default function Equipment() {
         })
       );
       setExercisesByEquipment(exercisesMap);
+
+      // Also fetch floor plan dimensions
+      try {
+        const fp = await machineAPI.getFloorPlan();
+        setFloorDimensions({ width: fp.width, height: fp.height });
+      } catch {
+        // Use defaults
+      }
     } catch (error) {
       console.error("Error loading machines:", error);
       console.error("Error details:", JSON.stringify(error));
@@ -50,10 +62,10 @@ export default function Equipment() {
 
     // Connect to WebSocket for real-time updates
     websocketService.connect();
-    
+
     const unsubscribe = websocketService.subscribe((updatedMachine) => {
       console.log('[Equipment] Received machine update via WebSocket:', updatedMachine);
-      setMachines(prev => 
+      setMachines(prev =>
         prev.map(m => m.id === updatedMachine.id ? updatedMachine : m)
       );
     });
@@ -80,97 +92,138 @@ export default function Equipment() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Equipment Availability</Text>
-      <TouchableOpacity style={styles.scanButton} onPress={() => router.push("/scan")}>
-        <Text style={styles.scanButtonText}>Scan QR to Check In</Text>
-      </TouchableOpacity>
 
-      <FlatList
-        data={machines}
-        keyExtractor={(item) => item.code}
-        contentContainerStyle={{ margin: 0 }}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={() => (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No machines available</Text>
-            <Text style={styles.emptySubtext}>Pull to refresh</Text>
-          </View>
-        )}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#4CAF50"
-            colors={["#4CAF50", "#66BB6A", "#81C784"]}
-            progressBackgroundColor="#ffffff"
-            title="Pull to refresh"
-            titleColor="#4CAF50"
-          />
-        }
-        renderItem={({ item }) => {
-          const statusUpper = item.status.toUpperCase();
-          const isAvailable = statusUpper === "AVAILABLE";
-          const exercises = exercisesByEquipment[item.id] || [];
-          const muscleGroups = [...new Set(exercises.map(e => e.muscleGroup))].join(", ");
-          
-          return (
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: "/machine/[id]", params: { id: String(item.id) } })}
-              activeOpacity={0.7}
-              style={[
-                styles.card,
-                isAvailable ? styles.availableCard : styles.inUseCard,
-              ]}
-            >
-              <View style={[
-                styles.iconContainer,
-                isAvailable ? styles.availableIconBg : styles.inUseIconBg
-              ]}>
-                <MaterialCommunityIcons
-                  name="dumbbell"
-                  size={28}
-                  color={isAvailable ? "#4CAF50" : "#FF5722"}
-                />
-              </View>
-              <View style={styles.cardContent}>
-                <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+      {/* View toggle + scan button row */}
+      <View style={styles.topRow}>
+        <View style={styles.viewToggle}>
+          <Pressable
+            style={[styles.toggleBtn, viewMode === "list" && styles.toggleBtnActive]}
+            onPress={() => setViewMode("list")}
+          >
+            <MaterialCommunityIcons
+              name="format-list-bulleted"
+              size={18}
+              color={viewMode === "list" ? "#fff" : "#888"}
+            />
+            <Text style={[styles.toggleText, viewMode === "list" && styles.toggleTextActive]}>
+              List
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.toggleBtn, viewMode === "map" && styles.toggleBtnActive]}
+            onPress={() => setViewMode("map")}
+          >
+            <MaterialCommunityIcons
+              name="map-outline"
+              size={18}
+              color={viewMode === "map" ? "#fff" : "#888"}
+            />
+            <Text style={[styles.toggleText, viewMode === "map" && styles.toggleTextActive]}>
+              Map
+            </Text>
+          </Pressable>
+        </View>
+        <TouchableOpacity style={styles.scanButton} onPress={() => router.push("/scan")}>
+          <MaterialCommunityIcons name="qrcode-scan" size={16} color="#fff" />
+          <Text style={styles.scanButtonText}>Scan QR</Text>
+        </TouchableOpacity>
+      </View>
+
+      {viewMode === "map" ? (
+        <FloorMap
+          equipment={machines}
+          width={floorDimensions.width}
+          height={floorDimensions.height}
+        />
+      ) : (
+        <FlatList
+          data={machines}
+          keyExtractor={(item) => item.code}
+          contentContainerStyle={{ margin: 0 }}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={() => (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No machines available</Text>
+              <Text style={styles.emptySubtext}>Pull to refresh</Text>
+            </View>
+          )}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#4CAF50"
+              colors={["#4CAF50", "#66BB6A", "#81C784"]}
+              progressBackgroundColor="#ffffff"
+              title="Pull to refresh"
+              titleColor="#4CAF50"
+            />
+          }
+          renderItem={({ item }) => {
+            const statusUpper = item.status.toUpperCase();
+            const isAvailable = statusUpper === "AVAILABLE";
+            const exercises = exercisesByEquipment[item.id] || [];
+            const muscleGroups = [...new Set(exercises.map(e => e.muscleGroup))].join(", ");
+
+            return (
+              <TouchableOpacity
+                onPress={() => router.push({ pathname: "/machine/[id]", params: { id: String(item.id) } })}
+                activeOpacity={0.7}
+                style={[
+                  styles.card,
+                  isAvailable ? styles.availableCard : styles.inUseCard,
+                ]}
+              >
                 <View style={[
-                  styles.statusBadge,
-                  isAvailable ? styles.availableBadge : styles.inUseBadge
+                  styles.iconContainer,
+                  isAvailable ? styles.availableIconBg : styles.inUseIconBg
                 ]}>
-                  <View style={[
-                    styles.statusDot,
-                    isAvailable ? styles.availableDot : styles.inUseDot
-                  ]} />
-                  <Text style={[
-                    styles.statusText,
-                    isAvailable ? styles.availableText : styles.inUseText
-                  ]}>
-                    {isAvailable ? "Available" : "In Use"}
-                  </Text>
+                  <MaterialCommunityIcons
+                    name="dumbbell"
+                    size={28}
+                    color={isAvailable ? "#4CAF50" : "#FF5722"}
+                  />
                 </View>
-                {exercises.length > 0 && (
-                  <View style={styles.exercisesContainer}>
-                    {muscleGroups && (
-                      <Text style={styles.muscleGroupText}>
-                        {muscleGroups}
-                      </Text>
-                    )}
-                    <Text style={styles.exercisesText} numberOfLines={2}>
-                      {exercises.slice(0, 3).map(e => e.name).join(", ")}
-                      {exercises.length > 3 && "..."}
+                <View style={styles.cardContent}>
+                  <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+                  <View style={[
+                    styles.statusBadge,
+                    isAvailable ? styles.availableBadge : styles.inUseBadge
+                  ]}>
+                    <View style={[
+                      styles.statusDot,
+                      isAvailable ? styles.availableDot : styles.inUseDot
+                    ]} />
+                    <Text style={[
+                      styles.statusText,
+                      isAvailable ? styles.availableText : styles.inUseText
+                    ]}>
+                      {isAvailable ? "Available" : "In Use"}
                     </Text>
                   </View>
-                )}
-              </View>
-              <MaterialCommunityIcons
-                name="chevron-right"
-                size={24}
-                color="#bdbdbd"
-              />
-            </TouchableOpacity>
-          );
-        }}
-      />
+                  {exercises.length > 0 && (
+                    <View style={styles.exercisesContainer}>
+                      {muscleGroups && (
+                        <Text style={styles.muscleGroupText}>
+                          {muscleGroups}
+                        </Text>
+                      )}
+                      <Text style={styles.exercisesText} numberOfLines={2}>
+                        {exercises.slice(0, 3).map(e => e.name).join(", ")}
+                        {exercises.length > 3 && "..."}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <MaterialCommunityIcons
+                  name="chevron-right"
+                  size={24}
+                  color="#bdbdbd"
+                />
+              </TouchableOpacity>
+            );
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -187,9 +240,54 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#1a1a1a",
     textAlign: "center",
-    marginBottom: 20,
+    marginBottom: 16,
     letterSpacing: 1,
     textTransform: "uppercase",
+  },
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  viewToggle: {
+    flexDirection: "row",
+    backgroundColor: "#e8e8e8",
+    borderRadius: 20,
+    padding: 3,
+  },
+  toggleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 18,
+  },
+  toggleBtnActive: {
+    backgroundColor: "#4CAF50",
+  },
+  toggleText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#888",
+  },
+  toggleTextActive: {
+    color: "#fff",
+  },
+  scanButton: {
+    backgroundColor: "#4CAF50",
+    borderRadius: 20,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  scanButtonText: {
+    color: "#ffffff",
+    fontWeight: "800",
+    fontSize: 13,
   },
   card: {
     flexDirection: "row",
@@ -293,21 +391,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#888",
     lineHeight: 16,
-  },
-  scanButton: {
-    backgroundColor: "#4CAF50",
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderWidth: 2,
-    borderColor: "#2e7d32",
-    marginBottom: 16,
-    alignItems: "center",
-  },
-  scanButtonText: {
-    color: "#ffffff",
-    fontWeight: "900",
-    fontSize: 14,
   },
   centered: {
     justifyContent: "center",
