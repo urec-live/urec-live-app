@@ -1,43 +1,74 @@
 import { useRouter } from "expo-router";
-import { FlatList, StyleSheet, Text, TouchableOpacity, View, RefreshControl, ActivityIndicator } from "react-native";
+import {
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  RefreshControl,
+  ActivityIndicator,
+} from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { MachineDto, machineAPI, Exercise } from "@/services/machineAPI";
+import {
+  MachineDto,
+  FloorPlanResponse,
+  machineAPI,
+  Exercise,
+} from "@/services/machineAPI";
 import websocketService from "@/services/websocketService";
-
+import MapModal from "../../components/MapModal";
 
 export default function Equipment() {
   const router = useRouter();
   const [machines, setMachines] = useState<MachineDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [exercisesByEquipment, setExercisesByEquipment] = useState<Record<number, Exercise[]>>({});
+  const [exercisesByEquipment, setExercisesByEquipment] = useState<
+    Record<number, Exercise[]>
+  >({});
+  const [floors, setFloors] = useState<FloorPlanResponse[]>([]);
+
+  // Map modal state
+  const [mapModalVisible, setMapModalVisible] = useState(false);
+  const [locateTarget, setLocateTarget] = useState<MachineDto | null>(null);
 
   const loadMachines = async (isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true);
-      console.log('[Equipment] Fetching machines from API...');
       const res = await machineAPI.listAll();
-      console.log('[Equipment] Machines received:', res.length);
       setMachines(res);
-      
+
       // Fetch exercises for each machine
       const exercisesMap: Record<number, Exercise[]> = {};
       await Promise.all(
         res.map(async (machine) => {
           try {
-            const exercises = await machineAPI.getExercisesByEquipmentId(machine.id);
+            const exercises = await machineAPI.getExercisesByEquipmentId(
+              machine.id
+            );
             exercisesMap[machine.id] = exercises;
-          } catch (err) {
-            console.error(`Error fetching exercises for machine ${machine.id}:`, err);
+          } catch {
             exercisesMap[machine.id] = [];
           }
         })
       );
       setExercisesByEquipment(exercisesMap);
+
+      // Fetch floor plans
+      try {
+        const fp = await machineAPI.getFloorPlans();
+        setFloors(fp);
+      } catch {
+        try {
+          const fp = await machineAPI.getFloorPlan();
+          setFloors([fp]);
+        } catch {
+          // no floor plans
+        }
+      }
     } catch (error) {
       console.error("Error loading machines:", error);
-      console.error("Error details:", JSON.stringify(error));
       setMachines([]);
     } finally {
       setLoading(false);
@@ -48,17 +79,24 @@ export default function Equipment() {
   useEffect(() => {
     loadMachines();
 
-    // Connect to WebSocket for real-time updates
     websocketService.connect();
-    
+
     const unsubscribe = websocketService.subscribe((updatedMachine) => {
-      console.log('[Equipment] Received machine update via WebSocket:', updatedMachine);
-      setMachines(prev => 
-        prev.map(m => m.id === updatedMachine.id ? updatedMachine : m)
+      setMachines((prev) =>
+        prev.map((m) => (m.id === updatedMachine.id ? updatedMachine : m))
+      );
+      setFloors((prev) =>
+        prev.map((floor) => ({
+          ...floor,
+          equipment: floor.equipment.map((eq) =>
+            eq.id === updatedMachine.id
+              ? { ...eq, status: updatedMachine.status }
+              : eq
+          ),
+        }))
       );
     });
 
-    // Cleanup on unmount
     return () => {
       unsubscribe();
     };
@@ -66,6 +104,11 @@ export default function Equipment() {
 
   const onRefresh = () => {
     loadMachines(true);
+  };
+
+  const openLocateModal = (machine: MachineDto) => {
+    setLocateTarget(machine);
+    setMapModalVisible(true);
   };
 
   if (loading) {
@@ -80,9 +123,18 @@ export default function Equipment() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Equipment Availability</Text>
-      <TouchableOpacity style={styles.scanButton} onPress={() => router.push("/scan")}>
-        <Text style={styles.scanButtonText}>Scan QR to Check In</Text>
-      </TouchableOpacity>
+
+      {/* Scan QR button row */}
+      <View style={styles.topRow}>
+        <View />
+        <TouchableOpacity
+          style={styles.scanButton}
+          onPress={() => router.push("/scan")}
+        >
+          <MaterialCommunityIcons name="qrcode-scan" size={16} color="#fff" />
+          <Text style={styles.scanButtonText}>Scan QR</Text>
+        </TouchableOpacity>
+      </View>
 
       <FlatList
         data={machines}
@@ -110,21 +162,35 @@ export default function Equipment() {
           const statusUpper = item.status.toUpperCase();
           const isAvailable = statusUpper === "AVAILABLE";
           const exercises = exercisesByEquipment[item.id] || [];
-          const muscleGroups = [...new Set(exercises.map(e => e.muscleGroup))].join(", ");
-          
+          const muscleGroupsStr = [
+            ...new Set(exercises.map((e) => e.muscleGroup)),
+          ].join(", ");
+
+          // Check if this equipment is placed on any floor
+          const isOnFloor = floors.some((f) =>
+            f.equipment.some((eq) => eq.id === item.id)
+          );
+
           return (
             <TouchableOpacity
-              onPress={() => router.push({ pathname: "/machine/[id]", params: { id: String(item.id) } })}
+              onPress={() =>
+                router.push({
+                  pathname: "/machine/[id]",
+                  params: { id: String(item.id) },
+                })
+              }
               activeOpacity={0.7}
               style={[
                 styles.card,
                 isAvailable ? styles.availableCard : styles.inUseCard,
               ]}
             >
-              <View style={[
-                styles.iconContainer,
-                isAvailable ? styles.availableIconBg : styles.inUseIconBg
-              ]}>
+              <View
+                style={[
+                  styles.iconContainer,
+                  isAvailable ? styles.availableIconBg : styles.inUseIconBg,
+                ]}
+              >
                 <MaterialCommunityIcons
                   name="dumbbell"
                   size={28}
@@ -132,44 +198,87 @@ export default function Equipment() {
                 />
               </View>
               <View style={styles.cardContent}>
-                <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-                <View style={[
-                  styles.statusBadge,
-                  isAvailable ? styles.availableBadge : styles.inUseBadge
-                ]}>
-                  <View style={[
-                    styles.statusDot,
-                    isAvailable ? styles.availableDot : styles.inUseDot
-                  ]} />
-                  <Text style={[
-                    styles.statusText,
-                    isAvailable ? styles.availableText : styles.inUseText
-                  ]}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    isAvailable ? styles.availableBadge : styles.inUseBadge,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.statusDot,
+                      isAvailable ? styles.availableDot : styles.inUseDot,
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.statusText,
+                      isAvailable ? styles.availableText : styles.inUseText,
+                    ]}
+                  >
                     {isAvailable ? "Available" : "In Use"}
                   </Text>
                 </View>
                 {exercises.length > 0 && (
                   <View style={styles.exercisesContainer}>
-                    {muscleGroups && (
+                    {muscleGroupsStr ? (
                       <Text style={styles.muscleGroupText}>
-                        {muscleGroups}
+                        {muscleGroupsStr}
                       </Text>
-                    )}
+                    ) : null}
                     <Text style={styles.exercisesText} numberOfLines={2}>
-                      {exercises.slice(0, 3).map(e => e.name).join(", ")}
-                      {exercises.length > 3 && "..."}
+                      {exercises
+                        .slice(0, 3)
+                        .map((e) => e.name)
+                        .join(", ")}
+                      {exercises.length > 3 ? "..." : ""}
                     </Text>
                   </View>
                 )}
               </View>
-              <MaterialCommunityIcons
-                name="chevron-right"
-                size={24}
-                color="#bdbdbd"
-              />
+              <View style={styles.cardActions}>
+                {isOnFloor && (
+                  <TouchableOpacity
+                    style={styles.locateBtn}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      openLocateModal(item);
+                    }}
+                    hitSlop={6}
+                    activeOpacity={0.7}
+                  >
+                    <MaterialCommunityIcons
+                      name="map-marker-radius-outline"
+                      size={18}
+                      color="#4CAF50"
+                    />
+                    <Text style={styles.locateBtnText}>Locate</Text>
+                  </TouchableOpacity>
+                )}
+                <MaterialCommunityIcons
+                  name="chevron-right"
+                  size={24}
+                  color="#bdbdbd"
+                />
+              </View>
             </TouchableOpacity>
           );
         }}
+      />
+
+      {/* Map Modal */}
+      <MapModal
+        visible={mapModalVisible}
+        onClose={() => {
+          setMapModalVisible(false);
+          setLocateTarget(null);
+        }}
+        floors={floors}
+        allMachines={machines}
+        targetEquipment={locateTarget}
       />
     </View>
   );
@@ -187,9 +296,29 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#1a1a1a",
     textAlign: "center",
-    marginBottom: 20,
+    marginBottom: 16,
     letterSpacing: 1,
     textTransform: "uppercase",
+  },
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  scanButton: {
+    backgroundColor: "#4CAF50",
+    borderRadius: 20,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  scanButtonText: {
+    color: "#ffffff",
+    fontWeight: "800",
+    fontSize: 13,
   },
   card: {
     flexDirection: "row",
@@ -294,20 +423,24 @@ const styles = StyleSheet.create({
     color: "#888",
     lineHeight: 16,
   },
-  scanButton: {
-    backgroundColor: "#4CAF50",
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderWidth: 2,
-    borderColor: "#2e7d32",
-    marginBottom: 16,
-    alignItems: "center",
+  cardActions: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    gap: 8,
   },
-  scanButtonText: {
-    color: "#ffffff",
-    fontWeight: "900",
-    fontSize: 14,
+  locateBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#e8f5e9",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  locateBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#4CAF50",
   },
   centered: {
     justifyContent: "center",
