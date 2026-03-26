@@ -204,6 +204,25 @@ export default function Profile() {
           </>
         ) : null}
 
+        {/* AI Assistant */}
+        <View style={styles.section}>
+          <Pressable
+            style={styles.aiCard}
+            onPress={() => router.push("/chat" as any)}
+          >
+            <View style={styles.aiIconCircle}>
+              <MaterialCommunityIcons name="robot-happy-outline" size={28} color="#fff" />
+            </View>
+            <View style={styles.aiTextBlock}>
+              <Text style={styles.aiTitle}>UREC AI</Text>
+              <Text style={styles.aiSubtitle}>
+                Get personalized workout advice, form tips, and training plans
+              </Text>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={24} color="#4CAF50" />
+          </Pressable>
+        </View>
+
         {/* Settings */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Settings</Text>
@@ -383,6 +402,43 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#888",
     marginTop: 2,
+  },
+  aiCard: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    borderWidth: 1,
+    borderColor: "#c8e6c9",
+    shadowColor: "#4CAF50",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  aiIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#4CAF50",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  aiTextBlock: {
+    flex: 1,
+  },
+  aiTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#1a1a1a",
+  },
+  aiSubtitle: {
+    fontSize: 12,
+    color: "#888",
+    marginTop: 2,
+    lineHeight: 17,
   },
   logoutButton: {
     backgroundColor: "#ff4444",
