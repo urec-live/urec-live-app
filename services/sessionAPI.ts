@@ -52,6 +52,21 @@ export interface SessionStatsResponse {
   totalDurationSeconds: number;
   topExercises: ExerciseCount[];
   sessionsPerWeek: Record<string, number>;
+  currentStreak: number;
+  longestStreak: number;
+  totalVolumeLbs: number;
+  volumePerWeek: Record<string, number>;
+  muscleGroupBreakdown: Record<string, number>;
+}
+
+export interface PersonalRecord {
+  exerciseName: string;
+  maxWeightLbs: number;
+}
+
+export interface WeightProgression {
+  date: string;
+  maxWeightLbs: number;
 }
 
 export const sessionAPI = {
@@ -67,6 +82,16 @@ export const sessionAPI = {
 
   getMyStats: async (): Promise<SessionStatsResponse> => {
     const response = await api.get('/sessions/me/stats');
+    return response.data;
+  },
+
+  getMyPRs: async (): Promise<PersonalRecord[]> => {
+    const response = await api.get('/sessions/me/prs');
+    return response.data;
+  },
+
+  getExerciseProgression: async (exerciseName: string): Promise<WeightProgression[]> => {
+    const response = await api.get(`/sessions/me/prs/${encodeURIComponent(exerciseName)}/history`);
     return response.data;
   },
 };
