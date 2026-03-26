@@ -1,0 +1,41 @@
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
+
+const DEFAULT_BACKEND_PORT = '8080';
+
+function getExpoHost(): string | null {
+  const fromExpoConfig = Constants.expoConfig?.hostUri;
+  const fromManifest2 = (Constants as any).manifest2?.extra?.expoGo?.debuggerHost;
+  const fromLegacyManifest = (Constants as any).manifest?.debuggerHost;
+
+  const hostWithPort = fromExpoConfig || fromManifest2 || fromLegacyManifest;
+  if (!hostWithPort || typeof hostWithPort !== 'string') {
+    return null;
+  }
+
+  return hostWithPort.split(':')[0] || null;
+}
+
+function getFallbackHost(): string {
+  if (Platform.OS === 'android') {
+    // Android emulator must use the host loopback alias.
+    return '10.0.2.2';
+  }
+
+  return 'localhost';
+}
+
+function resolveBackendOrigin(): string {
+  const explicitOrigin = process.env.EXPO_PUBLIC_BACKEND_ORIGIN;
+  if (explicitOrigin) {
+    return explicitOrigin.replace(/\/$/, '');
+  }
+
+  const host = getExpoHost() || getFallbackHost();
+  return `http://${host}:${DEFAULT_BACKEND_PORT}`;
+}
+
+const BACKEND_ORIGIN = resolveBackendOrigin();
+
+export const API_BASE_URL = `${BACKEND_ORIGIN}/api`;
+export const WS_URL = `${BACKEND_ORIGIN}/ws`;

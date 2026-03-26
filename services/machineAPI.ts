@@ -10,6 +10,7 @@ export interface MachineDto {
   floorX?: number | null;
   floorY?: number | null;
   floorLabel?: string | null;
+  floorPlanId?: number | null;
 }
 
 export interface FloorPlanResponse {
@@ -18,6 +19,7 @@ export interface FloorPlanResponse {
   imageUrl: string | null;
   width: number;
   height: number;
+  floorNumber: number;
   equipment: MachineDto[];
 }
 
@@ -128,9 +130,15 @@ export const machineAPI = {
     return response.data;
   },
 
-  // Get floor plan with all equipment positions and statuses
+  // Get floor plan with all equipment positions and statuses (single floor, backward compat)
   getFloorPlan: async (): Promise<FloorPlanResponse> => {
     const response = await api.get('/machines/floor-plan');
+    return response.data;
+  },
+
+  // Get all floor plans with equipment grouped by floor
+  getFloorPlans: async (): Promise<FloorPlanResponse[]> => {
+    const response = await api.get('/machines/floor-plans');
     return response.data;
   },
 };
