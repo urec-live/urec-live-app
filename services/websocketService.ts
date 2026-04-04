@@ -3,10 +3,10 @@ import SockJS from 'sockjs-client';
 import { Platform } from 'react-native';
 
 const WS_URL = Platform.select({
-  ios: 'http://172.20.1.229:8080/ws',
-  android: 'http://172.20.1.229:8080/ws',
-  default: 'http://localhost:8080/ws',
-}) || 'http://localhost:8080/ws';
+  ios: 'http://172.20.1.229:8081/ws',
+  android: 'http://172.20.1.229:8081/ws',
+  default: 'http://localhost:8081/ws',
+}) || 'http://localhost:8081/ws';
 
 export interface MachineUpdateCallback {
   (machine: any): void;
