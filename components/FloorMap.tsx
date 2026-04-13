@@ -82,7 +82,9 @@ function FloorCanvas({
   highlightedEquipmentId?: number | null;
 }) {
   const router = useRouter();
-  const screenWidth = Dimensions.get("window").width - 40;
+  const rawWidth = Dimensions.get("window").width - 40;
+  // On web, cap the canvas so the map doesn't become absurdly wide
+  const screenWidth = Platform.OS === "web" ? Math.min(rawWidth, 500) : rawWidth;
   const baseScale = screenWidth / floor.width;
   const baseH = floor.height * baseScale;
 

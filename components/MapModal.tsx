@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import {
   Dimensions,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -44,60 +45,88 @@ export default function MapModal({
 
   const isAvailable = targetEquipment.status.toUpperCase() === "AVAILABLE";
 
+  const isWeb = Platform.OS === "web";
+
+  const modalContent = (
+    <View style={[styles.container, isWeb && styles.webContainer]}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <MaterialCommunityIcons
+            name="map-marker-radius"
+            size={24}
+            color="#4CAF50"
+          />
+          <Text style={styles.headerTitle}>Locate Equipment</Text>
+        </View>
+        <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={12}>
+          <MaterialCommunityIcons name="close" size={24} color="#666" />
+        </Pressable>
+      </View>
+
+      {/* Equipment info card */}
+      <View style={styles.infoCard}>
+        <View
+          style={[
+            styles.infoDot,
+            { backgroundColor: isAvailable ? "#4CAF50" : "#FF5722" },
+          ]}
+        />
+        <View style={styles.infoContent}>
+          <Text style={styles.infoName}>{targetEquipment.name}</Text>
+          <Text style={styles.infoMeta}>
+            {floorName} · {isAvailable ? "Available" : "In Use"}
+          </Text>
+        </View>
+      </View>
+
+      {/* Floor Map */}
+      <View style={styles.mapWrapper}>
+        <FloorMap
+          floors={floors}
+          allMachines={allMachines}
+          highlightedEquipmentId={targetEquipment.id}
+          initialFloorIdx={initialFloorIdx}
+        />
+      </View>
+    </View>
+  );
+
   return (
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="pageSheet"
+      presentationStyle={isWeb ? undefined : "pageSheet"}
+      transparent={isWeb}
       onRequestClose={onClose}
     >
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <MaterialCommunityIcons
-              name="map-marker-radius"
-              size={24}
-              color="#4CAF50"
-            />
-            <Text style={styles.headerTitle}>Locate Equipment</Text>
-          </View>
-          <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={12}>
-            <MaterialCommunityIcons name="close" size={24} color="#666" />
-          </Pressable>
-        </View>
-
-        {/* Equipment info card */}
-        <View style={styles.infoCard}>
-          <View
-            style={[
-              styles.infoDot,
-              { backgroundColor: isAvailable ? "#4CAF50" : "#FF5722" },
-            ]}
-          />
-          <View style={styles.infoContent}>
-            <Text style={styles.infoName}>{targetEquipment.name}</Text>
-            <Text style={styles.infoMeta}>
-              {floorName} · {isAvailable ? "Available" : "In Use"}
-            </Text>
-          </View>
-        </View>
-
-        {/* Floor Map */}
-        <View style={styles.mapWrapper}>
-          <FloorMap
-            floors={floors}
-            allMachines={allMachines}
-            highlightedEquipmentId={targetEquipment.id}
-            initialFloorIdx={initialFloorIdx}
-          />
-        </View>
-      </View>
+      {isWeb ? (
+        <View style={styles.webOverlay}>{modalContent}</View>
+      ) : (
+        modalContent
+      )}
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  webOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  webContainer: {
+    maxWidth: 560,
+    maxHeight: "90%",
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
