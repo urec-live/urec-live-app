@@ -26,6 +26,17 @@ function getFallbackHost(): string {
 }
 
 function resolveBackendOrigin(): string {
+  // For web, use direct Railway URL
+  if (Platform.OS === 'web') {
+    const webOrigin = process.env.EXPO_PUBLIC_BACKEND_ORIGIN?.replace(/\/$/, '');
+    if (webOrigin) {
+      return webOrigin;
+    }
+    // Fallback for local web development
+    return 'http://localhost:8080';
+  }
+
+  // For native, use environment variable or discover host
   const explicitOrigin = process.env.EXPO_PUBLIC_BACKEND_ORIGIN;
   if (explicitOrigin) {
     return explicitOrigin.replace(/\/$/, '');
