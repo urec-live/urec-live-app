@@ -2,6 +2,7 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 const DEFAULT_BACKEND_PORT = '8080';
+const DEFAULT_PROD_BACKEND_ORIGIN = 'https://urec-live-backend-production.up.railway.app';
 
 function getExpoHost(): string | null {
   const fromExpoConfig = Constants.expoConfig?.hostUri;
@@ -30,16 +31,27 @@ function resolveBackendOrigin(): string {
   if (Platform.OS === 'web') {
     const webOrigin = process.env.EXPO_PUBLIC_BACKEND_ORIGIN?.replace(/\/$/, '');
     if (webOrigin) {
-      return webOrigin;
+      if (webOrigin.startsWith('http://') || webOrigin.startsWith('https://')) {
+        return webOrigin;
+      }
+
+      return `https://${webOrigin}`;
     }
     // Fallback for local web development
-    return 'http://localhost:8080';
+    return typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+      ? DEFAULT_PROD_BACKEND_ORIGIN
+      : 'http://localhost:8080';
   }
 
   // For native, use environment variable or discover host
   const explicitOrigin = process.env.EXPO_PUBLIC_BACKEND_ORIGIN;
   if (explicitOrigin) {
-    return explicitOrigin.replace(/\/$/, '');
+    const normalizedOrigin = explicitOrigin.replace(/\/$/, '');
+    if (normalizedOrigin.startsWith('http://') || normalizedOrigin.startsWith('https://')) {
+      return normalizedOrigin;
+    }
+
+    return `https://${normalizedOrigin}`;
   }
 
   const host = getExpoHost() || getFallbackHost();
