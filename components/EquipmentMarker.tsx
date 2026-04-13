@@ -45,15 +45,6 @@ export default function EquipmentMarker({
         },
       ]}
     >
-      {/* Pulse ring for highlighted marker */}
-      {highlighted && (
-        <View
-          style={[
-            styles.pulseRing,
-            { borderColor: color },
-          ]}
-        />
-      )}
       {/* Outer glow ring */}
       <View
         style={[
@@ -134,15 +125,5 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     paddingHorizontal: 8,
     paddingVertical: 3,
-  },
-  pulseRing: {
-    position: "absolute",
-    top: -6,
-    left: 8,
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 3,
-    opacity: 0.4,
   },
 });

@@ -266,6 +266,27 @@ export default function EquipmentAvailability() {
                     </Text>
                   </View>
 
+                  {/* Locate on map button */}
+                  {floors.some((f) =>
+                    f.equipment.some((eq) => eq.id === item.id)
+                  ) && (
+                    <TouchableOpacity
+                      style={styles.locateBtn}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        openLocateModal(item);
+                      }}
+                      hitSlop={6}
+                      activeOpacity={0.7}
+                    >
+                      <MaterialCommunityIcons
+                        name="map-marker-radius-outline"
+                        size={18}
+                        color="#4CAF50"
+                      />
+                    </TouchableOpacity>
+                  )}
+
                   {/* Manual Start button */}
                   {isAvailableForMe && (
                     <TouchableOpacity
@@ -291,27 +312,6 @@ export default function EquipmentAvailability() {
                         ? <ActivityIndicator size="small" color="#fff" />
                         : <Text style={styles.stopButtonText}>Stop</Text>
                       }
-                    </TouchableOpacity>
-                  )}
-
-                  {/* Locate on map button */}
-                  {floors.some((f) =>
-                    f.equipment.some((eq) => eq.id === item.id)
-                  ) && (
-                    <TouchableOpacity
-                      style={styles.locateBtn}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        openLocateModal(item);
-                      }}
-                      hitSlop={6}
-                      activeOpacity={0.7}
-                    >
-                      <MaterialCommunityIcons
-                        name="map-marker-radius-outline"
-                        size={18}
-                        color="#4CAF50"
-                      />
                     </TouchableOpacity>
                   )}
 
