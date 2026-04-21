@@ -1,150 +1,136 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
-import { authAPI, setAuthFailureHandler } from '../services/authAPI';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { authAPI, setAuthFailureHandler } from "../services/authAPI";
+
+const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
 
 interface User {
   username: string;
-  email: string;
+  email?: string;
+  id?: string | number;
 }
 
 interface AuthContextType {
   user: User | null;
-  loading: boolean;
+  sessionExpiresAt: number | null;
   signIn: (username: string, password: string) => Promise<void>;
   signUp: (username: string, email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  restoreToken: () => Promise<void>;
-  isSignedIn: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [sessionExpiresAt, setSessionExpiresAt] = useState<number | null>(null);
 
-  // Try to restore token on app load
+  // On mount: restore saved session and check if it's still valid
   useEffect(() => {
-    restoreToken();
-    setAuthFailureHandler(() => {
+    const restoreSession = async () => {
+      try {
+        const storedUser = await AsyncStorage.getItem("user");
+        const storedExpiry = await AsyncStorage.getItem("sessionExpiresAt");
+        const accessToken = await AsyncStorage.getItem("accessToken");
+
+        if (storedUser && storedExpiry && accessToken) {
+          const expiryTimestamp = parseInt(storedExpiry, 10);
+
+          if (Date.now() < expiryTimestamp) {
+            // Session still valid
+            setUser(JSON.parse(storedUser));
+            setSessionExpiresAt(expiryTimestamp);
+          } else {
+            // Session expired — clear everything
+            await clearStorage();
+          }
+        }
+      } catch {
+        await clearStorage();
+      }
+    };
+
+    restoreSession();
+
+    // Register handler so token refresh failures also sign the user out
+    setAuthFailureHandler(async () => {
+      await clearStorage();
       setUser(null);
-      setIsSignedIn(false);
+      setSessionExpiresAt(null);
     });
   }, []);
 
-  const restoreToken = async () => {
-    try {
-      setLoading(true);
-      const userData = await AsyncStorage.getItem('user');
-      const accessToken = await AsyncStorage.getItem('accessToken');
-
-      if (userData && accessToken) {
-        setUser(JSON.parse(userData));
-        setIsSignedIn(true);
-      } else {
-        setUser(null);
-        setIsSignedIn(false);
-      }
-    } catch (error) {
-      console.error('Error restoring token:', error);
-      setUser(null);
-      setIsSignedIn(false);
-    } finally {
-      setLoading(false);
-    }
+  const clearStorage = async () => {
+    await AsyncStorage.multiRemove([
+      "accessToken",
+      "refreshToken",
+      "user",
+      "sessionExpiresAt",
+    ]);
   };
 
   const signIn = async (username: string, password: string) => {
-    try {
-      setLoading(true);
-      const response = await authAPI.login(username, password);
+    const data = await authAPI.login(username, password);
 
-      // Store tokens
-      await AsyncStorage.setItem('accessToken', response.accessToken);
-      await AsyncStorage.setItem('refreshToken', response.refreshToken);
+    const loggedInUser: User = {
+      username: data.username ?? username,
+      email: data.email,
+      id: data.id ?? data.userId,
+    };
 
-      // Store user info
-      const userData: User = {
-        username: response.username,
-        email: response.email,
-      };
-      await AsyncStorage.setItem('user', JSON.stringify(userData));
+    const expiresAt = Date.now() + SESSION_DURATION_MS;
 
-      setUser(userData);
-      setIsSignedIn(true);
-    } catch (error) {
-      console.error('Sign in error:', error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
+    await AsyncStorage.setItem(
+      "accessToken",
+      data.accessToken ?? data.token ?? "",
+    );
+    await AsyncStorage.setItem("refreshToken", data.refreshToken ?? "");
+    await AsyncStorage.setItem("user", JSON.stringify(loggedInUser));
+    await AsyncStorage.setItem("sessionExpiresAt", expiresAt.toString());
+
+    setUser(loggedInUser);
+    setSessionExpiresAt(expiresAt);
   };
 
   const signUp = async (username: string, email: string, password: string) => {
-    try {
-      setLoading(true);
-      const response = await authAPI.register(username, email, password);
+    const data = await authAPI.register(username, email, password);
 
-      // Store tokens
-      await AsyncStorage.setItem('accessToken', response.accessToken);
-      await AsyncStorage.setItem('refreshToken', response.refreshToken);
+    const registeredUser: User = {
+      username: data.username ?? username,
+      email: data.email ?? email,
+      id: data.id ?? data.userId,
+    };
 
-      // Store user info
-      const userData: User = {
-        username: response.username,
-        email: response.email,
-      };
-      await AsyncStorage.setItem('user', JSON.stringify(userData));
+    const expiresAt = Date.now() + SESSION_DURATION_MS;
 
-      setUser(userData);
-      setIsSignedIn(true);
-    } catch (error) {
-      console.error('Sign up error:', error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
+    await AsyncStorage.setItem(
+      "accessToken",
+      data.accessToken ?? data.token ?? "",
+    );
+    await AsyncStorage.setItem("refreshToken", data.refreshToken ?? "");
+    await AsyncStorage.setItem("user", JSON.stringify(registeredUser));
+    await AsyncStorage.setItem("sessionExpiresAt", expiresAt.toString());
+
+    setUser(registeredUser);
+    setSessionExpiresAt(expiresAt);
   };
 
   const signOut = async () => {
-    try {
-      setLoading(true);
-      // Clear stored tokens and user data
-      await AsyncStorage.removeItem('accessToken');
-      await AsyncStorage.removeItem('refreshToken');
-      await AsyncStorage.removeItem('user');
-
-      setUser(null);
-      setIsSignedIn(false);
-    } catch (error) {
-      console.error('Sign out error:', error);
-    } finally {
-      setLoading(false);
-    }
+    await clearStorage();
+    setUser(null);
+    setSessionExpiresAt(null);
   };
 
   return (
     <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        signIn,
-        signUp,
-        signOut,
-        restoreToken,
-        isSignedIn,
-      }}
+      value={{ user, sessionExpiresAt, signIn, signUp, signOut }}
     >
       {children}
     </AuthContext.Provider>
   );
-};
+}
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+  return ctx;
+}
