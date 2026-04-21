@@ -43,9 +43,12 @@ yarn-error.*
 
 app-example
 
-# generated native folders
-/ios
 /android
+/ios/build/
+/ios/Pods/
+/ios/.xcode.env*
+/ios/*.xcworkspace/xcuserdata/
+/ios/*.xcodeproj/xcuserdata/
 
 # EAS Build
 eas-build-*
