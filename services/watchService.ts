@@ -1,5 +1,25 @@
 import { Platform } from 'react-native';
-import * as WatchConnectivity from 'react-native-watch-connectivity';
+
+type WatchConnectivityModule = {
+  updateApplicationContext: (message: Record<string, unknown>) => void;
+  sendMessage: (message: Record<string, unknown>, callback?: (reply: unknown) => void) => void;
+  watchEvents: {
+    on: (event: 'message' | 'application-context', handler: (msg: any) => void) => () => void;
+  };
+};
+
+const getWatchConnectivity = (): WatchConnectivityModule | null => {
+  if (Platform.OS !== 'ios') {
+    return null;
+  }
+
+  try {
+    // Lazy require prevents web bundler from evaluating native-only module internals.
+    return require('react-native-watch-connectivity') as WatchConnectivityModule;
+  } catch {
+    return null;
+  }
+};
 
 export const WatchService = {
   syncWorkout: (
@@ -19,9 +39,10 @@ export const WatchService = {
       restStartTime: payload?.restStartTime ?? 0,
     };
 
-    if (Platform.OS === 'ios') {
-      WatchConnectivity.updateApplicationContext(message);
-      WatchConnectivity.sendMessage(message, (reply) => console.log("⌚️ Watch Sync:", reply));
+    const watchConnectivity = getWatchConnectivity();
+    if (watchConnectivity) {
+      watchConnectivity.updateApplicationContext(message);
+      watchConnectivity.sendMessage(message, (reply) => console.log('Watch Sync:', reply));
     }
   },
 
@@ -29,13 +50,14 @@ export const WatchService = {
     onSetLogged: (reps: number, weight: number) => void,
     onWorkoutSync: (data: any) => void
   ) => {
-    if (Platform.OS === 'ios') {
+    const watchConnectivity = getWatchConnectivity();
+    if (watchConnectivity) {
       const handleMsg = (msg: any) => {
         if (msg.type === 'LOG_SET') onSetLogged(msg.reps, msg.weight);
         if (msg.status) onWorkoutSync(msg);
       };
-      const unsub1 = WatchConnectivity.watchEvents.on('message', handleMsg);
-      const unsub2 = WatchConnectivity.watchEvents.on('application-context', handleMsg);
+      const unsub1 = watchConnectivity.watchEvents.on('message', handleMsg);
+      const unsub2 = watchConnectivity.watchEvents.on('application-context', handleMsg);
       return () => { unsub1(); unsub2(); };
     }
     return () => {};
