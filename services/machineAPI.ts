@@ -7,6 +7,20 @@ export interface MachineDto {
   status: string;
   exercise: string;
   heldByMe?: boolean;
+  floorX?: number | null;
+  floorY?: number | null;
+  floorLabel?: string | null;
+  floorPlanId?: number | null;
+}
+
+export interface FloorPlanResponse {
+  id: number;
+  name: string;
+  imageUrl: string | null;
+  width: number;
+  height: number;
+  floorNumber: number;
+  equipment: MachineDto[];
 }
 
 export interface Machine {
@@ -113,6 +127,18 @@ export const machineAPI = {
   // Get exercises for a specific equipment by code
   getExercisesByEquipmentCode: async (code: string): Promise<Exercise[]> => {
     const response = await api.get(`/machines/code/${code}/exercises`);
+    return response.data;
+  },
+
+  // Get floor plan with all equipment positions and statuses (single floor, backward compat)
+  getFloorPlan: async (): Promise<FloorPlanResponse> => {
+    const response = await api.get('/machines/floor-plan');
+    return response.data;
+  },
+
+  // Get all floor plans with equipment grouped by floor
+  getFloorPlans: async (): Promise<FloorPlanResponse[]> => {
+    const response = await api.get('/machines/floor-plans');
     return response.data;
   },
 };

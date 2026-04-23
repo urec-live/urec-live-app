@@ -1,10 +1,11 @@
-import { MachineDto, machineAPI } from "@/services/machineAPI";
+import { MachineDto, FloorPlanResponse, machineAPI } from "@/services/machineAPI";
 import { sessionAPI, SessionResponse } from "@/services/sessionAPI";
 import { useWorkout } from "@/contexts/WorkoutContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
+import MapModal from "../../../../components/MapModal";
 import {
   ActivityIndicator,
   FlatList,
@@ -42,6 +43,11 @@ export default function EquipmentAvailability() {
   const [recentSessions, setRecentSessions] = useState<SessionResponse[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  // Map modal state
+  const [floors, setFloors] = useState<FloorPlanResponse[]>([]);
+  const [mapModalVisible, setMapModalVisible] = useState(false);
+  const [locateTarget, setLocateTarget] = useState<MachineDto | null>(null);
+
   // Workout details modal state
   const [workoutDetailsVisible, setWorkoutDetailsVisible] = useState(false);
   const [pendingStopCode, setPendingStopCode] = useState<string | null>(null);
@@ -53,8 +59,21 @@ export default function EquipmentAvailability() {
     const load = async () => {
       try {
         setLoading(true);
-          const ms = await machineAPI.getByExercise(name);
+        const ms = await machineAPI.getByExercise(name);
         setMachines(ms);
+
+        // Fetch floor plans for locate feature
+        try {
+          const fp = await machineAPI.getFloorPlans();
+          setFloors(fp);
+        } catch {
+          try {
+            const fp = await machineAPI.getFloorPlan();
+            setFloors([fp]);
+          } catch {
+            // no floor plans
+          }
+        }
       } catch {
         setMachines([]);
       } finally {
@@ -161,6 +180,11 @@ export default function EquipmentAvailability() {
     setModalVisible(true);
   };
 
+  const openLocateModal = (machine: MachineDto) => {
+    setLocateTarget(machine);
+    setMapModalVisible(true);
+  };
+
   return (
     <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
       <View style={styles.container}>
@@ -241,6 +265,27 @@ export default function EquipmentAvailability() {
                       {isMyMachine ? "Your Machine" : statusLabel}
                     </Text>
                   </View>
+
+                  {/* Locate on map button */}
+                  {floors.some((f) =>
+                    f.equipment.some((eq) => eq.id === item.id)
+                  ) && (
+                    <TouchableOpacity
+                      style={styles.locateBtn}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        openLocateModal(item);
+                      }}
+                      hitSlop={6}
+                      activeOpacity={0.7}
+                    >
+                      <MaterialCommunityIcons
+                        name="map-marker-radius-outline"
+                        size={18}
+                        color="#4CAF50"
+                      />
+                    </TouchableOpacity>
+                  )}
 
                   {/* Manual Start button */}
                   {isAvailableForMe && (
@@ -459,6 +504,18 @@ export default function EquipmentAvailability() {
             </View>
           </View>
         </Modal>
+
+        {/* Map Modal */}
+        <MapModal
+          visible={mapModalVisible}
+          onClose={() => {
+            setMapModalVisible(false);
+            setLocateTarget(null);
+          }}
+          floors={floors}
+          allMachines={machines}
+          targetEquipment={locateTarget}
+        />
       </View>
     </LinearGradient>
   );
@@ -562,6 +619,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   stopButtonText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  locateBtn: {
+    backgroundColor: "#e8f5e9",
+    borderRadius: 12,
+    padding: 8,
+  },
 
   // Modal
   modalOverlay: {
