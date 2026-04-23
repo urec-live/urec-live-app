@@ -8,21 +8,6 @@ export const setAuthFailureHandler = (handler: () => void) => {
   authFailureHandler = handler;
 };
 
-// API URL based on platform
-let API_BASE_URL = "http://localhost:8080/api";
-
-// Adjust the base URL with your local IP address when testing locally
-if (Platform.OS === "android") {
-  // Android emulator: use special IP for host machine
-  API_BASE_URL = "http://172.20.1.229:8080/api";
-} else if (Platform.OS === "ios") {
-  // iOS simulator: use machine's local IP address
-  API_BASE_URL = "http://172.20.1.229:8080/api";
-} else if (Platform.OS === "web") {
-  // Web: use localhost (or update for production)
-  API_BASE_URL = "http://localhost:8080/api";
-}
-
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
