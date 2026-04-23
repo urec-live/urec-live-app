@@ -83,23 +83,41 @@ export default function Profile() {
       }
       return;
     }
-    Alert.alert(
-      "Logout",
-      "Are you sure you want to log out?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Logout",
-          onPress: () => {
-            resetWorkout();
-            signOut();
-            router.replace("/(auth)/login");
-          },
-          style: "destructive",
+    Alert.alert("Logout", "Are you sure you want to log out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Logout",
+        onPress: () => {
+          resetWorkout();
+          signOut();
+          router.replace("/(auth)/login");
         },
-      ]
-    );
+        style: "destructive",
+      },
+    ]);
   };
+
+  const formatExpiry = (timestamp: number | null) => {
+    if (!timestamp) return "Unknown";
+    const date = new Date(timestamp);
+    return date.toLocaleDateString(undefined, {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  const displayName = user?.username || user?.email?.split("@")[0] || "User";
+  const initials = getInitials(displayName);
 
   return (
     <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
