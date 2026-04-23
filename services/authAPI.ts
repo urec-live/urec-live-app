@@ -8,21 +8,6 @@ export const setAuthFailureHandler = (handler: () => void) => {
   authFailureHandler = handler;
 };
 
-// API URL based on platform
-let API_BASE_URL = "http://localhost:8080/api";
-
-// Adjust the base URL with your local IP address when testing locally
-if (Platform.OS === "android") {
-  // Android emulator: use special IP for host machine
-  API_BASE_URL = "http://172.20.1.229:8080/api";
-} else if (Platform.OS === "ios") {
-  // iOS simulator: use machine's local IP address
-  API_BASE_URL = "http://172.20.1.229:8080/api";
-} else if (Platform.OS === "web") {
-  // Web: use localhost (or update for production)
-  API_BASE_URL = "http://localhost:8080/api";
-}
-
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
@@ -31,13 +16,13 @@ const api = axios.create({
 // Add token to requests
 api.interceptors.request.use(
   async (config) => {
-    const token = await AsyncStorage.getItem("accessToken");
+    const token = await AsyncStorage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
-  (error) => Promise.reject(error),
+  (error) => Promise.reject(error)
 );
 
 // Handle token refresh on 401
@@ -48,37 +33,37 @@ api.interceptors.response.use(
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
-
+      
       try {
-        const refreshToken = await AsyncStorage.getItem("refreshToken");
+        const refreshToken = await AsyncStorage.getItem('refreshToken');
         if (refreshToken) {
           const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
             refreshToken,
           });
 
           const { accessToken, refreshToken: newRefreshToken } = response.data;
-          await AsyncStorage.setItem("accessToken", accessToken);
-          await AsyncStorage.setItem("refreshToken", newRefreshToken);
+          await AsyncStorage.setItem('accessToken', accessToken);
+          await AsyncStorage.setItem('refreshToken', newRefreshToken);
 
           originalRequest.headers.Authorization = `Bearer ${accessToken}`;
           return api(originalRequest);
         }
       } catch {
         // Refresh failed — clear tokens and notify AuthContext
-        await AsyncStorage.removeItem("accessToken");
-        await AsyncStorage.removeItem("refreshToken");
-        await AsyncStorage.removeItem("user");
+        await AsyncStorage.removeItem('accessToken');
+        await AsyncStorage.removeItem('refreshToken');
+        await AsyncStorage.removeItem('user');
         authFailureHandler?.();
       }
     }
 
     return Promise.reject(error);
-  },
+  }
 );
 
 export const authAPI = {
   register: async (username: string, email: string, password: string) => {
-    const response = await api.post("/auth/register", {
+    const response = await api.post('/auth/register', {
       username,
       email,
       password,
@@ -87,7 +72,7 @@ export const authAPI = {
   },
 
   login: async (username: string, password: string) => {
-    const response = await api.post("/auth/login", {
+    const response = await api.post('/auth/login', {
       username,
       password,
     });
@@ -95,14 +80,14 @@ export const authAPI = {
   },
 
   refreshToken: async (refreshToken: string) => {
-    const response = await api.post("/auth/refresh", {
+    const response = await api.post('/auth/refresh', {
       refreshToken,
     });
     return response.data;
   },
 
   test: async () => {
-    const response = await api.get("/auth/test");
+    const response = await api.get('/auth/test');
     return response.data;
   },
 };

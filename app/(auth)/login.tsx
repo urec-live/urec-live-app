@@ -3,13 +3,13 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Alert,
+    Pressable,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import { useAuth } from "../../contexts/AuthContext";
 
@@ -38,18 +38,14 @@ export default function LoginScreen() {
         Alert.alert("Error", "Passwords do not match.");
         return;
       }
-
+      
       try {
         setLoading(true);
         await signUp(username, email, password);
         Alert.alert("Success", "Registration successful!");
         router.replace("/(tabs)");
       } catch (error: any) {
-        Alert.alert(
-          "Registration Failed",
-          error.response?.data?.message ||
-            "Failed to register. Please try again.",
-        );
+        Alert.alert("Registration Failed", error.response?.data?.message || "Failed to register. Please try again.");
       } finally {
         setLoading(false);
       }
@@ -59,31 +55,15 @@ export default function LoginScreen() {
         await signIn(username, password);
         router.replace("/(tabs)");
       } catch (error: any) {
-        const message =
-          error.response?.data || "Invalid credentials. Please try again."; // backend message (like "User not registered")
-
-        // Show a popup (Alert) or toast
-        Alert.alert("Login Failed", message);
+        Alert.alert("Login Failed", error.response?.data?.message || "Invalid credentials. Please try again.");
       } finally {
         setLoading(false);
       }
-      // try {
-      //   setLoading(true);
-      //   await signIn(username, password);
-      //   router.replace("/(tabs)");
-      // } catch (error: any) {
-      //   Alert.alert("Login Failed", error.response?.data?.message || "Invalid credentials. Please try again.");
-      // } finally {
-      //   setLoading(false);
-      // }
     }
   };
 
   return (
-    <LinearGradient
-      colors={["#ffffff", "#f5f5f5", "#ffffff"]}
-      style={{ flex: 1 }}
-    >
+    <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
       <View style={styles.container}>
         <MaterialCommunityIcons name="dumbbell" size={64} color="#00ff88" />
         <Text style={styles.title}>UREC Live</Text>
@@ -133,8 +113,8 @@ export default function LoginScreen() {
           />
         )}
 
-        <Pressable
-          style={[styles.button, loading && styles.buttonDisabled]}
+        <Pressable 
+          style={[styles.button, loading && styles.buttonDisabled]} 
           onPress={handleAuth}
           disabled={loading}
         >
@@ -147,16 +127,13 @@ export default function LoginScreen() {
           )}
         </Pressable>
 
-        <Pressable
-          onPress={() => {
-            setIsRegistering(!isRegistering);
-            setUsername("");
-            setEmail("");
-            setPassword("");
-            setConfirmPassword("");
-          }}
-          disabled={loading}
-        >
+        <Pressable onPress={() => {
+          setIsRegistering(!isRegistering);
+          setUsername("");
+          setEmail("");
+          setPassword("");
+          setConfirmPassword("");
+        }} disabled={loading}>
           <Text style={styles.toggleText}>
             {isRegistering
               ? "Already have an account? Login"
@@ -212,3 +189,4 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
 });
+
