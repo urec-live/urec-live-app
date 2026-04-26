@@ -1,6 +1,13 @@
-import { Client, IMessage } from '@stomp/stompjs';
-import SockJS from 'sockjs-client';
-import { WS_URL } from './networkConfig';
+import { Client, IMessage } from "@stomp/stompjs";
+import { Platform } from "react-native";
+import SockJS from "sockjs-client";
+
+const WS_URL =
+  Platform.select({
+    ios: "http://172.20.1.229:8080/ws",
+    android: "http://172.20.1.229:8080/ws",
+    default: "http://localhost:8080/ws",
+  }) || "http://localhost:8080/ws";
 
 export interface MachineUpdateCallback {
   (machine: any): void;
