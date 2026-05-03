@@ -2,6 +2,7 @@ package com.ureclive.urecliveapp.wear.services
 
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
+import com.google.android.gms.wearable.DataMap
 import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.WearableListenerService
 import com.ureclive.urecliveapp.wear.WearRepository
@@ -25,17 +26,26 @@ class WearDataLayerListenerService : WearableListenerService() {
                 scope.launch {
                     try {
                         val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
-                        val data = mutableMapOf<String, Any>()
-                        dataMap.keySet().forEach { key ->
-                            val value = dataMap[key]
-                            if (value != null) data[key] = value
-                        }
-                        WearRepository.updateFromPhone(applicationContext, data)
+                        handleWorkoutUpdate(dataMap)
                     } catch (e: Exception) {
                         e.printStackTrace()
                     }
                 }
             }
+        }
+    }
+
+    private suspend fun handleWorkoutUpdate(dataMap: DataMap) {
+        val data = mutableMapOf<String, Any>()
+        dataMap.getString("status")?.let { data["status"] = it }
+        dataMap.getString("exercise")?.let { data["exercise"] = it }
+        dataMap.getString("code")?.let { data["code"] = it }
+        val exerciseStart = dataMap.getLong("exerciseStartTime", 0L)
+        if (exerciseStart > 0L) data["exerciseStartTime"] = exerciseStart
+        val restStart = dataMap.getLong("restStartTime", 0L)
+        data["restStartTime"] = restStart
+        if (data.isNotEmpty()) {
+            WearRepository.updateFromPhone(applicationContext, data)
         }
     }
 }
