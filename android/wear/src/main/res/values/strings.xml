@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">UREC Live</string>
+    <string name="waiting_for_phone">Waiting for iPhone...</string>
+    <string name="no_active_workout">No Active Workout</string>
+    <string name="rest">Rest</string>
+    <string name="resume">Resume</string>
+    <string name="end">End</string>
+    <string name="log_set">Log Set</string>
+    <string name="reps">Reps</string>
+    <string name="weight">Weight (lbs)</string>
+    <string name="submit">Submit</string>
+    <string name="cancel">Cancel</string>
+    <string name="rest_timer">REST</string>
+    <string name="lbs">lbs</string>
+</resources>

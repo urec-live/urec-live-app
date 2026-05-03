@@ -43,7 +43,12 @@ yarn-error.*
 
 app-example
 
-/android
+# Android and iOS native source should be tracked; only ignore generated build outputs
+/android/.gradle/
+/android/build/
+/android/**/build/
+/android/local.properties
+/android/**/*.iml
 /ios/build/
 /ios/Pods/
 /ios/.xcode.env*

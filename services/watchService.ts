@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Platform, DeviceEventEmitter } from 'react-native';
 
 type WatchConnectivityModule = {
   updateApplicationContext: (message: Record<string, unknown>) => void;
@@ -21,6 +21,28 @@ const getWatchConnectivity = (): WatchConnectivityModule | null => {
   }
 };
 
+// react-native-wear-connectivity actual API:
+//   sendMessage(payload, successCb, errorCb) — sends payload as Wearable message path (JSON string)
+//   Incoming messages arrive via DeviceEventEmitter 'message' event (fired by the library's
+//   headless task after parsing messageEvent.path as JSON on the native side).
+const getWearConnectivity = () => {
+  if (Platform.OS !== 'android') {
+    return null;
+  }
+
+  try {
+    return require('react-native-wear-connectivity') as {
+      sendMessage: (
+        message: Record<string, unknown>,
+        onSuccess: (reply: unknown) => void,
+        onError: (err: string) => void
+      ) => void;
+    };
+  } catch {
+    return null;
+  }
+};
+
 export const WatchService = {
   syncWorkout: (
     exercise: string,
@@ -28,7 +50,6 @@ export const WatchService = {
     status: 'START' | 'PAUSE' | 'END',
     payload?: { exerciseStartTime: number; restStartTime?: number }
   ) => {
-    // Prevent crashes by providing defaults if payload is missing
     const message = {
       type: 'WORKOUT_STATUS',
       exercise,
@@ -39,10 +60,21 @@ export const WatchService = {
       restStartTime: payload?.restStartTime ?? 0,
     };
 
-    const watchConnectivity = getWatchConnectivity();
-    if (watchConnectivity) {
-      watchConnectivity.updateApplicationContext(message);
-      watchConnectivity.sendMessage(message, (reply) => console.log('Watch Sync:', reply));
+    if (Platform.OS === 'ios') {
+      const watchConnectivity = getWatchConnectivity();
+      if (watchConnectivity) {
+        watchConnectivity.updateApplicationContext(message);
+        watchConnectivity.sendMessage(message, (reply) => console.log('Watch Sync (iOS):', reply));
+      }
+    } else if (Platform.OS === 'android') {
+      const wear = getWearConnectivity();
+      if (wear) {
+        wear.sendMessage(
+          message,
+          () => console.log('Wear Sync (Android): sent'),
+          (err) => console.log('Wear Sync (Android) Error:', err)
+        );
+      }
     }
   },
 
@@ -50,16 +82,31 @@ export const WatchService = {
     onSetLogged: (reps: number, weight: number) => void,
     onWorkoutSync: (data: any) => void
   ) => {
-    const watchConnectivity = getWatchConnectivity();
-    if (watchConnectivity) {
-      const handleMsg = (msg: any) => {
+    const unsubscribers: Array<() => void> = [];
+
+    if (Platform.OS === 'ios') {
+      const watchConnectivity = getWatchConnectivity();
+      if (watchConnectivity) {
+        const handleMsg = (msg: any) => {
+          if (msg.type === 'LOG_SET') onSetLogged(msg.reps, msg.weight);
+          if (msg.status) onWorkoutSync(msg);
+        };
+        unsubscribers.push(watchConnectivity.watchEvents.on('message', handleMsg));
+        unsubscribers.push(watchConnectivity.watchEvents.on('application-context', handleMsg));
+      }
+    } else if (Platform.OS === 'android') {
+      // The library's native WearConnectivityMessageClient parses messageEvent.path as JSON
+      // and emits via the WearConnectivityTask headless task → DeviceEventEmitter.emit('message').
+      // Do NOT use watchEvents from the library — it references an undefined NativeModule.
+      const sub = DeviceEventEmitter.addListener('message', (msg: any) => {
         if (msg.type === 'LOG_SET') onSetLogged(msg.reps, msg.weight);
         if (msg.status) onWorkoutSync(msg);
-      };
-      const unsub1 = watchConnectivity.watchEvents.on('message', handleMsg);
-      const unsub2 = watchConnectivity.watchEvents.on('application-context', handleMsg);
-      return () => { unsub1(); unsub2(); };
+      });
+      unsubscribers.push(() => sub.remove());
     }
-    return () => {};
-  }
+
+    return () => {
+      unsubscribers.forEach((unsub) => unsub());
+    };
+  },
 };

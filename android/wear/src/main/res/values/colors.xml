@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary colors (UREC Live branding) -->
+    <color name="primary_green">#22C55E</color>
+    <color name="primary_green_dark">#16A34A</color>
+    
+    <!-- Secondary colors -->
+    <color name="rest_yellow">#FCA311</color>
+    <color name="button_orange">#FF8C42</color>
+    <color name="error_red">#EF4444</color>
+    <color name="button_blue">#3B82F6</color>
+    
+    <!-- Text colors -->
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#CCCCCC</color>
+    <color name="text_tertiary">#999999</color>
+    
+    <!-- Background colors -->
+    <color name="background_dark">#1A1A1A</color>
+    <color name="background_card">#2D2D2D</color>
+    
+    <!-- Neutral -->
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+</resources>
