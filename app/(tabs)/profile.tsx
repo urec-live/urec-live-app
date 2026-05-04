@@ -9,6 +9,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from "react-native";
@@ -19,11 +20,15 @@ import StatsCard from "../../components/StatsCard";
 import StreakDisplay from "../../components/StreakDisplay";
 import WeeklyChart from "../../components/WeeklyChart";
 import PRList from "../../components/PRList";
+import BadgeGrid from "../../components/BadgeGrid";
+import StreakCalendar from "../../components/StreakCalendar";
 import {
   sessionAPI,
   SessionStatsResponse,
   PersonalRecord,
 } from "@/services/sessionAPI";
+import { badgeAPI, BadgeEntry } from "@/services/badgeAPI";
+import { socialAPI } from "@/services/socialAPI";
 
 function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -46,6 +51,9 @@ export default function Profile() {
 
   const [stats, setStats] = useState<SessionStatsResponse | null>(null);
   const [prs, setPrs] = useState<PersonalRecord[]>([]);
+  const [badges, setBadges] = useState<BadgeEntry[]>([]);
+  const [calendarDates, setCalendarDates] = useState<string[]>([]);
+  const [isPublic, setIsPublic] = useState(false);
   const [loading, setLoading] = useState(true);
   const [chartMode, setChartMode] = useState<"sessions" | "volume">("sessions");
 
@@ -54,13 +62,17 @@ export default function Profile() {
       let cancelled = false;
       const load = async () => {
         try {
-          const [statsData, prsData] = await Promise.all([
+          const [statsData, prsData, badgesData, calendarData] = await Promise.all([
             sessionAPI.getMyStats(),
             sessionAPI.getMyPRs(),
+            badgeAPI.getMyBadges(),
+            sessionAPI.getCalendar(),
           ]);
           if (!cancelled) {
             setStats(statsData);
             setPrs(prsData);
+            setBadges(badgesData.earned);
+            setCalendarDates(calendarData.workoutDates);
           }
         } catch {
           // silently handle
@@ -73,6 +85,15 @@ export default function Profile() {
       return () => { cancelled = true; };
     }, [])
   );
+
+  const handlePublicToggle = async (value: boolean) => {
+    setIsPublic(value);
+    try {
+      await socialAPI.updateMyProfile({ profileVisibility: value ? 'PUBLIC' : 'PRIVATE' });
+    } catch {
+      setIsPublic(!value);
+    }
+  };
 
   const handleLogoutPress = () => {
     if (Platform.OS === "web") {
@@ -123,6 +144,16 @@ export default function Profile() {
                 currentStreak={stats.currentStreak}
                 longestStreak={stats.longestStreak}
               />
+            </View>
+
+            {/* Badges */}
+            <View style={styles.section}>
+              <BadgeGrid earned={badges} />
+            </View>
+
+            {/* Workout Calendar */}
+            <View style={styles.section}>
+              <StreakCalendar workoutDates={calendarDates} />
             </View>
 
             {/* Quick Stats */}
@@ -241,6 +272,23 @@ export default function Profile() {
             </View>
             <MaterialCommunityIcons name="chevron-right" size={24} color="#ccc" />
           </Pressable>
+          <View style={styles.settingsRow}>
+            <View style={styles.settingsLeft}>
+              <MaterialCommunityIcons name="earth" size={24} color="#4CAF50" />
+              <View>
+                <Text style={styles.settingsLabel}>Public Profile</Text>
+                <Text style={styles.settingsDescription}>
+                  Let others see your stats and PRs
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={isPublic}
+              onValueChange={handlePublicToggle}
+              trackColor={{ false: '#e0e0e0', true: '#a5d6a7' }}
+              thumbColor={isPublic ? '#4CAF50' : '#f4f3f4'}
+            />
+          </View>
         </View>
 
         {/* Logout */}

@@ -35,6 +35,7 @@ export interface WorkoutPlanResponse {
   id: number;
   name: string;
   active: boolean;
+  visibility: string;
   days: DayPlanResponse[];
   createdAt: string;
   updatedAt: string;
@@ -79,6 +80,21 @@ export const planAPI = {
   getTodayPlan: async (): Promise<TodayPlanResponse | null> => {
     const response = await api.get('/plans/me/today');
     if (response.status === 204) return null;
+    return response.data;
+  },
+
+  updateVisibility: async (id: number, visibility: 'PUBLIC' | 'PRIVATE'): Promise<WorkoutPlanResponse> => {
+    const response = await api.patch(`/plans/${id}/visibility`, { visibility });
+    return response.data;
+  },
+
+  getPublicPlans: async (username: string): Promise<WorkoutPlanResponse[]> => {
+    const response = await api.get(`/plans/public?username=${encodeURIComponent(username)}`);
+    return response.data;
+  },
+
+  copyPlan: async (id: number): Promise<WorkoutPlanResponse> => {
+    const response = await api.post(`/plans/${id}/copy`);
     return response.data;
   },
 };

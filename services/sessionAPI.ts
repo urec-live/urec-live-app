@@ -94,4 +94,9 @@ export const sessionAPI = {
     const response = await api.get(`/sessions/me/prs/${encodeURIComponent(exerciseName)}/history`);
     return response.data;
   },
+
+  getCalendar: async (): Promise<{ workoutDates: string[] }> => {
+    const response = await api.get('/sessions/me/calendar');
+    return response.data;
+  },
 };
