@@ -59,7 +59,9 @@ export default function CommunityChatScreen() {
     return (
       <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
         {!isMe && (
-          <Text style={styles.senderName}>{item.senderUsername}</Text>
+          <Pressable onPress={() => router.push(`/users/${item.senderUsername}` as any)}>
+            <Text style={styles.senderName}>{item.senderUsername}</Text>
+          </Pressable>
         )}
         <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextThem]}>
           {item.content}
