@@ -211,10 +211,14 @@ export default function ActiveExerciseTracker() {
         </TouchableOpacity>
         
         <TouchableOpacity style={styles.endButton} onPress={() => {
-            Alert.alert("End Workout", "Are you sure?", [
+            if (Platform.OS === 'web') {
+              if (window.confirm('End Workout? Are you sure?')) doEnd();
+            } else {
+              Alert.alert("End Workout", "Are you sure?", [
                 { text: "Cancel", style: "cancel" },
-                { text: "End", onPress: doEnd }
-            ]);
+                { text: "End", onPress: doEnd },
+              ]);
+            }
         }}>
           <MaterialCommunityIcons name="stop" size={16} color="#fff" />
           <Text style={styles.endButtonText}>End Workout</Text>

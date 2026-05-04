@@ -14,11 +14,13 @@ import {
 import { socialAPI, PublicProfileResponse } from "@/services/socialAPI";
 import { planAPI, WorkoutPlanResponse } from "@/services/planAPI";
 import { usePlan } from "@/contexts/PlanContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function PublicProfile() {
   const { username } = useLocalSearchParams<{ username: string }>();
   const router = useRouter();
   const { refreshActivePlan } = usePlan();
+  const { user: currentUser } = useAuth();
 
   const [profile, setProfile] = useState<PublicProfileResponse | null>(null);
   const [publicPlans, setPublicPlans] = useState<WorkoutPlanResponse[]>([]);
@@ -82,6 +84,15 @@ export default function PublicProfile() {
             <MaterialCommunityIcons name="account-circle" size={64} color="#4CAF50" />
             <Text style={styles.username}>{profile.username}</Text>
             {profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
+            {currentUser && currentUser.username !== username && (
+              <Pressable
+                style={styles.messageBtn}
+                onPress={() => router.push(`/chat/dm/${username}` as any)}
+              >
+                <MaterialCommunityIcons name="chat-outline" size={16} color="#fff" />
+                <Text style={styles.messageBtnText}>Message</Text>
+              </Pressable>
+            )}
           </View>
 
           {/* Streak stats */}
@@ -210,6 +221,21 @@ const styles = StyleSheet.create({
     color: "#666",
     marginTop: 4,
     textAlign: "center",
+  },
+  messageBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#4CAF50",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginTop: 12,
+  },
+  messageBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#fff",
   },
   statsRow: {
     flexDirection: "row",

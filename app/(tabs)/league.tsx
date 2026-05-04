@@ -56,6 +56,9 @@ export default function League() {
       <View style={styles.header}>
         <MaterialCommunityIcons name="trophy" size={24} color="#4CAF50" />
         <Text style={styles.headerTitle}>Leagues</Text>
+        <Pressable style={styles.chatBtn} onPress={() => router.push("/chat/community" as any)}>
+          <MaterialCommunityIcons name="chat-outline" size={22} color="#4CAF50" />
+        </Pressable>
       </View>
 
       {loading ? (
@@ -138,6 +141,15 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "900",
     color: "#1a1a1a",
+    flex: 1,
+  },
+  chatBtn: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e8f5e9",
+    borderRadius: 20,
   },
   center: {
     flex: 1,

@@ -127,6 +127,9 @@ export default function Profile() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* User Info */}
         <View style={styles.userSection}>
+          <Pressable style={styles.inboxBtn} onPress={() => router.push("/chat/dm" as any)}>
+            <MaterialCommunityIcons name="chat-outline" size={22} color="#4CAF50" />
+          </Pressable>
           <MaterialCommunityIcons name="account-circle" size={64} color="#4CAF50" />
           <Text style={styles.username}>{user?.username || "User"}</Text>
           <Text style={styles.email}>{user?.email || ""}</Text>
@@ -313,6 +316,17 @@ const styles = StyleSheet.create({
   userSection: {
     alignItems: "center",
     marginBottom: 20,
+  },
+  inboxBtn: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e8f5e9",
+    borderRadius: 20,
   },
   username: {
     fontSize: 22,

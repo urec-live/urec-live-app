@@ -29,6 +29,9 @@ function RootLayoutNav() {
             <Stack.Screen name="settings/plan" options={{ headerShown: false }} />
             <Stack.Screen name="progress/[exercise]" options={{ headerShown: false }} />
             <Stack.Screen name="users/[username]" options={{ headerShown: false }} />
+            <Stack.Screen name="chat/community" options={{ headerShown: false }} />
+            <Stack.Screen name="chat/dm/index" options={{ headerShown: false }} />
+            <Stack.Screen name="chat/dm/[username]" options={{ headerShown: false }} />
             <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
           </>
         ) : (
