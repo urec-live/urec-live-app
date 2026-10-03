@@ -45,8 +45,10 @@ app/
 │       └── equipment/
 │           └── [exercise].tsx # Equipment for specific exercise
 ├── machine/
-│   └── [id].tsx              # Machine detail screen
-├── scan.tsx                  # QR code scanner → check in/out
+│   └── [id].tsx              # Machine detail screen (+ open-issue banner, "Report a problem")
+├── report-issue.tsx          # Report a broken machine (?id= or ?code=)
+├── my-reports.tsx            # Member's equipment reports + repair status (from Profile)
+├── scan.tsx                  # QR code scanner → check in/out (+ "Report a Problem")
 ├── summary.tsx               # Workout summary screen
 └── modal.tsx                 # Modal screen
 
@@ -109,6 +111,14 @@ constants/
 
 ### Profile
 - User info display, logout functionality
+
+### Equipment Issue Reporting
+- Members report a machine as "Not working" or "Damaged / hard to use" with a required 10–1000 character description (`app/report-issue.tsx`, `services/issueAPI.ts`)
+- Entry points: machine page, scan result, and the workout tracker header (the tracker hides itself on the form without unmounting, so entered sets survive)
+- `WorkoutSession.machineId` holds the machine's QR **code**, so the tracker/scanner open the form with `?code=`; the machine page uses `?id=`
+- Profile → My Equipment Reports shows each report's status (Submitted → Seen by staff → Repair on the way → Fixed)
+- `components/MachineIssueBanner.tsx` warns every member when a machine has open reports (no reporter details)
+- Errors/success are shown inline, not via `Alert` (Alert buttons don't work on web)
 
 ---
 
@@ -175,6 +185,13 @@ constants/
 Focus only on polish and the remaining items listed above.
 
 ---
+
+## Testing
+
+- `npm test` — Jest with `jest-expo` + React Native Testing Library (dev dependencies only; config under `"jest"` in `package.json`)
+- Tests live in `__tests__/` — never inside `app/`, or Expo Router treats them as routes
+- Mock `expo-router`, the `services/` modules and `@expo/vector-icons` per test file; see `__tests__/report-issue.test.tsx` for the pattern
+- Typed routes: after adding a screen, run `npx expo start` once to regenerate `.expo/types/router.d.ts` before `npx tsc --noEmit`
 
 ## Development Setup
 

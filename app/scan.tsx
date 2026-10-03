@@ -79,6 +79,12 @@ export default function ScanScreen() {
     }
   };
 
+  // Lets a member report a broken machine without checking in to it
+  const handleReportProblem = () => {
+    if (!parsed?.machineId) return;
+    router.push({ pathname: "/report-issue", params: { code: parsed.machineId } });
+  };
+
   if (!permission) {
     return (
       <CenteredScreen>
@@ -129,6 +135,9 @@ export default function ScanScreen() {
                   {parsed.muscle && <Text style={styles.metaText}>Muscle: {parsed.muscle}</Text>}
                   <Pressable style={styles.button} onPress={handleConfirmCheckIn}>
                     <Text style={styles.buttonText}>Confirm Check-In</Text>
+                  </Pressable>
+                  <Pressable style={[styles.button, styles.reportButton]} onPress={handleReportProblem}>
+                    <Text style={styles.reportButtonText}>Report a Problem</Text>
                   </Pressable>
                 </>
               )}
@@ -223,6 +232,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#001a14",
   },
   secondaryButtonText: { color: "#00ff88", fontWeight: "900" },
+  reportButton: { backgroundColor: "#330000", borderColor: "#ff6666" },
+  reportButtonText: { color: "#ff9a9a", fontWeight: "900" },
   errorBox: { borderColor: "#ff6666", backgroundColor: "#330000" },
   errorText: { color: "#ff9a9a", textAlign: "center" },
   successBox: { borderColor: "#00ff88", backgroundColor: "#002d20" },

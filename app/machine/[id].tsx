@@ -1,6 +1,9 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import MachineIssueBanner from "@/components/MachineIssueBanner";
+import { issueAPI, MachineIssueStatus } from "@/services/issueAPI";
 import { machineAPI, Machine, Exercise } from "@/services/machineAPI";
 
 export default function MachineDetails() {
@@ -11,10 +14,29 @@ export default function MachineDetails() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [issue, setIssue] = useState<MachineIssueStatus | null>(null);
 
   useEffect(() => {
     loadMachine();
   }, [id]);
+
+  // Refetch on focus so the banner shows up right after the member files a report
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      issueAPI
+        .getMachineIssueStatus(Number(id))
+        .then((status) => {
+          if (!cancelled) setIssue(status);
+        })
+        .catch(() => {
+          // Non-critical: the page still works without the banner
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [id])
+  );
 
   const loadMachine = async () => {
     try {
@@ -94,8 +116,20 @@ export default function MachineDetails() {
         {status.toUpperCase()}
       </Text>
 
+      {issue && <MachineIssueBanner issue={issue} />}
+
       <TouchableOpacity style={styles.scanButton} onPress={() => router.push("/scan")}>
         <Text style={styles.scanButtonText}>Scan QR to Check In</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.reportButton}
+        onPress={() =>
+          router.push({ pathname: "/report-issue", params: { id: String(machine.id) } })
+        }
+      >
+        <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#D32F2F" />
+        <Text style={styles.reportButtonText}>Report a problem</Text>
       </TouchableOpacity>
 
       {exercises.length > 0 && (
@@ -264,12 +298,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderWidth: 2,
     borderColor: "#2e7d32",
-    marginBottom: 20,
+    marginBottom: 12,
     alignItems: "center",
   },
   scanButtonText: {
     color: "#ffffff",
     fontWeight: "900",
+    fontSize: 14,
+  },
+  reportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#ffffff",
+    borderRadius: 10,
+    paddingVertical: 11,
+    borderWidth: 1.5,
+    borderColor: "#F5C2C0",
+    marginBottom: 20,
+  },
+  reportButtonText: {
+    color: "#D32F2F",
+    fontWeight: "800",
     fontSize: 14,
   },
 });

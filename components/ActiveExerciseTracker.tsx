@@ -1,7 +1,7 @@
 import { useWorkout } from "@/contexts/WorkoutContext";
 import { machineAPI } from "@/services/machineAPI";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -23,6 +23,7 @@ export default function ActiveExerciseTracker() {
   const { currentSession, exerciseStartTime, restStartTime, startRest, endRest, checkOut } =
     useWorkout();
   const router = useRouter();
+  const pathname = usePathname();
 
   const [exerciseElapsed, setExerciseElapsed] = useState(0);
   const [restElapsed, setRestElapsed] = useState(0);
@@ -49,6 +50,9 @@ export default function ActiveExerciseTracker() {
   }, [restStartTime]);
 
   if (!currentSession) return null;
+  // The overlay would cover the report form. Returning null (rather than unmounting)
+  // keeps the reps/weights already entered for when the member comes back.
+  if (pathname === "/report-issue") return null;
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -128,7 +132,20 @@ export default function ActiveExerciseTracker() {
     <View style={styles.container}>
       <View style={styles.header}>
         <MaterialCommunityIcons name="dumbbell" size={20} color="#00ff88" />
-        <Text style={styles.exerciseName}>{currentSession.exerciseName}</Text>
+        <Text style={styles.exerciseName} numberOfLines={1}>
+          {currentSession.exerciseName}
+        </Text>
+        {/* currentSession.machineId holds the machine's QR code */}
+        <TouchableOpacity
+          style={styles.reportButton}
+          onPress={() =>
+            router.push({ pathname: "/report-issue", params: { code: currentSession.machineId } })
+          }
+          accessibilityLabel="Report a problem with this machine"
+        >
+          <MaterialCommunityIcons name="alert-circle-outline" size={15} color="#ff9a8a" />
+          <Text style={styles.reportButtonText}>Report</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.timers}>
@@ -235,6 +252,23 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#00ff88",
+    flexShrink: 1,
+  },
+  reportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginLeft: "auto",
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ff6666",
+  },
+  reportButtonText: {
+    color: "#ff9a8a",
+    fontSize: 12,
+    fontWeight: "800",
   },
   timers: {
     flexDirection: "row",
