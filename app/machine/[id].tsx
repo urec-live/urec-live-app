@@ -3,6 +3,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import MachineIssueBanner from "@/components/MachineIssueBanner";
+import { isOutOfOrder, OUT_OF_ORDER_COLOR, OUT_OF_ORDER_ICON } from "@/constants/machineStatus";
 import { issueAPI, MachineIssueStatus } from "@/services/issueAPI";
 import { machineAPI, Machine, Exercise } from "@/services/machineAPI";
 
@@ -118,9 +119,18 @@ export default function MachineDetails() {
 
       {issue && <MachineIssueBanner issue={issue} />}
 
-      <TouchableOpacity style={styles.scanButton} onPress={() => router.push("/scan")}>
-        <Text style={styles.scanButtonText}>Scan QR to Check In</Text>
-      </TouchableOpacity>
+      {isOutOfOrder(status) ? (
+        <View style={styles.outOfOrderNotice}>
+          <MaterialCommunityIcons name={OUT_OF_ORDER_ICON} size={18} color={OUT_OF_ORDER_COLOR} />
+          <Text style={styles.outOfOrderText}>
+            Staff have taken this machine out of service, so check-in is unavailable.
+          </Text>
+        </View>
+      ) : (
+        <TouchableOpacity style={styles.scanButton} onPress={() => router.push("/scan")}>
+          <Text style={styles.scanButtonText}>Scan QR to Check In</Text>
+        </TouchableOpacity>
+      )}
 
       <TouchableOpacity
         style={styles.reportButton}
@@ -172,6 +182,8 @@ const getStatusColor = (status: string) => {
       return "#4CAF50";
     case "in use":
       return "#FF5722";
+    case "out of order":
+      return OUT_OF_ORDER_COLOR;
     default:
       return "#999";
   }
@@ -305,6 +317,22 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontWeight: "900",
     fontSize: 14,
+  },
+  outOfOrderNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#eeeeee",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+  },
+  outOfOrderText: {
+    flex: 1,
+    color: "#424242",
+    fontSize: 14,
+    fontWeight: "600",
   },
   reportButton: {
     flexDirection: "row",

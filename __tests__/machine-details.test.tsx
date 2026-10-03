@@ -71,6 +71,28 @@ describe("Machine details screen", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("replaces check-in with a notice when the machine is out of order", async () => {
+    mockGetMachineById.mockResolvedValue({ id: 12, name: "Leg Press", status: "Out of Order", exercise: "Leg Press" });
+    mockGetMachineIssueStatus.mockResolvedValue(NOTHING_OPEN);
+    render(<MachineDetails />);
+
+    expect(
+      await screen.findByText("Staff have taken this machine out of service, so check-in is unavailable.")
+    ).toBeTruthy();
+    expect(screen.getByText("OUT OF ORDER")).toBeTruthy();
+    expect(screen.queryByText("Scan QR to Check In")).toBeNull();
+    // Members can still add a report about it
+    expect(screen.getByText("Report a problem")).toBeTruthy();
+  });
+
+  it("offers check-in for machines that are in service", async () => {
+    mockGetMachineIssueStatus.mockResolvedValue(NOTHING_OPEN);
+    render(<MachineDetails />);
+
+    expect(await screen.findByText("Scan QR to Check In")).toBeTruthy();
+    expect(screen.queryByText("Staff have taken this machine out of service, so check-in is unavailable.")).toBeNull();
+  });
+
   it("opens the report form for this machine", async () => {
     mockGetMachineIssueStatus.mockResolvedValue(NOTHING_OPEN);
     render(<MachineDetails />);

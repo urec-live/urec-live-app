@@ -120,6 +120,11 @@ constants/
 - `components/MachineIssueBanner.tsx` warns every member when a machine has open reports (no reporter details)
 - Errors/success are shown inline, not via `Alert` (Alert buttons don't work on web)
 
+### Out of Order machines
+- Staff can set a machine's status to "Out of Order"; use `isOutOfOrder()` from `constants/machineStatus.ts` (case-insensitive) rather than comparing strings
+- It shows gray (`OUT_OF_ORDER_COLOR`, wrench icon) in the equipment list, workout machine list and floor map; the machine page replaces check-in with a notice
+- The backend refuses check-in with 409 (the scan screen explains it) but still accepts check-out, so an in-progress workout can end
+
 ---
 
 ## API & Network

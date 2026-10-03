@@ -22,6 +22,7 @@ import {
   View,
 } from "react-native";
 import websocketService from "@/services/websocketService";
+import { isOutOfOrder, OUT_OF_ORDER_COLOR, OUT_OF_ORDER_ICON } from "@/constants/machineStatus";
 
 export default function EquipmentAvailability() {
   const { exercise, muscle } = useLocalSearchParams();
@@ -226,11 +227,12 @@ export default function EquipmentAvailability() {
               const isMyEngagement = currentSession?.machineId === item.code;
               const userHoldingOther = currentSession && !isMyEngagement;
               const statusUpper = item.status.toUpperCase();
+              const outOfOrder = isOutOfOrder(item.status);
               const lockedByOther = !item.heldByMe && (statusUpper === "IN_USE" || statusUpper === "IN USE");
-              const isClickable = !lockedByOther && !userHoldingOther;
+              const isClickable = !lockedByOther && !userHoldingOther && !outOfOrder;
               const shouldBeVisuallyDisabled = !isClickable;
 
-              const statusLabel = statusUpper === "AVAILABLE" ? "Available" : "In Use";
+              const statusLabel = outOfOrder ? "Out of order" : statusUpper === "AVAILABLE" ? "Available" : "In Use";
               const isAvailableForMe = statusUpper === "AVAILABLE" && !currentSession;
               const isMyMachine = item.heldByMe && (statusUpper === "IN_USE" || statusUpper === "IN USE");
 
@@ -238,25 +240,29 @@ export default function EquipmentAvailability() {
                 <TouchableOpacity
                   style={[
                     styles.card,
-                    statusUpper === "AVAILABLE"
-                      ? styles.available
-                      : item.heldByMe
-                        ? styles.myMachine
-                        : styles.inUse,
+                    outOfOrder
+                      ? styles.outOfOrder
+                      : statusUpper === "AVAILABLE"
+                        ? styles.available
+                        : item.heldByMe
+                          ? styles.myMachine
+                          : styles.inUse,
                     shouldBeVisuallyDisabled && styles.disabled,
                   ]}
                   onPress={() => openModal(item)}
                   disabled={!isClickable}
                 >
                   <MaterialCommunityIcons
-                    name="weight-lifter"
+                    name={outOfOrder ? OUT_OF_ORDER_ICON : "weight-lifter"}
                     size={32}
                     color={
-                      item.status === "AVAILABLE"
-                        ? "#4CAF50"
-                        : item.heldByMe
+                      outOfOrder
+                        ? OUT_OF_ORDER_COLOR
+                        : item.status === "AVAILABLE"
                           ? "#4CAF50"
-                          : "#FF5722"
+                          : item.heldByMe
+                            ? "#4CAF50"
+                            : "#FF5722"
                     }
                   />
                   <View style={{ flex: 1 }}>
@@ -594,6 +600,7 @@ const styles = StyleSheet.create({
   },
   available: { borderColor: "#4CAF50", borderWidth: 2 },
   inUse: { borderColor: "#FF5722", borderWidth: 2 },
+  outOfOrder: { borderColor: OUT_OF_ORDER_COLOR, borderWidth: 2, backgroundColor: "#f5f5f5" },
   reserved: { borderColor: "#F44336", borderWidth: 2 },
   myMachine: { borderColor: "#4CAF50", borderWidth: 3, backgroundColor: "#E8F5E9" },
   disabled: { opacity: 0.5 },
