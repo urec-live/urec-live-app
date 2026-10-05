@@ -8,7 +8,9 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import ActiveExerciseTracker from '../components/ActiveExerciseTracker';
 import DailyWorkoutSummary from '../components/DailyWorkoutSummary';
+import HelpRequestBanner from '../components/HelpRequestBanner';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { HelpRequestProvider } from '../contexts/HelpRequestContext';
 import { PlanProvider } from '../contexts/PlanContext';
 import { WorkoutProvider } from '../contexts/WorkoutContext';
 
@@ -21,6 +23,7 @@ function RootLayoutNav() {
 
   return (
     <>
+      <HelpRequestBanner />
       <DailyWorkoutSummary />
       <Stack screenOptions={{ headerShown: false }}>
         {user ? (
@@ -46,14 +49,16 @@ export default function RootLayout() {
     <AuthProvider>
       <WorkoutProvider>
         <PlanProvider>
-          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-            <SafeAreaProvider>
-              <SafeAreaView style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-                <RootLayoutNav />
-                <StatusBar style="auto" />
-              </SafeAreaView>
-            </SafeAreaProvider>
-          </ThemeProvider>
+          <HelpRequestProvider>
+            <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+              <SafeAreaProvider>
+                <SafeAreaView style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+                  <RootLayoutNav />
+                  <StatusBar style="auto" />
+                </SafeAreaView>
+              </SafeAreaProvider>
+            </ThemeProvider>
+          </HelpRequestProvider>
         </PlanProvider>
       </WorkoutProvider>
     </AuthProvider>
