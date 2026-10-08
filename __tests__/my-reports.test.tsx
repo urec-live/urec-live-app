@@ -88,6 +88,20 @@ describe("My Equipment Reports screen", () => {
     expect(within(card).getByText("Fixed")).toHaveStyle({ color: "#aaa" });
   });
 
+  it("offers no way to withdraw, edit or delete a report once it's made", async () => {
+    mockGetMyReports.mockResolvedValue([
+      report({ id: 1, status: "REPORTED" }),
+      report({ id: 2, status: "IN_PROGRESS" }),
+    ]);
+    render(<MyReportsScreen />);
+
+    for (const id of [1, 2]) {
+      const card = await screen.findByTestId(`report-${id}`);
+      expect(within(card).queryAllByRole("button")).toHaveLength(0);
+    }
+    expect(screen.queryByText(/withdraw|delete|remove|edit|undo|cancel|mistake/i)).toBeNull();
+  });
+
   it("shows an empty state when the member hasn't reported anything", async () => {
     mockGetMyReports.mockResolvedValue([]);
     render(<MyReportsScreen />);

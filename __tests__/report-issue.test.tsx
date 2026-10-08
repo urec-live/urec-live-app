@@ -150,6 +150,19 @@ describe("Report a problem screen", () => {
     expect(mockRouter.replace).toHaveBeenCalledWith("/my-reports");
   });
 
+  it("offers no way to take the report back once it's sent", async () => {
+    mockReportIssue.mockResolvedValue({ id: 1 });
+    await renderScreen();
+
+    fillForm("Not working", "Weights don't move at all");
+    fireEvent.press(sendButton());
+
+    expect(await screen.findByText("Thanks, staff have been notified")).toBeTruthy();
+    expect(screen.getByText("View my reports")).toBeTruthy();
+    expect(screen.getByText("Done")).toBeTruthy();
+    expect(screen.queryByText(/undo|withdraw|cancel|delete|edit/i)).toBeNull();
+  });
+
   it("goes back when the member taps Done after reporting", async () => {
     mockReportIssue.mockResolvedValue({ id: 1 });
     await renderScreen();
