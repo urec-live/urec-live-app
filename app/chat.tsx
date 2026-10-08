@@ -3,6 +3,8 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Linking,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -13,7 +15,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ChatMessage, chatAPI } from "../services/chatAPI";
+import { ChatMessage, ChatSource, chatAPI } from "../services/chatAPI";
 import { useAuth } from "../contexts/AuthContext";
 
 interface DisplayMessage {
@@ -21,13 +23,15 @@ interface DisplayMessage {
   role: "user" | "assistant";
   content: string;
   pending?: boolean;
+  failed?: boolean;
+  sources?: ChatSource[];
 }
 
 const SUGGESTIONS = [
-  "What should I work on today?",
-  "How's my progress looking?",
-  "Give me a chest workout",
-  "Am I training enough legs?",
+  "What are the UREC hours?",
+  "Who can get a membership?",
+  "What group fitness classes are offered?",
+  "How do I sign up for personal training?",
 ];
 
 export default function ChatScreen() {
@@ -65,7 +69,7 @@ export default function ChatScreen() {
       // Build message history for API (exclude pending)
       const history: ChatMessage[] = [
         ...messages
-          .filter((m) => !m.pending)
+          .filter((m) => !m.pending && !m.failed)
           .map((m) => ({ role: m.role, content: m.content })),
         { role: "user" as const, content: userText },
       ];
@@ -75,11 +79,12 @@ export default function ChatScreen() {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === pendingMsg.id
-              ? { ...m, content: reply, pending: false }
+              ? { ...m, content: reply.reply, sources: reply.sources, pending: false }
               : m
           )
         );
       } catch {
+        setInput(userText);
         setMessages((prev) =>
           prev.map((m) =>
             m.id === pendingMsg.id
@@ -87,6 +92,7 @@ export default function ChatScreen() {
                   ...m,
                   content: "Sorry, something went wrong. Please try again.",
                   pending: false,
+                  failed: true,
                 }
               : m
           )
@@ -143,6 +149,26 @@ export default function ChatScreen() {
           >
             {item.content}
           </Text>
+          {!isUser && item.sources?.map((source) => (
+            <Pressable
+              key={source.id}
+              accessibilityRole="link"
+              accessibilityLabel={`Open source ${source.id}: ${source.title}`}
+              onPress={() => {
+                if (!source.url.startsWith("https://urec.charlotte.edu/")) return;
+                Linking.openURL(source.url).catch(() =>
+                  Alert.alert("Could not open source", "Please try again."));
+              }}
+              style={{ marginTop: 10 }}
+            >
+              <Text style={{ color: "#216b36", textDecorationLine: "underline" }}>
+                [{source.id}] {source.title}
+              </Text>
+              <Text style={{ color: "#666", fontSize: 11, marginTop: 3 }}>
+                Checked at {new Date(source.fetchedAt).toLocaleString()}
+              </Text>
+            </Pressable>
+          ))}
         </View>
       </View>
     );
@@ -167,7 +193,7 @@ export default function ChatScreen() {
           </View>
           <View>
             <Text style={styles.headerTitle}>UREC AI</Text>
-            <Text style={styles.headerSubtitle}>Fitness Assistant</Text>
+            <Text style={styles.headerSubtitle}>UREC Website Assistant</Text>
           </View>
         </View>
         <View style={{ width: 40 }} />
@@ -191,8 +217,8 @@ export default function ChatScreen() {
               Hey{user?.username ? ` ${user.username}` : ""}! 👋
             </Text>
             <Text style={styles.emptySubtitle}>
-              I'm your AI fitness assistant. I can see your workout history and
-              help with training advice, form tips, and programming.
+              Ask about UREC hours, memberships, classes, and facilities.
+              Answers use the official UNC Charlotte UREC website and include source links.
             </Text>
 
             <View style={styles.suggestionsGrid}>
@@ -234,7 +260,7 @@ export default function ChatScreen() {
             style={styles.textInput}
             value={input}
             onChangeText={setInput}
-            placeholder="Ask anything about your workouts..."
+            placeholder="Ask about UREC..."
             placeholderTextColor="#aaa"
             multiline
             maxLength={1000}
