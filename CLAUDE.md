@@ -1,3 +1,7 @@
+## Shared team workflow
+
+Read `TEAM_WORKFLOW.md` before making changes. It defines the shared setup, task ownership, verification, and handoff rules for Codex and Claude Code. Verify architecture notes against source and stay within the current task. Work priorities come from current task instructions.
+
 # CLAUDE.md — UREC Live Mobile App
 
 ## Project Overview
@@ -133,46 +137,6 @@ constants/
 - **State:** Use existing Context pattern. Don't add Redux/Zustand/MobX.
 - **API calls:** All HTTP calls go through the `services/` layer. Never call Axios directly from components.
 - **Navigation:** Use expo-router file-based routing. New screens = new files in `app/`.
-
----
-
-## What Still Needs Work
-
-### Priority 1: Error Handling & Loading States
-- Add error boundary component
-- Network error screens with retry buttons
-- Skeleton loaders for equipment list, workout screens, history
-- Toast notifications for check-in/out success/failure
-- Handle WebSocket disconnection gracefully with a user-visible indicator
-
-### Priority 2: App Onboarding Flow
-- First-launch tutorial screens (3–4 slides): equipment status, QR scanning, workout logging
-- Show once; persist `has_onboarded` flag in AsyncStorage
-- Use `react-native-reanimated` for polished animations
-
-### Priority 3: Environment Configuration
-- Move hardcoded IPs to `.env.development` / `.env.production`
-- Use `expo-constants` or `react-native-dotenv` for access
-
-### Priority 4: Pre-Launch Polish
-- Custom app icon and splash screen (replace Expo defaults)
-- Pull-to-refresh on equipment list
-- Haptic feedback on QR scan success
-- Empty states for history (first-time user sees helpful message, not blank screen)
-
----
-
-## What NOT to Build (Phase 2+)
-
-- Smartwatch / HealthKit / Google Fit sync
-- Diet / nutrition screens
-- AI chatbot interface
-- Social features (leaderboards, workout buddies)
-- Push notifications
-- Equipment reservation system
-- Interactive gym floor map
-
-Focus only on polish and the remaining items listed above.
 
 ---
 
