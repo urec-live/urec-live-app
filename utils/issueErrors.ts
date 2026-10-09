@@ -35,3 +35,20 @@ export function toReportSubmitError(error: unknown): ReportSubmitError {
       };
   }
 }
+
+/** Maps a failed POST /equipment-issues/{id}/withdraw to a message for the report card. */
+export function toWithdrawErrorMessage(error: unknown): string {
+  const status = isAxiosError(error) ? error.response?.status : undefined;
+  switch (status) {
+    case 401:
+      return "Please sign in again to withdraw this report.";
+    case 404:
+      return "This report couldn't be found.";
+    case 409:
+      return "This report is already closed.";
+    default:
+      return isAxiosError(error) && !error.response
+        ? "Can't reach the server. Check your connection and try again."
+        : "Couldn't withdraw your report. Please try again.";
+  }
+}

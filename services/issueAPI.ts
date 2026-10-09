@@ -15,6 +15,7 @@ export interface IssueReport {
   reportedAt: string;        // ISO instant string
   updatedAt: string;         // ISO instant string
   resolvedAt: string | null; // ISO instant string
+  withdrawnAt: string | null; // ISO instant string; set when the member took it back (status is then RESOLVED)
 }
 
 export interface CreateIssueReportRequest {
@@ -39,6 +40,12 @@ export const issueAPI = {
 
   getMyReports: async (): Promise<IssueReport[]> => {
     const response = await api.get('/equipment-issues/me');
+    return response.data;
+  },
+
+  /** Takes back the member's own open report, filed by mistake. Resolves to the closed report. */
+  withdrawReport: async (reportId: number): Promise<IssueReport> => {
+    const response = await api.post(`/equipment-issues/${reportId}/withdraw`);
     return response.data;
   },
 

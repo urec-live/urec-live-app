@@ -42,6 +42,14 @@ describe("issueAPI", () => {
     expect(mockGet).toHaveBeenCalledWith("/equipment-issues/me");
   });
 
+  it("withdraws one of the member's own reports", async () => {
+    const closed = { id: 7, status: "RESOLVED", withdrawnAt: "2026-10-08T12:00:00Z" };
+    mockPost.mockResolvedValue({ data: closed });
+
+    await expect(issueAPI.withdrawReport(7)).resolves.toBe(closed);
+    expect(mockPost).toHaveBeenCalledWith("/equipment-issues/7/withdraw");
+  });
+
   it("loads a machine's open-issue summary", async () => {
     const summary = { equipmentId: 12, openReportCount: 0, worstSeverity: null, status: null };
     mockGet.mockResolvedValue({ data: summary });

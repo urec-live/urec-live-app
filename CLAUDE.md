@@ -117,6 +117,7 @@ constants/
 - Entry points: machine page, scan result, and the workout tracker header (the tracker hides itself on the form without unmounting, so entered sets survive)
 - `WorkoutSession.machineId` holds the machine's QR **code**, so the tracker/scanner open the form with `?code=`; the machine page uses `?id=`
 - Profile → My Equipment Reports shows each report's status (Submitted → Seen by staff → Repair on the way → Fixed)
+- Members can withdraw their own open report from My Reports ("Reported by mistake? Withdraw", confirmed on the card): `issueAPI.withdrawReport` → `POST /equipment-issues/{id}/withdraw`. A withdrawn report is RESOLVED with `withdrawnAt` set and shows as **Withdrawn**
 - `components/MachineIssueBanner.tsx` warns every member when a machine has open reports (no reporter details)
 - Errors/success are shown inline, not via `Alert` (Alert buttons don't work on web)
 

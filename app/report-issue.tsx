@@ -99,7 +99,7 @@ export default function ReportIssueScreen() {
         </View>
         <Text style={styles.successTitle}>Thanks, staff have been notified</Text>
         <Text style={styles.successText}>
-          {"We'll update the status in My Reports as the repair moves along."}
+          {"We'll update the status in My Reports as the repair moves along. Reported it by mistake? You can withdraw it there."}
         </Text>
         <Pressable style={styles.primaryButton} onPress={() => router.replace("/my-reports")}>
           <Text style={styles.primaryButtonText}>View my reports</Text>

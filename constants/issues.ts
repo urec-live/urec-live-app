@@ -54,6 +54,9 @@ export const STATUS_DISPLAY: Record<IssueStatus, { label: string; short: string;
   RESOLVED: { label: "Fixed", short: "Fixed", color: "#4CAF50" },
 };
 
+/** How a report the member withdrew (filed by mistake) reads to them. Its status is RESOLVED. */
+export const WITHDRAWN_DISPLAY = { label: "Withdrawn", color: "#757575" };
+
 /** Status line on the machine page banner, which every member can see. */
 export const BANNER_STATUS_TEXT: Record<IssueStatus, string> = {
   REPORTED: "Awaiting staff review",

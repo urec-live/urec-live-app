@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react-native";
+import { AxiosError, AxiosHeaders } from "axios";
 import React from "react";
 import { RefreshControl } from "react-native";
 
@@ -17,8 +18,12 @@ jest.mock("expo-router", () => {
 });
 
 const mockGetMyReports = jest.fn();
+const mockWithdrawReport = jest.fn();
 jest.mock("@/services/issueAPI", () => ({
-  issueAPI: { getMyReports: (...args: unknown[]) => mockGetMyReports(...args) },
+  issueAPI: {
+    getMyReports: (...args: unknown[]) => mockGetMyReports(...args),
+    withdrawReport: (...args: unknown[]) => mockWithdrawReport(...args),
+  },
 }));
 
 jest.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: () => null }));
@@ -38,9 +43,23 @@ function report(overrides: Partial<IssueReport>): IssueReport {
     reportedAt: NOW,
     updatedAt: NOW,
     resolvedAt: null,
+    withdrawnAt: null,
     ...overrides,
   };
 }
+
+function httpError(status: number): AxiosError {
+  return new AxiosError("Request failed", "ERR_BAD_REQUEST", undefined, undefined, {
+    status,
+    statusText: "",
+    headers: {},
+    config: { headers: new AxiosHeaders() },
+    data: "",
+  });
+}
+
+const withdrawLink = (card: ReturnType<typeof screen.getByTestId>) =>
+  within(card).queryByRole("button", { name: "Reported by mistake? Withdraw" });
 
 describe("My Equipment Reports screen", () => {
   beforeEach(() => jest.clearAllMocks());
@@ -88,18 +107,107 @@ describe("My Equipment Reports screen", () => {
     expect(within(card).getByText("Fixed")).toHaveStyle({ color: "#aaa" });
   });
 
-  it("offers no way to withdraw, edit or delete a report once it's made", async () => {
+  // ── Withdrawing a report filed by mistake ─────────────────────────────────
+
+  it("lets the member withdraw an open report they filed by mistake", async () => {
+    const withdrawnAt = new Date().toISOString();
+    mockGetMyReports.mockResolvedValue([report({ id: 1, status: "ACKNOWLEDGED" })]);
+    mockWithdrawReport.mockResolvedValue(
+      report({ id: 1, status: "RESOLVED", resolvedAt: withdrawnAt, withdrawnAt })
+    );
+    render(<MyReportsScreen />);
+    const card = await screen.findByTestId("report-1");
+
+    fireEvent.press(withdrawLink(card)!);
+    expect(within(card).getByText("Withdraw this report?")).toBeTruthy();
+    expect(within(card).getByText("Staff will see that you reported it by mistake. You can't undo this.")).toBeTruthy();
+    expect(mockWithdrawReport).not.toHaveBeenCalled(); // nothing is sent until they confirm
+
+    await act(async () => {
+      fireEvent.press(within(card).getByRole("button", { name: "Withdraw report" }));
+    });
+
+    expect(mockWithdrawReport).toHaveBeenCalledWith(1);
+    const updated = screen.getByTestId("report-1");
+    expect(within(updated).getByText("Withdrawn")).toBeTruthy();
+    expect(within(updated).getByText(/You withdrew this report on/)).toBeTruthy();
+    expect(within(updated).queryByText("Withdraw this report?")).toBeNull();
+    expect(withdrawLink(updated)).toBeNull();
+  });
+
+  it("leaves the report alone when the member chooses to keep it", async () => {
+    mockGetMyReports.mockResolvedValue([report({ id: 1, status: "REPORTED" })]);
+    render(<MyReportsScreen />);
+    const card = await screen.findByTestId("report-1");
+
+    fireEvent.press(withdrawLink(card)!);
+    fireEvent.press(within(card).getByRole("button", { name: "Keep report" }));
+
+    expect(mockWithdrawReport).not.toHaveBeenCalled();
+    expect(within(card).queryByText("Withdraw this report?")).toBeNull();
+    expect(within(card).getAllByText("Submitted").length).toBeGreaterThan(0);
+    expect(withdrawLink(card)).toBeTruthy();
+  });
+
+  it("only offers to withdraw reports that are still open", async () => {
+    const closedAt = new Date().toISOString();
     mockGetMyReports.mockResolvedValue([
       report({ id: 1, status: "REPORTED" }),
       report({ id: 2, status: "IN_PROGRESS" }),
+      report({ id: 3, status: "RESOLVED", resolvedAt: closedAt }),
+      report({ id: 4, status: "RESOLVED", resolvedAt: closedAt, withdrawnAt: closedAt }),
     ]);
     render(<MyReportsScreen />);
 
-    for (const id of [1, 2]) {
-      const card = await screen.findByTestId(`report-${id}`);
-      expect(within(card).queryAllByRole("button")).toHaveLength(0);
-    }
-    expect(screen.queryByText(/withdraw|delete|remove|edit|undo|cancel|mistake/i)).toBeNull();
+    expect(withdrawLink(await screen.findByTestId("report-1"))).toBeTruthy();
+    expect(withdrawLink(screen.getByTestId("report-2"))).toBeTruthy();
+    // Fixed by staff
+    const fixed = screen.getByTestId("report-3");
+    expect(withdrawLink(fixed)).toBeNull();
+    expect(within(fixed).getAllByText("Fixed").length).toBeGreaterThan(0);
+    // Already withdrawn: labelled as such, without the repair progress strip
+    const withdrawn = screen.getByTestId("report-4");
+    expect(withdrawLink(withdrawn)).toBeNull();
+    expect(within(withdrawn).getByText("Withdrawn")).toBeTruthy();
+    expect(within(withdrawn).queryByText("Fixed")).toBeNull();
+    expect(within(withdrawn).queryByText("Repairing")).toBeNull();
+  });
+
+  it("says why withdrawing failed and keeps the report open so the member can retry", async () => {
+    mockGetMyReports.mockResolvedValue([report({ id: 1, status: "REPORTED" })]);
+    mockWithdrawReport.mockRejectedValue(new AxiosError("Network Error", "ERR_NETWORK"));
+    render(<MyReportsScreen />);
+    const card = await screen.findByTestId("report-1");
+
+    fireEvent.press(withdrawLink(card)!);
+    await act(async () => {
+      fireEvent.press(within(card).getByRole("button", { name: "Withdraw report" }));
+    });
+
+    expect(within(card).getByText("Can't reach the server. Check your connection and try again.")).toBeTruthy();
+    expect(within(card).getAllByText("Submitted").length).toBeGreaterThan(0);
+    expect(within(card).getByRole("button", { name: "Withdraw report" })).toBeEnabled();
+    expect(mockGetMyReports).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the latest status when the report was closed in the meantime", async () => {
+    mockGetMyReports
+      .mockResolvedValueOnce([report({ id: 1, status: "IN_PROGRESS" })])
+      .mockResolvedValueOnce([report({ id: 1, status: "RESOLVED", resolvedAt: new Date().toISOString() })]);
+    mockWithdrawReport.mockRejectedValue(httpError(409));
+    render(<MyReportsScreen />);
+    const card = await screen.findByTestId("report-1");
+
+    fireEvent.press(withdrawLink(card)!);
+    await act(async () => {
+      fireEvent.press(within(card).getByRole("button", { name: "Withdraw report" }));
+    });
+
+    expect(mockGetMyReports).toHaveBeenCalledTimes(2);
+    const updated = screen.getByTestId("report-1");
+    expect(within(updated).getByText("This report is already closed.")).toBeTruthy();
+    expect(within(updated).getAllByText("Fixed").length).toBeGreaterThan(0);
+    expect(withdrawLink(updated)).toBeNull();
   });
 
   it("shows an empty state when the member hasn't reported anything", async () => {
