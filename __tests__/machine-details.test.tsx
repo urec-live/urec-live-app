@@ -29,6 +29,11 @@ jest.mock("@/services/issueAPI", () => ({
   issueAPI: { getMachineIssueStatus: (...args: unknown[]) => mockGetMachineIssueStatus(...args) },
 }));
 
+// The machine page also shows the Call staff card, which reads the open help request
+jest.mock("@/contexts/HelpRequestContext", () => ({
+  useHelpRequest: () => ({ activeRequest: null, callStaff: jest.fn() }),
+}));
+
 jest.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: () => null }));
 
 const NOTHING_OPEN = { equipmentId: 12, openReportCount: 0, worstSeverity: null, status: null };

@@ -25,6 +25,11 @@ jest.mock("@/contexts/WorkoutContext", () => ({
 }));
 
 jest.mock("@/services/machineAPI", () => ({ machineAPI: { checkOut: jest.fn() } }));
+// The tracker header also has the Call staff pill, which reads the open help request
+jest.mock("@/contexts/HelpRequestContext", () => ({
+  useHelpRequest: () => ({ activeRequest: null, callStaff: jest.fn() }),
+}));
+
 jest.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: () => null }));
 
 describe("ActiveExerciseTracker", () => {

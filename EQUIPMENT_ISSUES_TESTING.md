@@ -21,7 +21,7 @@ npm install   # once, to pick up the new dev dependencies
 npm test
 ```
 
-You should see `Tests: 78 passed`. The suite uses Jest with `jest-expo` and React Native Testing Library, which are dev dependencies only, configured in `package.json` under `"jest"`. Test files live in `__tests__/`, outside `app/`, so Expo Router doesn't treat them as screens. The backend and navigation are mocked, so no server is needed.
+You should see `Tests: 206 passed` for the whole app suite; the equipment-issue files below account for 78 of them, and the rest cover help requests. The suite uses Jest with `jest-expo` and React Native Testing Library, which are dev dependencies only, configured in `package.json` under `"jest"`. Test files live in `__tests__/`, outside `app/`, so Expo Router doesn't treat them as screens. The backend and navigation are mocked, so no server is needed.
 
 | File | What it covers |
 |---|---|
