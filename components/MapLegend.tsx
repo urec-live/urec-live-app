@@ -1,10 +1,13 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import { OUT_OF_ORDER_COLOR } from "@/constants/machineStatus";
+
 const LEGEND_ITEMS = [
   { color: "#4CAF50", label: "Available" },
   { color: "#FF5722", label: "In Use" },
   { color: "#FF9800", label: "Reserved" },
+  { color: OUT_OF_ORDER_COLOR, label: "Out of Order" },
 ];
 
 export default function MapLegend() {

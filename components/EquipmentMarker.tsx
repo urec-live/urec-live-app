@@ -1,6 +1,8 @@
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+import { OUT_OF_ORDER_COLOR, OUT_OF_ORDER_STATUS } from "@/constants/machineStatus";
+
 interface EquipmentMarkerProps {
   x: number;
   y: number;
@@ -16,7 +18,12 @@ const STATUS_COLORS: Record<string, string> = {
   available: "#4CAF50",
   "in use": "#FF5722",
   reserved: "#FF9800",
+  [OUT_OF_ORDER_STATUS.toLowerCase()]: OUT_OF_ORDER_COLOR,
 };
+
+export function markerColor(status: string): string {
+  return STATUS_COLORS[status.trim().toLowerCase()] || "#9E9E9E";
+}
 
 export default function EquipmentMarker({
   x,
@@ -28,7 +35,7 @@ export default function EquipmentMarker({
   highlighted = false,
   onPress,
 }: EquipmentMarkerProps) {
-  const color = STATUS_COLORS[status.toLowerCase()] || "#9E9E9E";
+  const color = markerColor(status);
   const markerScale = highlighted ? 1.4 : 1;
 
   return (

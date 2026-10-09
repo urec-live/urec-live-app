@@ -25,7 +25,7 @@ npm install   # once, to pick up the Jest dev dependencies
 npm test
 ```
 
-You should see `Tests: 128 passed` across 11 files. The backend and navigation are mocked, so no server is needed.
+You should see `Tests: 206 passed` across 22 files for the whole app suite; the help request files account for 128 of them, across 11 files, and the rest cover equipment issues. The backend and navigation are mocked, so no server is needed.
 
 | File | What it covers |
 |---|---|

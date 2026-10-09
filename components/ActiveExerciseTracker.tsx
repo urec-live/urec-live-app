@@ -56,8 +56,9 @@ export default function ActiveExerciseTracker() {
   }, [restStartTime]);
 
   if (!currentSession) return null;
-  // Stays mounted (so entered sets survive) but out of the way on the help request and demo screens
-  if (pathname === "/help-request" || pathname === "/demo-player") return null;
+  // Stays mounted (so entered sets survive) but out of the way on the screens it would cover:
+  // the report form, the help request and the demo player
+  if (pathname === "/report-issue" || pathname === "/help-request" || pathname === "/demo-player") return null;
 
   const handleHelp = async () => {
     if (activeRequest) {
@@ -157,7 +158,9 @@ export default function ActiveExerciseTracker() {
     <View style={styles.container}>
       <View style={styles.header}>
         <MaterialCommunityIcons name="dumbbell" size={20} color="#00ff88" />
-        <Text style={styles.exerciseName}>{currentSession.exerciseName}</Text>
+        <Text style={styles.exerciseName} numberOfLines={1}>
+          {currentSession.exerciseName}
+        </Text>
         <TouchableOpacity
           style={styles.helpPill}
           onPress={handleHelp}
@@ -169,6 +172,17 @@ export default function ActiveExerciseTracker() {
           <Text style={styles.helpPillText}>
             {activeRequest ? `Help: ${HELP_STATUS_DISPLAY[activeRequest.status].label}` : "Call staff"}
           </Text>
+        </TouchableOpacity>
+        {/* currentSession.machineId holds the machine's QR code */}
+        <TouchableOpacity
+          style={styles.reportButton}
+          onPress={() =>
+            router.push({ pathname: "/report-issue", params: { code: currentSession.machineId } })
+          }
+          accessibilityLabel="Report a problem with this machine"
+        >
+          <MaterialCommunityIcons name="alert-circle-outline" size={15} color="#ff9a8a" />
+          <Text style={styles.reportButtonText}>Report</Text>
         </TouchableOpacity>
       </View>
       {helpError && <Text style={styles.helpError}>{helpError}</Text>}
@@ -278,6 +292,23 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#00ff88",
+    flexShrink: 1,
+  },
+  reportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginLeft: "auto",
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ff6666",
+  },
+  reportButtonText: {
+    color: "#ff9a8a",
+    fontSize: 12,
+    fontWeight: "800",
   },
   helpPill: {
     flexDirection: "row",

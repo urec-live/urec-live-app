@@ -45,10 +45,12 @@ app/
 │       └── equipment/
 │           └── [exercise].tsx # Equipment for specific exercise
 ├── machine/
-│   └── [id].tsx              # Machine detail screen (+ Call staff card)
+│   └── [id].tsx              # Machine detail screen (+ open-issue banner, Call staff card, "Report a problem")
 ├── help-request.tsx          # The member's help request: status stepper, demo links, Received help / Cancel
 ├── demo-player.tsx           # Plays an exercise's demo video/GIF (/demo-player?title=…&video=…&gif=…&show=…)
-├── scan.tsx                  # QR code scanner → check in/out
+├── report-issue.tsx          # Report a broken machine (?id= or ?code=)
+├── my-reports.tsx            # Member's equipment reports + repair status (from Profile)
+├── scan.tsx                  # QR code scanner → check in/out (+ "Report a Problem")
 ├── summary.tsx               # Workout summary screen
 └── modal.tsx                 # Modal screen
 
@@ -124,6 +126,20 @@ constants/
 ### Profile
 - User info display, logout functionality
 
+### Equipment Issue Reporting
+- Members report a machine as "Not working" or "Damaged / hard to use" with a required 10–1000 character description (`app/report-issue.tsx`, `services/issueAPI.ts`)
+- Entry points: machine page, scan result, and the workout tracker header (the tracker hides itself on the form without unmounting, so entered sets survive)
+- `WorkoutSession.machineId` holds the machine's QR **code**, so the tracker/scanner open the form with `?code=`; the machine page uses `?id=`
+- Profile → My Equipment Reports shows each report's status (Submitted → Seen by staff → Repair on the way → Fixed)
+- Members can withdraw their own open report from My Reports ("Reported by mistake? Withdraw", confirmed on the card): `issueAPI.withdrawReport` → `POST /equipment-issues/{id}/withdraw`. A withdrawn report is RESOLVED with `withdrawnAt` set and shows as **Withdrawn**
+- `components/MachineIssueBanner.tsx` warns every member when a machine has open reports (no reporter details)
+- Errors/success are shown inline, not via `Alert` (Alert buttons don't work on web)
+
+### Out of Order machines
+- Staff can set a machine's status to "Out of Order"; use `isOutOfOrder()` from `constants/machineStatus.ts` (case-insensitive) rather than comparing strings
+- It shows gray (`OUT_OF_ORDER_COLOR`, wrench icon) in the equipment list, workout machine list and floor map; the machine page replaces check-in with a notice
+- The backend refuses check-in with 409 (the scan screen explains it) but still accepts check-out, so an in-progress workout can end
+
 ### Call Staff (help requests)
 - **Call staff** on the machine page and in the workout tracker (by QR code) → `POST /api/help-requests`; one open request per member
 - `app/help-request.tsx`: Request received → On the way / Too busy → Helped; **I received help** behind an "Are you sure?" confirm; **Cancel request**
@@ -195,6 +211,13 @@ constants/
 Focus only on polish and the remaining items listed above.
 
 ---
+
+## Testing
+
+- `npm test` — Jest with `jest-expo` + React Native Testing Library (dev dependencies only; config under `"jest"` in `package.json`)
+- Tests live in `__tests__/` — never inside `app/`, or Expo Router treats them as routes
+- Mock `expo-router`, the `services/` modules and `@expo/vector-icons` per test file; see `__tests__/report-issue.test.tsx` for the pattern
+- Typed routes: after adding a screen, run `npx expo start` once to regenerate `.expo/types/router.d.ts` before `npx tsc --noEmit`
 
 ## Development Setup
 
