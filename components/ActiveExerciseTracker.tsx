@@ -1,8 +1,11 @@
+import { HELP_STATUS_DISPLAY } from "@/constants/helpRequests";
+import { useHelpRequest } from "@/contexts/HelpRequestContext";
 import { useWorkout } from "@/contexts/WorkoutContext";
 import { machineAPI } from "@/services/machineAPI";
 import { WatchService } from "@/services/watchService";
+import { toHelpRequestError } from "@/utils/helpRequestErrors";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   Alert,
@@ -24,6 +27,10 @@ export default function ActiveExerciseTracker() {
   const { currentSession, exerciseStartTime, restStartTime, startRest, endRest, checkOut } =
     useWorkout();
   const router = useRouter();
+  const pathname = usePathname();
+  const { activeRequest, callStaff } = useHelpRequest();
+  const [callingStaff, setCallingStaff] = useState(false);
+  const [helpError, setHelpError] = useState<string | null>(null);
 
   // --- Restored State ---
   const [exerciseElapsed, setExerciseElapsed] = useState(0);
@@ -138,13 +145,48 @@ export default function ActiveExerciseTracker() {
   };
 
   if (!currentSession) return null;
+  // Stays mounted (so entered sets survive) but out of the way on the help request and demo screens
+  if (pathname === "/help-request" || pathname === "/demo-player") return null;
+
+  const handleHelp = async () => {
+    if (activeRequest) {
+      router.push("/help-request");
+      return;
+    }
+    setCallingStaff(true);
+    setHelpError(null);
+    try {
+      // machineId holds the QR code; the server ignores an exercise name that is really the code
+      await callStaff({ equipmentCode: currentSession.machineId, exerciseName: currentSession.exerciseName });
+      router.push("/help-request");
+    } catch (e) {
+      const { message, alreadyOpen } = toHelpRequestError(e, "call");
+      if (alreadyOpen) router.push("/help-request");
+      else setHelpError(message);
+    } finally {
+      setCallingStaff(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <MaterialCommunityIcons name="dumbbell" size={20} color="#00ff88" />
         <Text style={styles.exerciseName}>{currentSession.exerciseName}</Text>
+        <TouchableOpacity
+          style={styles.helpPill}
+          onPress={handleHelp}
+          disabled={callingStaff}
+          accessibilityRole="button"
+          accessibilityLabel={activeRequest ? "View your help request" : "Call staff for help"}
+        >
+          <MaterialCommunityIcons name="face-agent" size={14} color="#001a14" />
+          <Text style={styles.helpPillText}>
+            {activeRequest ? `Help: ${HELP_STATUS_DISPLAY[activeRequest.status].label}` : "Call staff"}
+          </Text>
+        </TouchableOpacity>
       </View>
+      {helpError && <Text style={styles.helpError}>{helpError}</Text>}
 
       <View style={styles.timers}>
         <View style={styles.timerSection}>
@@ -231,7 +273,10 @@ const styles = StyleSheet.create({
     padding: 15, borderTopWidth: 3, borderColor: "#00ff88", elevation: 8,
   },
   header: { flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 8 },
-  exerciseName: { fontSize: 18, fontWeight: "700", color: "#00ff88" },
+  exerciseName: { flex: 1, fontSize: 18, fontWeight: "700", color: "#00ff88" },
+  helpPill: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#00ff88", borderRadius: 14, paddingVertical: 4, paddingHorizontal: 10 },
+  helpPillText: { color: "#001a14", fontWeight: "800", fontSize: 12 },
+  helpError: { color: "#ff8a80", fontSize: 12, marginTop: -6, marginBottom: 8 },
   timers: { flexDirection: "row", justifyContent: "space-around", marginBottom: 12 },
   timerSection: { alignItems: "center", flex: 1 },
   timerLabel: { fontSize: 12, color: "#ccc" },

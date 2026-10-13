@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import CallStaffCard from "@/components/CallStaffCard";
 import { machineAPI, Machine, Exercise } from "@/services/machineAPI";
 
 export default function MachineDetails() {
@@ -84,7 +85,7 @@ export default function MachineDetails() {
   const statusLower = status.toLowerCase();
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
       <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
         <Text style={styles.backText}>← Back</Text>
       </TouchableOpacity>
@@ -93,6 +94,12 @@ export default function MachineDetails() {
       <Text style={[styles.status, { color: getStatusColor(status) }]}>
         {status.toUpperCase()}
       </Text>
+
+      {/* Near the top: the workout tracker overlay covers the bottom of the screen */}
+      <CallStaffCard
+        equipmentId={machine.id}
+        exerciseName={exercises.length === 1 ? exercises[0].name : undefined}
+      />
 
       <TouchableOpacity style={styles.scanButton} onPress={() => router.push("/scan")}>
         <Text style={styles.scanButtonText}>Scan QR to Check In</Text>
@@ -127,7 +134,7 @@ export default function MachineDetails() {
           </TouchableOpacity>
         )}
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -147,6 +154,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
+    padding: 25,
+  },
+  scroll: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+  },
+  scrollContent: {
+    flexGrow: 1,
     padding: 25,
   },
   backButton: {
