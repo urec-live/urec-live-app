@@ -45,25 +45,39 @@ app/
 │       └── equipment/
 │           └── [exercise].tsx # Equipment for specific exercise
 ├── machine/
-│   └── [id].tsx              # Machine detail screen
+│   └── [id].tsx              # Machine detail screen (+ Call staff card)
+├── help-request.tsx          # The member's help request: status stepper, demo links, Received help / Cancel
+├── demo-player.tsx           # Plays an exercise's demo video/GIF (/demo-player?title=…&video=…&gif=…&show=…)
 ├── scan.tsx                  # QR code scanner → check in/out
 ├── summary.tsx               # Workout summary screen
 └── modal.tsx                 # Modal screen
 
 components/                   # Reusable UI components
-├── ActiveExerciseTracker.tsx
+├── ActiveExerciseTracker.tsx  # (+ Call staff pill; hidden on /help-request and /demo-player)
 ├── DailyWorkoutSummary.tsx
+├── CallStaffCard.tsx          # Machine page "Call staff" card
+├── HelpRequestBanner.tsx      # Help request status bar above every screen
+├── DemoGif.tsx                # Inline GIF player (expo-image; Pause/Play on native)
+├── DemoVideo.tsx              # Native: hands the clip to the in-app browser's video player
+├── DemoVideo.web.tsx          # Web: inline <video> element
 └── (themed primitives, icons)
 
 contexts/
 ├── AuthContext.tsx            # User, JWT tokens, login/signup/logout
-└── WorkoutContext.tsx         # Active session, today's workouts, history, offline queue
+├── WorkoutContext.tsx         # Active session, today's workouts, history, offline queue
+└── HelpRequestContext.tsx     # The open help request: loads on sign-in, polls every 5 s while open
 
 services/
 ├── authAPI.ts                 # Axios client + JWT auto-refresh interceptor
 ├── machineAPI.ts              # 18 functions for equipment/exercise API calls
 ├── sessionAPI.ts              # postSession(), getMyHistory(), getMyStats()
+├── helpRequestAPI.ts          # /api/help-requests calls and types
 └── websocketService.ts        # Singleton STOMP client, auto-reconnect
+
+utils/
+├── confirm.ts                 # confirmAsync(): Alert on native, window.confirm on web
+├── demoPlayer.ts              # demo player route params (build + validate)
+└── helpRequestErrors.ts       # user-facing messages for help request API errors
 
 hooks/
 ├── use-color-scheme.ts
@@ -109,6 +123,12 @@ constants/
 
 ### Profile
 - User info display, logout functionality
+
+### Call Staff (help requests)
+- **Call staff** on the machine page and in the workout tracker (by QR code) → `POST /api/help-requests`; one open request per member
+- `app/help-request.tsx`: Request received → On the way / Too busy → Helped; **I received help** behind an "Are you sure?" confirm; **Cancel request**
+- `HelpRequestContext` polls the open request every 5 s while the app is in the foreground (no WebSocket) and vibrates on a status change; the banner shows the status on every screen
+- Demo media are placeholders for now (`videoPlaceholder` / `gifPlaceholder` flags from the backend). `app/demo-player.tsx` plays the GIF inline with expo-image. There's no native video module (adding `expo-video` needs a dev-build rebuild), so on native the video opens in the in-app browser's player (`DemoVideo.tsx`); the web build plays it inline (`DemoVideo.web.tsx`)
 
 ---
 
@@ -186,6 +206,14 @@ npx expo start
 # Scan QR with Expo Go app on phone
 # Or press 'i' for iOS simulator, 'a' for Android emulator
 ```
+
+## Testing
+
+- `npm test` runs Jest (`jest-expo` preset + React Native Testing Library). Tests live in `__tests__/`, outside `app/`, so Expo Router doesn't treat them as screens. Mock the backend, `expo-router` and native modules per test file.
+- Jest resolves the native files, so test a `.web.tsx` component by importing it directly (see `__tests__/DemoVideo.web.test.tsx`)
+- `npx tsc --noEmit` (one existing error in `app/settings/plan.tsx`) and `npx expo lint`
+- After adding a screen, regenerate typed routes so `router.push` type-checks: run `CI=1 npx expo start --offline --port 8099` until `.expo/types/router.d.ts` mentions the route, then stop it
+- Help request testing guide: `HELP_REQUESTS_TESTING.md`
 
 ## Jira Project
 - Project key: UREC
