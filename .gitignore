@@ -43,9 +43,17 @@ yarn-error.*
 
 app-example
 
-# generated native folders
-/ios
-/android
+# Android and iOS native source should be tracked; only ignore generated build outputs
+/android/.gradle/
+/android/build/
+/android/**/build/
+/android/local.properties
+/android/**/*.iml
+/ios/build/
+/ios/Pods/
+/ios/.xcode.env*
+/ios/*.xcworkspace/xcuserdata/
+/ios/*.xcodeproj/xcuserdata/
 
 # EAS Build
 eas-build-*
