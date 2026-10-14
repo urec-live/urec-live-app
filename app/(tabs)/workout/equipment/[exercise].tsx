@@ -1,11 +1,12 @@
-import { MachineDto, FloorPlanResponse, machineAPI } from "@/services/machineAPI";
-import { sessionAPI, SessionResponse } from "@/services/sessionAPI";
 import { useWorkout } from "@/contexts/WorkoutContext";
+import { FloorPlanResponse, machineAPI, MachineDto } from "@/services/machineAPI";
+import { sessionAPI, SessionResponse } from "@/services/sessionAPI";
+import { WatchService } from "@/services/watchService";
+import websocketService from "@/services/websocketService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import MapModal from "../../../../components/MapModal";
 import {
   ActivityIndicator,
   FlatList,
@@ -19,9 +20,9 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
-import websocketService from "@/services/websocketService";
+import MapModal from "../../../../components/MapModal";
 import { isOutOfOrder, OUT_OF_ORDER_COLOR, OUT_OF_ORDER_ICON } from "@/constants/machineStatus";
 
 export default function EquipmentAvailability() {
@@ -38,6 +39,7 @@ export default function EquipmentAvailability() {
   const [busyCode, setBusyCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isResting, setIsResting] = useState(false);
 
   // History modal state
   const [historyVisible, setHistoryVisible] = useState(false);
@@ -55,6 +57,9 @@ export default function EquipmentAvailability() {
   const [setsInput, setSetsInput] = useState("");
   const [repsInput, setRepsInput] = useState("");
   const [weightInput, setWeightInput] = useState("");
+  const [currentReps, setCurrentReps] = useState("");
+  const [currentWeight, setCurrentWeight] = useState("");
+  
 
   useEffect(() => {
     const load = async () => {
@@ -131,9 +136,21 @@ export default function EquipmentAvailability() {
   // Direct start — bypasses modal (testing convenience)
   const handleStartDirect = async (code: string) => {
     await handleCheckIn(code);
+    WatchService.syncWorkout(name, code, 'START');
+    setIsResting(false);
+    setCurrentReps("");
+    setCurrentWeight("");
   };
 
-  // Open workout details sheet before stopping
+  const toggleRest = () => {
+    if (!currentSession) return;
+    const newRestState = !isResting;
+    setIsResting(newRestState);
+    WatchService.syncWorkout(name, currentSession.machineId, newRestState ? 'PAUSE' : 'START');
+  };
+
+
+   // Open workout details sheet before stopping (Restored to original)
   const handleStopPress = (code: string) => {
     setPendingStopCode(code);
     setSetsInput("");
@@ -142,8 +159,10 @@ export default function EquipmentAvailability() {
     setWorkoutDetailsVisible(true);
   };
 
+  // Restored handleStopConfirm to use the original set logic
   const handleStopConfirm = async () => {
     if (!pendingStopCode) return;
+    WatchService.syncWorkout(name, pendingStopCode, 'END');
     const numSets = setsInput ? parseInt(setsInput, 10) : 0;
     const setDetails = numSets > 0
       ? Array.from({ length: numSets }, () => ({
@@ -151,7 +170,8 @@ export default function EquipmentAvailability() {
           weightLbs: weightInput ? parseFloat(weightInput) : undefined,
         }))
       : undefined;
-    setWorkoutDetailsVisible(false);
+    
+    // setWorkoutDetailsVisible(false);
     await handleCheckOut(pendingStopCode, setDetails ? { setDetails } : undefined);
     setPendingStopCode(null);
   };
@@ -377,8 +397,7 @@ export default function EquipmentAvailability() {
             </View>
           </View>
         </Modal>
-
-        {/* Workout Details Modal (shown before stopping) */}
+        {/* Workout Details Modal */}
         <Modal visible={workoutDetailsVisible} transparent animationType="slide">
           <KeyboardAvoidingView
             behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -440,10 +459,21 @@ export default function EquipmentAvailability() {
                 >
                   <Text style={styles.cancelText}>Skip & Stop</Text>
                 </Pressable>
+
+                <Pressable
+                  style={[styles.button, styles.cancelButton]}
+                  onPress={() => {
+                    setWorkoutDetailsVisible(false);
+                    setPendingStopCode(null);
+                  }}
+                >
+                  <Text style={styles.cancelText}>Cancel</Text>
+                </Pressable>
               </View>
             </View>
           </KeyboardAvoidingView>
         </Modal>
+
         {/* History Modal */}
         <Modal visible={historyVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
@@ -582,6 +612,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   scanButtonText: { color: "#ffffff", fontWeight: "900" },
+  setTable: { backgroundColor: "#f9f9f9", borderRadius: 8, padding: 10, marginBottom: 10 },
+  tableHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 5 },
+  tableHeaderText: { fontSize: 12, fontWeight: "bold", color: "#666", flex: 1, textAlign: "center" },
+  tableRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 5, borderTopWidth: 1, borderTopColor: "#e0e0e0" },
+  tableCell: { fontSize: 14, color: "#1a1a1a", flex: 1, textAlign: "center" },
+  lastSetText: { color: "#4CAF50", fontSize: 16, fontWeight: "700", textAlign: "center", marginBottom: 10 },
   card: {
     flexDirection: "row",
     alignItems: "center",

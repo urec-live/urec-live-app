@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { AxiosError, AxiosHeaders } from "axios";
 import React from "react";
 
@@ -29,6 +29,20 @@ jest.mock("@/contexts/HelpRequestContext", () => ({ useHelpRequest: () => mockCo
 
 jest.mock("@/services/machineAPI", () => ({ machineAPI: { checkOut: jest.fn() } }));
 jest.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: () => null }));
+
+// Sets logged on the watch arrive through the callback the tracker subscribes with
+let mockOnWatchSet: ((reps: number, weight: number) => void) | null = null;
+jest.mock("@/services/watchService", () => ({
+  WatchService: {
+    syncWorkout: jest.fn(),
+    subscribeToWatch: (onSetLogged: (reps: number, weight: number) => void) => {
+      mockOnWatchSet = onSetLogged;
+      return () => {
+        mockOnWatchSet = null;
+      };
+    },
+  },
+}));
 
 function httpError(status: number): AxiosError {
   return new AxiosError("Request failed", "ERR_BAD_REQUEST", undefined, undefined, {
@@ -103,5 +117,32 @@ describe("Workout tracker: call staff", () => {
     render(<ActiveExerciseTracker />);
 
     expect(screen.toJSON()).toBeNull();
+  });
+
+  it("keeps entered sets while hidden on the help screen", () => {
+    const { rerender } = render(<ActiveExerciseTracker />);
+    fireEvent.changeText(screen.getAllByPlaceholderText("—")[0], "10");
+
+    mockPathname = "/help-request";
+    rerender(<ActiveExerciseTracker />);
+    expect(screen.toJSON()).toBeNull();
+
+    mockPathname = "/workout";
+    rerender(<ActiveExerciseTracker />);
+    expect(screen.getByDisplayValue("10")).toBeTruthy();
+  });
+
+  it("still takes sets from the watch while hidden on the help screen", () => {
+    const { rerender } = render(<ActiveExerciseTracker />);
+    mockPathname = "/help-request";
+    rerender(<ActiveExerciseTracker />);
+
+    expect(mockOnWatchSet).not.toBeNull();
+    act(() => mockOnWatchSet!(12, 135));
+
+    mockPathname = "/workout";
+    rerender(<ActiveExerciseTracker />);
+    expect(screen.getByDisplayValue("12")).toBeTruthy();
+    expect(screen.getByDisplayValue("135")).toBeTruthy();
   });
 });

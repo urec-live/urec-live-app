@@ -25,7 +25,7 @@ npm install   # once, to pick up the Jest dev dependencies
 npm test
 ```
 
-You should see `Tests: 206 passed` across 22 files for the whole app suite; the help request files account for 128 of them, across 11 files, and the rest cover equipment issues. The backend and navigation are mocked, so no server is needed.
+You should see `Tests: 208 passed` across 22 files for the whole app suite; the help request files account for 130 of them, across 11 files, and the rest cover equipment issues. The backend and navigation are mocked, so no server is needed.
 
 | File | What it covers |
 |---|---|
@@ -36,7 +36,7 @@ You should see `Tests: 206 passed` across 22 files for the whole app suite; the 
 | `HelpRequestContext.test.tsx` (18) | Loads on sign-in (so it survives a restart) and not while signed out; checks every 5 s only while a request is open and the app is in the foreground; vibrates on a status change only; "staff finished" and "expired" notices; keeps checking after a dropped connection; a 409 on call loads the request that's already open; Received help, Cancel and their 409s; forgets everything on sign-out |
 | `machine-call-staff.test.tsx` (8) | The machine page's card: calls staff with the machine's only exercise (none if it has several), opens the request, handles 409 and other errors, shows the status at this machine, and points to a request open at another machine |
 | `HelpRequestBanner.test.tsx` (7) | The banner for each open status opens the request; hidden on the help screen; "staff finished" until dismissed; expired |
-| `tracker-help-pill.test.tsx` (6) | The tracker's pill calls staff by QR code with the exercise, shows the open request's status, handles 409 and other errors, and **hides on `/help-request` and `/demo-player`** |
+| `tracker-help-pill.test.tsx` (8) | The tracker's pill calls staff by QR code with the exercise, shows the open request's status, handles 409 and other errors, and **hides on `/help-request` and `/demo-player`**; while hidden it keeps the sets entered and still takes sets logged on the watch |
 | `helpRequestAPI.test.ts` (13), `helpRequestErrors.test.ts` (9), `confirm.test.ts` (7) | Endpoints and payloads; which statuses are open; error messages per status code and for network errors; the confirm prompt (`Alert` on native, `window.confirm` on web) |
 
 **Mutation-checked:** each of these temporary breaks makes at least one test fail:
@@ -53,11 +53,13 @@ You should see `Tests: 206 passed` across 22 files for the whole app suite; the 
 - the GIF link opening on the video
 - the placeholder note always shown
 - the tracker showing on the player
+- the tracker hiding before its watch-sync hook (hook order changes)
+- the tracker dropping the watch subscription while hidden
 
 Type check and lint:
 
 ```bash
-npx tsc --noEmit   # one existing error in app/settings/plan.tsx predates this branch
+npx tsc --noEmit   # two existing errors: the tracker passes a time to startRest(), which takes none
 npx expo lint      # the files this branch adds or changes are clean
 ```
 
@@ -69,7 +71,7 @@ After adding a screen, the typed routes in `.expo/types/router.d.ts` need regene
 2. Tap "*exercise*: how-to video". The demo player opens on **Video** with the placeholder note. Tap play: a 5-second sample clip plays in the in-app browser's player. Close it to come back.
 3. Tap the **GIF** tab. A spinner shows, then an animated "Coming soon" GIF. **Pause** freezes it and **Play** resumes it.
 4. With the network off, open the GIF: you get "Couldn't load the GIF…" and **Try again**, which works once the network is back.
-5. If you're checked in to a machine, the workout tracker is hidden on the help screen and the player. The help banner stays on the player.
+5. If you're checked in to a machine, the workout tracker is hidden on the help screen and the player, and the sets you entered are still there when you come back. The help banner stays on the player.
 6. Have staff click **On the way**, then **Too busy**. Each shows within about 5 seconds, with a vibration.
 7. Tap **I received help**. **Not yet** does nothing. **Yes, I got help** closes the request and thanks you.
 8. Call staff again and have staff click **Done helping**. The app says "Staff marked this as done", and the banner keeps saying so until dismissed.

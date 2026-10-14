@@ -9,6 +9,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -35,6 +36,7 @@ export default function PlanEditor() {
   const [expandedDay, setExpandedDay] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [planPublic, setPlanPublic] = useState(false);
 
   // Load muscle groups and existing plan
   useEffect(() => {
@@ -52,6 +54,7 @@ export default function PlanEditor() {
 
       if (activePlan) {
         setPlanName(activePlan.name);
+        setPlanPublic(activePlan.visibility === 'PUBLIC');
         const existing: WeekPlan = {};
         for (const day of activePlan.days) {
           existing[day.dayOfWeek] = {
@@ -130,7 +133,7 @@ export default function PlanEditor() {
   const handleSave = async () => {
     const days: DayPlanDto[] = Object.entries(weekPlan).map(([dow, config]) => ({
       dayOfWeek: parseInt(dow),
-      label: config.label || null,
+      label: config.label || undefined,
       items: config.items.map((item, idx) => ({
         muscleGroup: item.muscleGroup,
         targetCount: item.targetCount,
@@ -221,6 +224,30 @@ export default function PlanEditor() {
             placeholder="e.g., PPL Split, Bro Split"
             placeholderTextColor="#bbb"
           />
+          {activePlan && (
+            <View style={styles.visibilityRow}>
+              <View style={styles.visibilityLeft}>
+                <MaterialCommunityIcons name="earth" size={20} color="#4CAF50" />
+                <View>
+                  <Text style={styles.visibilityLabel}>Share Plan</Text>
+                  <Text style={styles.visibilityDesc}>Let others view and copy this plan</Text>
+                </View>
+              </View>
+              <Switch
+                value={planPublic}
+                onValueChange={async (value) => {
+                  setPlanPublic(value);
+                  try {
+                    await planAPI.updateVisibility(activePlan.id, value ? 'PUBLIC' : 'PRIVATE');
+                  } catch {
+                    setPlanPublic(!value);
+                  }
+                }}
+                trackColor={{ false: '#e0e0e0', true: '#a5d6a7' }}
+                thumbColor={planPublic ? '#4CAF50' : '#f4f3f4'}
+              />
+            </View>
+          )}
         </View>
 
         {/* Week Grid */}
@@ -380,6 +407,33 @@ const styles = StyleSheet.create({
   },
   nameSection: {
     marginBottom: 20,
+  },
+  visibilityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#f9f9f9",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    padding: 12,
+    marginTop: 10,
+  },
+  visibilityLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  visibilityLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1a1a1a",
+  },
+  visibilityDesc: {
+    fontSize: 12,
+    color: "#888",
+    marginTop: 1,
   },
   label: {
     fontSize: 14,
