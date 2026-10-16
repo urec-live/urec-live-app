@@ -63,8 +63,8 @@ components/                   # Reusable UI components
 └── (themed primitives, icons)
 
 contexts/
-├── AuthContext.tsx            # User, JWT tokens, login/signup/logout
-├── WorkoutContext.tsx         # Active session, today's workouts, history, offline queue
+├── AuthContext.tsx            # User, JWT tokens, login/signup/logout (loads saved data on start, wipes the member's on sign-out)
+├── WorkoutContext.tsx         # Active session, today's workouts, history, offline queue; an empty session isn't saved
 └── HelpRequestContext.tsx     # The open help request: loads on sign-in, polls every 5 s while open
 
 services/
@@ -72,14 +72,19 @@ services/
 ├── machineAPI.ts              # 18 functions for equipment/exercise API calls
 ├── sessionAPI.ts              # postSession(), getMyHistory(), getMyStats()
 ├── helpRequestAPI.ts          # /api/help-requests calls and types
+├── resourceCache.ts           # Saved copies of backend data (memory + AsyncStorage), patched by live updates
+├── cachedResources.ts         # The cache keys, how long each stays fresh, shared fetchers
 └── websocketService.ts        # Singleton STOMP client, auto-reconnect
 
 utils/
 ├── confirm.ts                 # confirmAsync(): Alert on native, window.confirm on web
 ├── demoPlayer.ts              # demo player route params (build + validate)
-└── helpRequestErrors.ts       # user-facing messages for help request API errors
+├── helpRequestErrors.ts       # user-facing messages for help request API errors
+└── workoutSession.ts          # Whether ending a session saves it (no sets = not saved; cardio after 1 min)
 
 hooks/
+├── useCachedResource.ts       # A screen's data: saved copy first, background refresh when stale
+├── useLiveMachineUpdates.ts   # Connects live updates at sign-in (used in app/_layout.tsx)
 ├── use-color-scheme.ts
 └── use-theme-color.ts
 
@@ -100,7 +105,7 @@ constants/
 
 ### Equipment Availability
 - Real-time equipment status (Available / In Use / Reserved)
-- WebSocket subscription to `/topic/machines` — instant updates
+- WebSocket subscription to `/topic/machines` — instant updates, connected once at sign-in for every screen; each update patches every saved machine list (`patchCachedMachine`)
 - QR code scanning via device camera
 - Scan → identify machine → show status → check in/out
 
@@ -119,7 +124,13 @@ constants/
 
 ### Workout History
 - History tab shows past sessions grouped by date
-- Fetched from backend; context serves as in-memory cache
+- Shows the saved copy, refreshes on focus once it's 30 s old or after a workout is saved
+
+### Saved data (how screens load)
+- Load backend data with `useCachedResource(key, fetcher, { staleTime, live })` from `hooks/useCachedResource.ts`, not `useEffect` + `useState`. It shows the saved copy at once (also after a restart), fetches only when stale, shares requests between screens, and redraws only when the data changed. `loading` is true only when nothing is saved yet, so that's the only time to show a spinner.
+- Keys, freshness and shared fetchers live in `services/cachedResources.ts`. A member's data goes under `cacheKeys.user(username, …)`: it's wiped on sign-out and marked stale when a session is saved.
+- Keys starting with `machines`, `machine:` or `floor-plans` are live: live updates patch them, and they count as fresh only while the socket has stayed connected since the fetch. Apply a check-in/out response with `patchCachedMachine` instead of refetching a list.
+- Tab screens stay mounted: call `revalidate()` from `useFocusEffect` to refresh when the tab is reopened.
 
 ### Profile
 - User info display, logout functionality
@@ -210,10 +221,11 @@ npx expo start
 ## Testing
 
 - `npm test` runs Jest (`jest-expo` preset + React Native Testing Library). Tests live in `__tests__/`, outside `app/`, so Expo Router doesn't treat them as screens. Mock the backend, `expo-router` and native modules per test file.
+- AsyncStorage throws under Jest without its mock: add `jest.mock("@react-native-async-storage/async-storage", () => jest.requireActual("@react-native-async-storage/async-storage/jest/async-storage-mock"))` to any test that loads `services/resourceCache.ts`, and `await clearCache()` in `beforeEach`, since saved data is module-level. (`package.json` stays byte-identical to equipment-issue-reports', so there's no global setup file.)
 - Jest resolves the native files, so test a `.web.tsx` component by importing it directly (see `__tests__/DemoVideo.web.test.tsx`)
-- `npx tsc --noEmit` (one existing error in `app/settings/plan.tsx`) and `npx expo lint`
+- `npx tsc --noEmit` (no errors) and `npx expo lint`
 - After adding a screen, regenerate typed routes so `router.push` type-checks: run `CI=1 npx expo start --offline --port 8099` until `.expo/types/router.d.ts` mentions the route, then stop it
-- Help request testing guide: `HELP_REQUESTS_TESTING.md`
+- Help request testing guide: `HELP_REQUESTS_TESTING.md`; saved data, live updates and empty sessions: `MINOR_FIXES_TESTING.md`
 
 ## Jira Project
 - Project key: UREC
