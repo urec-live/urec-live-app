@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { AxiosError, AxiosHeaders } from "axios";
 import React from "react";
 
 import MachineDetails from "@/app/machine/[id]";
 import CallStaffCard from "@/components/CallStaffCard";
 import type { HelpRequest } from "@/services/helpRequestAPI";
+import { clearCache, writeCached } from "@/services/resourceCache";
 
 const mockRouter = { back: jest.fn(), replace: jest.fn(), push: jest.fn() };
 jest.mock("expo-router", () => ({
@@ -28,6 +29,9 @@ jest.mock("@/services/machineAPI", () => ({
 }));
 
 jest.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: () => null }));
+jest.mock("@react-native-async-storage/async-storage", () =>
+  jest.requireActual("@react-native-async-storage/async-storage/jest/async-storage-mock"),
+);
 
 function helpRequest(overrides: Partial<HelpRequest> = {}): HelpRequest {
   return {
@@ -124,11 +128,49 @@ describe("Call staff card", () => {
 });
 
 describe("Machine page", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
+    // Saved machine data would otherwise carry over from the previous test
+    await clearCache();
     mockContext.activeRequest = null;
     mockContext.callStaff.mockResolvedValue(helpRequest());
+    // An older backend: no exercise names with the machine, so the page asks for them
     mockGetMachineById.mockResolvedValue({ id: 12, name: "Leg Press", status: "Available", exercise: "Leg Press" });
+  });
+
+  it("uses the exercises sent with the machine instead of asking for them", async () => {
+    mockGetMachineById.mockResolvedValue({
+      id: 12,
+      code: "LP01",
+      name: "Leg Press",
+      status: "Available",
+      exercise: "Leg Press",
+      exerciseNames: ["Leg Press"],
+      muscleGroups: ["Quads"],
+    });
+    render(<MachineDetails />);
+
+    fireEvent.press(await screen.findByRole("button", { name: "Call staff" }));
+
+    await screen.findByRole("button", { name: "Call staff" });
+    expect(mockContext.callStaff).toHaveBeenCalledWith({ equipmentId: 12, exerciseName: "Leg Press" });
+    expect(screen.getByText("Quads")).toBeTruthy();
+    expect(mockGetExercises).not.toHaveBeenCalled();
+  });
+
+  it("shows the machine from the Equipment tab's saved list while its own request runs", async () => {
+    writeCached("machines", [
+      { id: 12, code: "LP01", name: "Leg Press", status: "In Use", exercise: "Leg Press", exerciseNames: ["Leg Press"], muscleGroups: ["Quads"] },
+    ]);
+    mockGetMachineById.mockReturnValue(new Promise(() => {}));
+    render(<MachineDetails />);
+
+    // No spinner: the list's copy is on screen right away
+    expect(screen.getByText("IN USE")).toBeTruthy();
+    expect(screen.getByText("Quads")).toBeTruthy();
+    expect(screen.queryByText("Loading machine details...")).toBeNull();
+    // ...and it still checks for a newer copy in the background
+    await waitFor(() => expect(mockGetMachineById).toHaveBeenCalledWith(12));
   });
 
   it("shows the Call staff card and sends the machine's only exercise", async () => {

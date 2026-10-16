@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -11,7 +11,15 @@ import {
   View,
 } from "react-native";
 import LeagueCard from "../../components/LeagueCard";
-import { leagueAPI, LeagueInfoResponse, LeaderboardResponse } from "@/services/leagueAPI";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCachedResource } from "@/hooks/useCachedResource";
+import { cacheKeys, STALE_MS } from "@/services/cachedResources";
+import { leagueAPI } from "@/services/leagueAPI";
+
+async function fetchLeague() {
+  const [info, board] = await Promise.all([leagueAPI.getMyLeagueInfo(), leagueAPI.getLeaderboard()]);
+  return { info, board };
+}
 
 function formatVolume(lbs: number): string {
   if (lbs >= 1000) return `${(lbs / 1000).toFixed(1)}K`;
@@ -20,34 +28,21 @@ function formatVolume(lbs: number): string {
 
 export default function League() {
   const router = useRouter();
-  const [leagueInfo, setLeagueInfo] = useState<LeagueInfoResponse | null>(null);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
 
+  // The saved copy shows at once on every visit; a stale one refreshes in the background
+  const { data, loading, revalidate } = useCachedResource(
+    user ? cacheKeys.user(user.username, "league") : null,
+    fetchLeague,
+    { staleTime: STALE_MS.user },
+  );
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
-      const load = async () => {
-        try {
-          const [info, board] = await Promise.all([
-            leagueAPI.getMyLeagueInfo(),
-            leagueAPI.getLeaderboard(),
-          ]);
-          if (!cancelled) {
-            setLeagueInfo(info);
-            setLeaderboard(board);
-          }
-        } catch {
-          // silently handle
-        } finally {
-          if (!cancelled) setLoading(false);
-        }
-      };
-      setLoading(true);
-      load();
-      return () => { cancelled = true; };
-    }, [])
+      revalidate();
+    }, [revalidate])
   );
+  const leagueInfo = data?.info ?? null;
+  const leaderboard = data?.board ?? null;
 
   const noWorkouts = leagueInfo?.weeklyScore === 0;
 

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { authAPI, setAuthFailureHandler } from '../services/authAPI';
+import { clearUserCache, preloadCache } from '../services/resourceCache';
 
 interface User {
   username: string;
@@ -28,6 +29,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     restoreToken();
     setAuthFailureHandler(() => {
+      clearUserCache();
       setUser(null);
       setIsSignedIn(false);
     });
@@ -36,6 +38,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const restoreToken = async () => {
     try {
       setLoading(true);
+      // Saved data into memory first, so the first screens show it instead of a spinner
+      await preloadCache();
       const userData = await AsyncStorage.getItem('user');
       const accessToken = await AsyncStorage.getItem('accessToken');
 
@@ -114,6 +118,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await AsyncStorage.removeItem('accessToken');
       await AsyncStorage.removeItem('refreshToken');
       await AsyncStorage.removeItem('user');
+      // ...and the saved copies of this member's stats, history and messages
+      await clearUserCache();
 
       setUser(null);
       setIsSignedIn(false);

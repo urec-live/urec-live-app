@@ -2,14 +2,15 @@ import { HELP_STATUS_DISPLAY } from "@/constants/helpRequests";
 import { useHelpRequest } from "@/contexts/HelpRequestContext";
 import { useWorkout } from "@/contexts/WorkoutContext";
 import { machineAPI } from "@/services/machineAPI";
+import { patchCachedMachine } from "@/services/resourceCache";
 import { WatchService } from "@/services/watchService";
+import { confirmAsync } from "@/utils/confirm";
 import { toHelpRequestError } from "@/utils/helpRequestErrors";
+import { emptySessionPrompt, sessionWillBeSaved } from "@/utils/workoutSession";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
-  Alert,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -90,6 +91,15 @@ export default function ActiveExerciseTracker() {
   };
 
   // --- Logic: Checkout & End Workout ---
+  // The rows with reps or a weight entered; blank rows aren't sets
+  const loggedSets = () =>
+    setRows
+      .map(r => ({
+        reps: r.reps.trim() ? parseInt(r.reps, 10) : undefined,
+        weightLbs: r.weightLbs.trim() ? parseFloat(r.weightLbs) : undefined,
+      }))
+      .filter(s => s.reps !== undefined || s.weightLbs !== undefined);
+
   const doEnd = async () => {
     if (!currentSession) return;
 
@@ -98,15 +108,11 @@ export default function ActiveExerciseTracker() {
       exerciseStartTime: exerciseStartTime || Date.now(),
     });
 
-    const setDetails = setRows
-      .map(r => ({
-        reps: r.reps.trim() ? parseInt(r.reps, 10) : undefined,
-        weightLbs: r.weightLbs.trim() ? parseFloat(r.weightLbs) : undefined,
-      }))
-      .filter(s => s.reps !== undefined || s.weightLbs !== undefined);
+    const setDetails = loggedSets();
 
     try {
-      await machineAPI.checkOut(currentSession.machineId);
+      // Every saved list shows the machine free right away, without waiting for the live update
+      patchCachedMachine(await machineAPI.checkOut(currentSession.machineId));
     } catch (e) {
       console.log("Checkout network error, continuing local flow");
     }
@@ -118,6 +124,18 @@ export default function ActiveExerciseTracker() {
     setTimeout(() => {
       router.replace(`/workout/exercises/${targetMuscleGroup}`);
     }, 0);
+  };
+
+  // An empty session isn't saved as a workout, so say so before ending it
+  const handleEndPress = async () => {
+    if (!currentSession) return;
+    const willSave = sessionWillBeSaved(currentSession, Date.now(), loggedSets());
+    const confirmed = await confirmAsync(
+      willSave
+        ? { title: "End Workout", message: "Are you sure?", confirmText: "End" }
+        : emptySessionPrompt(currentSession),
+    );
+    if (confirmed) doEnd();
   };
 
   const handleToggleRest = () => {
@@ -252,16 +270,7 @@ export default function ActiveExerciseTracker() {
           <Text style={styles.buttonText}>{!restStartTime ? "Start Rest" : "End Rest"}</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.endButton} onPress={() => {
-            if (Platform.OS === 'web') {
-              if (window.confirm('End Workout? Are you sure?')) doEnd();
-            } else {
-              Alert.alert("End Workout", "Are you sure?", [
-                { text: "Cancel", style: "cancel" },
-                { text: "End", onPress: doEnd },
-              ]);
-            }
-        }}>
+        <TouchableOpacity style={styles.endButton} onPress={handleEndPress}>
           <MaterialCommunityIcons name="stop" size={16} color="#fff" />
           <Text style={styles.endButtonText}>End Workout</Text>
         </TouchableOpacity>

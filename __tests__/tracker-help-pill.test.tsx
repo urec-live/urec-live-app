@@ -29,6 +29,9 @@ jest.mock("@/contexts/HelpRequestContext", () => ({ useHelpRequest: () => mockCo
 
 jest.mock("@/services/machineAPI", () => ({ machineAPI: { checkOut: jest.fn() } }));
 jest.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: () => null }));
+jest.mock("@react-native-async-storage/async-storage", () =>
+  jest.requireActual("@react-native-async-storage/async-storage/jest/async-storage-mock"),
+);
 
 // Sets logged on the watch arrive through the callback the tracker subscribes with
 let mockOnWatchSet: ((reps: number, weight: number) => void) | null = null;

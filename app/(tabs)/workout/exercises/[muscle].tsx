@@ -1,12 +1,11 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   FlatList,
   ActivityIndicator,
   Image,
-  Linking,
   RefreshControl,
   StyleSheet,
   Text,
@@ -14,22 +13,55 @@ import {
   View,
 } from "react-native";
 import { useWorkout } from "@/contexts/WorkoutContext";
-import { machineAPI, Exercise } from "@/services/machineAPI";
-import websocketService from "@/services/websocketService";
+import { useCachedResource, useCachedResources } from "@/hooks/useCachedResource";
+import { cacheKeys, STALE_MS } from "@/services/cachedResources";
+import { machineAPI, Exercise, MachineDto } from "@/services/machineAPI";
 
 export default function MuscleExercises() {
   const { muscle } = useLocalSearchParams();
   const router = useRouter();
   const { todayWorkouts } = useWorkout();
   const group = (muscle as string) || "Chest";
-  const [exercises, setExercises] = useState<Exercise[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const [availabilityByExercise, setAvailabilityByExercise] = useState<
-    Record<string, { available: number; total: number }>
-  >({});
   const [refreshing, setRefreshing] = useState(false);
+
+  const {
+    data,
+    loading,
+    error,
+    refresh: refreshExercises,
+  } = useCachedResource<Exercise[]>(
+    cacheKeys.exercisesFor(group),
+    () => machineAPI.getExercisesByMuscleGroup(group),
+    { staleTime: STALE_MS.catalog },
+  );
+  const exercises = useMemo(() => (Array.isArray(data) ? data : []), [data]);
+
+  // Each exercise's machines, saved under the key its machine picker opens with. Live updates
+  // patch them, so the counts change without refetching anything.
+  const machineRequests = useMemo(
+    () =>
+      exercises.map((ex) => ({
+        key: cacheKeys.machinesFor(ex.name),
+        fetcher: () => machineAPI.getByExercise(ex.name),
+      })),
+    [exercises],
+  );
+  const { data: machinesByKey, refresh: refreshMachines } = useCachedResources<MachineDto[]>(machineRequests, {
+    live: true,
+    staleTime: STALE_MS.live,
+  });
+
+  const availabilityByExercise = useMemo(() => {
+    const result: Record<string, { available: number; total: number } | undefined> = {};
+    for (const ex of exercises) {
+      const machines = machinesByKey[cacheKeys.machinesFor(ex.name)];
+      result[ex.name] = machines && {
+        total: machines.length,
+        available: machines.filter((m) => m.status.toUpperCase() === "AVAILABLE").length,
+      };
+    }
+    return result;
+  }, [exercises, machinesByKey]);
 
   const sortedExercises = useMemo(() => {
     return [...exercises].sort((a, b) => {
@@ -41,73 +73,10 @@ export default function MuscleExercises() {
     });
   }, [exercises, availabilityByExercise]);
 
-  const loadExercises = async () => {
-    try {
-      setError(null);
-      console.log('[loadExercises] Fetching exercises for muscle group:', group);
-      const exerciseList = await machineAPI.getExercisesByMuscleGroup(group);
-      console.log('[loadExercises] Received exercises:', exerciseList);
-      setExercises(exerciseList);
-    } catch (err) {
-      console.error('[loadExercises] Failed to fetch exercises:', err);
-      setError('Failed to load exercises');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadAvailability = async () => {
-    if (!exercises || !Array.isArray(exercises) || exercises.length === 0) {
-      console.log('[loadAvailability] Skipping - no exercises to load availability for');
-      return;
-    }
-    
-    console.log('[loadAvailability] Loading availability for', exercises.length, 'exercises');
-    const entries = await Promise.all(
-      exercises.map(async (ex) => {
-        try {
-          console.log('[loadAvailability] Fetching machines for exercise:', ex.name);
-          const machines = await machineAPI.getByExercise(ex.name);
-          console.log('[loadAvailability] Found', machines.length, 'machines for', ex.name);
-          const total = machines.length;
-          const available = machines.filter((m) => m.status.toUpperCase() === "AVAILABLE").length;
-          return [ex.name, { available, total }] as const;
-        } catch (err) {
-          console.error('[loadAvailability] Error fetching machines for', ex.name, ':', err);
-          return [ex.name, { available: 0, total: 0 }] as const;
-        }
-      })
-    );
-    console.log('[loadAvailability] Setting availability:', Object.fromEntries(entries));
-    setAvailabilityByExercise(Object.fromEntries(entries));
-  };
-
-  useEffect(() => {
-    loadExercises();
-  }, [group]);
-
-  useEffect(() => {
-    if (exercises.length > 0) {
-      loadAvailability();
-
-      // Subscribe to WebSocket updates
-      const unsubscribe = websocketService.subscribe((updatedMachine) => {
-        console.log('[Exercise List] Received machine update:', updatedMachine);
-        // Reload availability when any machine is updated
-        loadAvailability();
-      });
-
-      return () => {
-        unsubscribe();
-      };
-    }
-  }, [exercises]);
-
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await loadExercises();
-      await loadAvailability();
+      await Promise.all([refreshExercises(), refreshMachines()]);
     } finally {
       setRefreshing(false);
     }
@@ -124,18 +93,15 @@ export default function MuscleExercises() {
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
         <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
           <MaterialCommunityIcons name="alert-circle" size={48} color="#f44336" />
-          <Text style={{ marginTop: 10, color: '#f44336', fontSize: 16 }}>{error}</Text>
+          <Text style={{ marginTop: 10, color: '#f44336', fontSize: 16 }}>Failed to load exercises</Text>
           <TouchableOpacity 
             style={{ marginTop: 20, backgroundColor: '#4CAF50', padding: 12, borderRadius: 8 }}
-            onPress={() => {
-              setLoading(true);
-              loadExercises();
-            }}
+            onPress={refreshExercises}
           >
             <Text style={{ color: '#fff', fontWeight: '600' }}>Retry</Text>
           </TouchableOpacity>
@@ -145,8 +111,9 @@ export default function MuscleExercises() {
   }
 
   const renderItem = ({ item }: { item: Exercise }) => {
-    const availableMachines = availabilityByExercise[item.name]?.available ?? 0;
-    const totalMachines = availabilityByExercise[item.name]?.total ?? 0;
+    const availability = availabilityByExercise[item.name];
+    const availableMachines = availability?.available ?? 0;
+    const totalMachines = availability?.total ?? 0;
     const isAvailable = availableMachines > 0;
     const isCompleted = todayWorkouts.some(session => session.exerciseName === item.name);
 
@@ -177,8 +144,10 @@ export default function MuscleExercises() {
           <Text style={[styles.availabilityText, isCompleted && styles.completedText]}>
             {isCompleted
               ? "Completed"
-              : totalMachines === 0
+              : !availability
               ? "Loading availability…"
+              : totalMachines === 0
+              ? "No machines"
               : `${availableMachines}/${totalMachines} Available`}
           </Text>
         </View>

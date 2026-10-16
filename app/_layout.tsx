@@ -6,6 +6,7 @@ import 'react-native-reanimated';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useLiveMachineUpdates } from '@/hooks/useLiveMachineUpdates';
 import ActiveExerciseTracker from '../components/ActiveExerciseTracker';
 import DailyWorkoutSummary from '../components/DailyWorkoutSummary';
 import HelpRequestBanner from '../components/HelpRequestBanner';
@@ -20,6 +21,8 @@ export const unstable_settings = {
 
 function RootLayoutNav() {
   const { user } = useAuth();
+  // Machine statuses stay live on every screen, not just the Equipment tab
+  useLiveMachineUpdates(!!user);
 
   return (
     <>

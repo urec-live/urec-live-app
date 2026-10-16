@@ -23,30 +23,47 @@ class WebSocketService {
   private communityCallbacks: ChatMessageCallback[] = [];
   private userQueueCallbacks: ChatMessageCallback[] = [];
 
+  // When the current connection came up (null while disconnected), and who to tell when it does
+  private connectedSince: number | null = null;
+  private connectListeners = new Set<() => void>();
+  // Bumped by disconnect(), so a connect() still reading the token doesn't start a client afterwards
+  private connectionId = 0;
+  private connecting = false;
+
   async connect() {
     console.log('[WS] connect() called — isConnected:', this.isConnected, 'client.active:', this.client?.active);
-    if (this.isConnected || this.client?.active) {
+    if (this.isConnected || this.client?.active || this.connecting) {
       console.log('[WS] Already connected/active, skipping');
       return;
     }
 
-    const token = await AsyncStorage.getItem('accessToken');
+    this.connecting = true;
+    const attempt = ++this.connectionId;
+    let token: string | null;
+    try {
+      token = await AsyncStorage.getItem('accessToken');
+    } finally {
+      this.connecting = false;
+    }
+    if (attempt !== this.connectionId) return;
     console.log('[WS] Token present:', !!token, '— connecting to:', WS_URL);
     const connectHeaders: Record<string, string> = token
       ? { Authorization: `Bearer ${token}` }
       : {};
 
     try {
-      this.client = new Client({
+      const client: Client = new Client({
         webSocketFactory: () => new SockJS(WS_URL),
         connectHeaders,
         reconnectDelay: 5000,
         heartbeatIncoming: 4000,
         heartbeatOutgoing: 4000,
         onConnect: () => {
+          if (this.client !== client) return; // replaced by a newer connection
           console.log('[WS] onConnect fired — communityCallbacks:', this.communityCallbacks.length, 'userQueueCallbacks:', this.userQueueCallbacks.length);
           this.isConnected = true;
           this.reconnectAttempts = 0;
+          this.connectedSince = Date.now();
 
           // Machines
           this.client!.subscribe('/topic/machines', (message: IMessage) => {
@@ -91,10 +108,14 @@ class WebSocketService {
               }
             );
           }
+
+          this.connectListeners.forEach(listener => listener());
         },
         onDisconnect: () => {
+          if (this.client !== client) return;
           console.log('[WS] Disconnected');
           this.isConnected = false;
+          this.connectedSince = null;
           this.communitySubscription = null;
           this.userQueueSubscription = null;
         },
@@ -105,15 +126,18 @@ class WebSocketService {
           console.error('[WS] WebSocket error:', event);
         },
         onWebSocketClose: () => {
+          if (this.client !== client) return;
           console.log('[WS] WebSocket closed, reconnect attempt:', this.reconnectAttempts);
           this.isConnected = false;
+          this.connectedSince = null;
           if (this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++;
           }
         },
       });
 
-      this.client.activate();
+      this.client = client;
+      client.activate();
       console.log('[WS] client.activate() called');
     } catch (error) {
       console.error('[WS] Connection error:', error);
@@ -121,8 +145,11 @@ class WebSocketService {
   }
 
   disconnect() {
+    this.connectionId++;
+    this.connectedSince = null;
     if (this.client) {
       this.client.deactivate();
+      this.client = null;
       this.isConnected = false;
       this.subscribers = [];
       this.communityCallbacks = [];
@@ -130,6 +157,19 @@ class WebSocketService {
       this.communitySubscription = null;
       this.userQueueSubscription = null;
     }
+  }
+
+  /** When the current connection came up, or null while disconnected */
+  getConnectedSince(): number | null {
+    return this.connectedSince;
+  }
+
+  /** Calls the listener after every connect, including automatic reconnects. Returns an unsubscribe. */
+  onConnect(listener: () => void): () => void {
+    this.connectListeners.add(listener);
+    return () => {
+      this.connectListeners.delete(listener);
+    };
   }
 
   // ── Machine updates ────────────────────────────────────────────────────

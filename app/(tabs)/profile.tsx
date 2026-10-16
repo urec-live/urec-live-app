@@ -22,13 +22,21 @@ import WeeklyChart from "../../components/WeeklyChart";
 import PRList from "../../components/PRList";
 import BadgeGrid from "../../components/BadgeGrid";
 import StreakCalendar from "../../components/StreakCalendar";
-import {
-  sessionAPI,
-  SessionStatsResponse,
-  PersonalRecord,
-} from "@/services/sessionAPI";
-import { badgeAPI, BadgeEntry } from "@/services/badgeAPI";
+import { sessionAPI } from "@/services/sessionAPI";
+import { badgeAPI } from "@/services/badgeAPI";
 import { socialAPI } from "@/services/socialAPI";
+import { useCachedResource } from "@/hooks/useCachedResource";
+import { cacheKeys, STALE_MS } from "@/services/cachedResources";
+
+async function fetchProfile() {
+  const [stats, prs, badges, calendar] = await Promise.all([
+    sessionAPI.getMyStats(),
+    sessionAPI.getMyPRs(),
+    badgeAPI.getMyBadges(),
+    sessionAPI.getCalendar(),
+  ]);
+  return { stats, prs, badges: badges.earned, calendarDates: calendar.workoutDates };
+}
 
 function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -49,42 +57,24 @@ export default function Profile() {
   const { activePlan } = usePlan();
   const router = useRouter();
 
-  const [stats, setStats] = useState<SessionStatsResponse | null>(null);
-  const [prs, setPrs] = useState<PersonalRecord[]>([]);
-  const [badges, setBadges] = useState<BadgeEntry[]>([]);
-  const [calendarDates, setCalendarDates] = useState<string[]>([]);
   const [isPublic, setIsPublic] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [chartMode, setChartMode] = useState<"sessions" | "volume">("sessions");
 
+  // The saved copy shows at once on every visit; a stale one refreshes in the background
+  const { data: profile, loading, revalidate } = useCachedResource(
+    user ? cacheKeys.user(user.username, "profile") : null,
+    fetchProfile,
+    { staleTime: STALE_MS.user },
+  );
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
-      const load = async () => {
-        try {
-          const [statsData, prsData, badgesData, calendarData] = await Promise.all([
-            sessionAPI.getMyStats(),
-            sessionAPI.getMyPRs(),
-            badgeAPI.getMyBadges(),
-            sessionAPI.getCalendar(),
-          ]);
-          if (!cancelled) {
-            setStats(statsData);
-            setPrs(prsData);
-            setBadges(badgesData.earned);
-            setCalendarDates(calendarData.workoutDates);
-          }
-        } catch {
-          // silently handle
-        } finally {
-          if (!cancelled) setLoading(false);
-        }
-      };
-      setLoading(true);
-      load();
-      return () => { cancelled = true; };
-    }, [])
+      revalidate();
+    }, [revalidate])
   );
+  const stats = profile?.stats ?? null;
+  const prs = profile?.prs ?? [];
+  const badges = profile?.badges ?? [];
+  const calendarDates = profile?.calendarDates ?? [];
 
   const handlePublicToggle = async (value: boolean) => {
     setIsPublic(value);

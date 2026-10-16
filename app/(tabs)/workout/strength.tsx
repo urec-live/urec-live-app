@@ -2,38 +2,19 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useState, useEffect } from "react";
+import { useCachedResource } from "@/hooks/useCachedResource";
+import { cacheKeys, STALE_MS } from "@/services/cachedResources";
 import { machineAPI } from "@/services/machineAPI";
 
 export default function StrengthWorkout() {
   const router = useRouter();
-  const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [muscleGroups, setMuscleGroups] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchMuscleGroups = async () => {
-    try {
-      setError(null);
-      const groups = await machineAPI.getMuscleGroups();
-      setMuscleGroups(groups);
-    } catch (err) {
-      console.error('Failed to fetch muscle groups:', err);
-      setError('Failed to load muscle groups');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchMuscleGroups();
-  }, []);
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchMuscleGroups();
-    setRefreshing(false);
-  };
+  // Saved after the first visit, so coming back shows the list at once
+  const { data, loading, error, refreshing, refresh } = useCachedResource(
+    cacheKeys.muscleGroups,
+    machineAPI.getMuscleGroups,
+    { staleTime: STALE_MS.catalog },
+  );
+  const muscleGroups = data ?? [];
 
   if (loading) {
     return (
@@ -46,15 +27,15 @@ export default function StrengthWorkout() {
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
         <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
           <MaterialCommunityIcons name="alert-circle" size={48} color="#f44336" />
-          <Text style={{ marginTop: 10, color: '#f44336', fontSize: 16 }}>{error}</Text>
-          <TouchableOpacity 
+          <Text style={{ marginTop: 10, color: '#f44336', fontSize: 16 }}>Failed to load muscle groups</Text>
+          <TouchableOpacity
             style={{ marginTop: 20, backgroundColor: '#4CAF50', padding: 12, borderRadius: 8 }}
-            onPress={fetchMuscleGroups}
+            onPress={refresh}
           >
             <Text style={{ color: '#fff', fontWeight: '600' }}>Retry</Text>
           </TouchableOpacity>
@@ -76,7 +57,7 @@ export default function StrengthWorkout() {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={onRefresh}
+              onRefresh={refresh}
               tintColor="#4CAF50"
               colors={["#4CAF50", "#66BB6A", "#81C784"]}
               progressBackgroundColor="#ffffff"
