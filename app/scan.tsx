@@ -1,3 +1,4 @@
+import { isAxiosError } from "axios";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -12,6 +13,10 @@ type BarCodeScannedData = {
   data: string;
   type: string;
 };
+
+// The backend answers 409 when someone tries to check in to a machine staff marked out of order
+const OUT_OF_ORDER_MESSAGE =
+  "This machine is out of order. Pick another machine, or report a problem if something else is wrong.";
 
 export default function ScanScreen() {
   const router = useRouter();
@@ -60,13 +65,15 @@ export default function ScanScreen() {
       await machineAPI.checkIn(parsed.machineId);
       checkIn(exerciseName, parsed.machineId, muscleGroup);
       setMessage(`Checked into ${parsed.machineId}`);
-    } catch (e: any) {
-      const status = e?.response?.status;
-      const msg = e?.response?.data?.message || e?.response?.data || e?.message;
-      if (status === 401) setError("Please sign in to check in.");
-      else if (status === 409) setError(String(msg || "Machine not available. Please retry."));
-      else if (status === 404) setError("Machine not found.");
-      else setError(String(msg || "Unable to check in right now."));
+    } catch (e) {
+      const response = isAxiosError(e) ? e.response : undefined;
+      // Spring's error body is an object, so only show it when it's text
+      const body: unknown = response?.data;
+      const msg = typeof body === "string" ? body : e instanceof Error ? e.message : undefined;
+      if (response?.status === 401) setError("Please sign in to check in.");
+      else if (response?.status === 409) setError(OUT_OF_ORDER_MESSAGE);
+      else if (response?.status === 404) setError("Machine not found.");
+      else setError(msg || "Unable to check in right now.");
       return;
     }
 
@@ -77,6 +84,12 @@ export default function ScanScreen() {
         params: { exercise: parsed.exercise, muscle: parsed.muscle ?? undefined },
       });
     }
+  };
+
+  // Lets a member report a broken machine without checking in to it
+  const handleReportProblem = () => {
+    if (!parsed?.machineId) return;
+    router.push({ pathname: "/report-issue", params: { code: parsed.machineId } });
   };
 
   if (!permission) {
@@ -129,6 +142,9 @@ export default function ScanScreen() {
                   {parsed.muscle && <Text style={styles.metaText}>Muscle: {parsed.muscle}</Text>}
                   <Pressable style={styles.button} onPress={handleConfirmCheckIn}>
                     <Text style={styles.buttonText}>Confirm Check-In</Text>
+                  </Pressable>
+                  <Pressable style={[styles.button, styles.reportButton]} onPress={handleReportProblem}>
+                    <Text style={styles.reportButtonText}>Report a Problem</Text>
                   </Pressable>
                 </>
               )}
@@ -223,6 +239,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#001a14",
   },
   secondaryButtonText: { color: "#00ff88", fontWeight: "900" },
+  reportButton: { backgroundColor: "#330000", borderColor: "#ff6666" },
+  reportButtonText: { color: "#ff9a9a", fontWeight: "900" },
   errorBox: { borderColor: "#ff6666", backgroundColor: "#330000" },
   errorText: { color: "#ff9a9a", textAlign: "center" },
   successBox: { borderColor: "#00ff88", backgroundColor: "#002d20" },

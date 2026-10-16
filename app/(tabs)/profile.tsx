@@ -275,7 +275,7 @@ export default function Profile() {
             </View>
             <MaterialCommunityIcons name="chevron-right" size={24} color="#ccc" />
           </Pressable>
-          <View style={styles.settingsRow}>
+          <View style={[styles.settingsRow, styles.settingsRowSpaced]}>
             <View style={styles.settingsLeft}>
               <MaterialCommunityIcons name="earth" size={24} color="#4CAF50" />
               <View>
@@ -292,6 +292,21 @@ export default function Profile() {
               thumbColor={isPublic ? '#4CAF50' : '#f4f3f4'}
             />
           </View>
+          <Pressable
+            style={[styles.settingsRow, styles.settingsRowSpaced]}
+            onPress={() => router.push("/my-reports")}
+          >
+            <View style={styles.settingsLeft}>
+              <MaterialCommunityIcons name="alert-circle-outline" size={24} color="#4CAF50" />
+              <View>
+                <Text style={styles.settingsLabel}>My Equipment Reports</Text>
+                <Text style={styles.settingsDescription}>
+                  {"Track repairs on machines you've reported"}
+                </Text>
+              </View>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={24} color="#ccc" />
+          </Pressable>
         </View>
 
         {/* Logout */}
@@ -448,6 +463,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 1,
+  },
+  settingsRowSpaced: {
+    marginTop: 10,
   },
   settingsLeft: {
     flexDirection: "row",

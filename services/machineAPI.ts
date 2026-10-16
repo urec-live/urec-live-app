@@ -71,6 +71,12 @@ export const machineAPI = {
     return response.data;
   },
 
+  // Get a machine by its QR code
+  getMachineByCode: async (code: string): Promise<MachineDto> => {
+    const response = await api.get(`/machines/code/${encodeURIComponent(code)}`);
+    return response.data;
+  },
+
   // Get current user's engagement (machine they're using)
   getMyEngagement: async (): Promise<MachineDto | null> => {
     try {

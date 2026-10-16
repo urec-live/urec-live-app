@@ -17,6 +17,7 @@ import {
   Exercise,
 } from "@/services/machineAPI";
 import websocketService from "@/services/websocketService";
+import { isOutOfOrder, OUT_OF_ORDER_COLOR, OUT_OF_ORDER_ICON } from "@/constants/machineStatus";
 import MapModal from "../../components/MapModal";
 
 export default function Equipment() {
@@ -161,6 +162,7 @@ export default function Equipment() {
         renderItem={({ item }) => {
           const statusUpper = item.status.toUpperCase();
           const isAvailable = statusUpper === "AVAILABLE";
+          const outOfOrder = isOutOfOrder(item.status);
           const exercises = exercisesByEquipment[item.id] || [];
           const muscleGroupsStr = [
             ...new Set(exercises.map((e) => e.muscleGroup)),
@@ -182,19 +184,19 @@ export default function Equipment() {
               activeOpacity={0.7}
               style={[
                 styles.card,
-                isAvailable ? styles.availableCard : styles.inUseCard,
+                outOfOrder ? styles.outOfOrderCard : isAvailable ? styles.availableCard : styles.inUseCard,
               ]}
             >
               <View
                 style={[
                   styles.iconContainer,
-                  isAvailable ? styles.availableIconBg : styles.inUseIconBg,
+                  outOfOrder ? styles.outOfOrderIconBg : isAvailable ? styles.availableIconBg : styles.inUseIconBg,
                 ]}
               >
                 <MaterialCommunityIcons
-                  name="dumbbell"
+                  name={outOfOrder ? OUT_OF_ORDER_ICON : "dumbbell"}
                   size={28}
-                  color={isAvailable ? "#4CAF50" : "#FF5722"}
+                  color={outOfOrder ? OUT_OF_ORDER_COLOR : isAvailable ? "#4CAF50" : "#FF5722"}
                 />
               </View>
               <View style={styles.cardContent}>
@@ -204,22 +206,22 @@ export default function Equipment() {
                 <View
                   style={[
                     styles.statusBadge,
-                    isAvailable ? styles.availableBadge : styles.inUseBadge,
+                    outOfOrder ? styles.outOfOrderBadge : isAvailable ? styles.availableBadge : styles.inUseBadge,
                   ]}
                 >
                   <View
                     style={[
                       styles.statusDot,
-                      isAvailable ? styles.availableDot : styles.inUseDot,
+                      outOfOrder ? styles.outOfOrderDot : isAvailable ? styles.availableDot : styles.inUseDot,
                     ]}
                   />
                   <Text
                     style={[
                       styles.statusText,
-                      isAvailable ? styles.availableText : styles.inUseText,
+                      outOfOrder ? styles.outOfOrderText : isAvailable ? styles.availableText : styles.inUseText,
                     ]}
                   >
-                    {isAvailable ? "Available" : "In Use"}
+                    {outOfOrder ? "Out of order" : isAvailable ? "Available" : "In Use"}
                   </Text>
                 </View>
                 {exercises.length > 0 && (
@@ -345,6 +347,11 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: "#FF5722",
   },
+  outOfOrderCard: {
+    backgroundColor: "#f5f5f5",
+    borderLeftWidth: 4,
+    borderLeftColor: OUT_OF_ORDER_COLOR,
+  },
   iconContainer: {
     width: 56,
     height: 56,
@@ -358,6 +365,9 @@ const styles = StyleSheet.create({
   },
   inUseIconBg: {
     backgroundColor: "#ffebee",
+  },
+  outOfOrderIconBg: {
+    backgroundColor: "#eeeeee",
   },
   cardContent: {
     flex: 1,
@@ -384,6 +394,9 @@ const styles = StyleSheet.create({
   inUseBadge: {
     backgroundColor: "#ffebee",
   },
+  outOfOrderBadge: {
+    backgroundColor: "#eeeeee",
+  },
   statusDot: {
     width: 8,
     height: 8,
@@ -394,6 +407,9 @@ const styles = StyleSheet.create({
   },
   inUseDot: {
     backgroundColor: "#FF5722",
+  },
+  outOfOrderDot: {
+    backgroundColor: OUT_OF_ORDER_COLOR,
   },
   statusText: {
     fontSize: 13,
@@ -406,6 +422,9 @@ const styles = StyleSheet.create({
   },
   inUseText: {
     color: "#d32f2f",
+  },
+  outOfOrderText: {
+    color: "#616161",
   },
   exercisesContainer: {
     marginTop: 8,
