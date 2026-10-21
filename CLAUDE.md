@@ -133,6 +133,7 @@ constants/
 - Keys, freshness and shared fetchers live in `services/cachedResources.ts`. A member's data goes under `cacheKeys.user(username, …)`: it's wiped on sign-out and marked stale when a session is saved.
 - Keys starting with `machines`, `machine:` or `floor-plans` are live: live updates patch them, and they count as fresh only while the socket has stayed connected since the fetch. Apply a check-in/out response with `patchCachedMachine` instead of refetching a list.
 - Tab screens stay mounted: call `revalidate()` from `useFocusEffect` to refresh when the tab is reopened.
+- Not everything is saved: the machine page's equipment-issue banner (`issueAPI.getMachineIssueStatus`) and My Equipment Reports fetch on every focus, so a report the member just filed shows straight away.
 
 ### Profile
 - User info display, logout functionality
@@ -244,7 +245,7 @@ npx expo start
 ## Testing
 
 - `npm test` runs Jest (`jest-expo` preset + React Native Testing Library). Tests live in `__tests__/`, outside `app/`, so Expo Router doesn't treat them as screens. Mock the backend, `expo-router` and native modules per test file.
-- AsyncStorage throws under Jest without its mock: add `jest.mock("@react-native-async-storage/async-storage", () => jest.requireActual("@react-native-async-storage/async-storage/jest/async-storage-mock"))` to any test that loads `services/resourceCache.ts`, and `await clearCache()` in `beforeEach`, since saved data is module-level. (`package.json` stays byte-identical to equipment-issue-reports', so there's no global setup file.)
+- AsyncStorage throws under Jest without its mock: add `jest.mock("@react-native-async-storage/async-storage", () => jest.requireActual("@react-native-async-storage/async-storage/jest/async-storage-mock"))` to any test that loads `services/resourceCache.ts`, and `await clearCache()` in `beforeEach`, since saved data is module-level. There's no global Jest setup file.
 - Jest resolves the native files, so test a `.web.tsx` component by importing it directly (see `__tests__/DemoVideo.web.test.tsx`)
 - `npx tsc --noEmit` (no errors) and `npx expo lint`
 - After adding a screen, regenerate typed routes so `router.push` type-checks: run `CI=1 npx expo start --offline --port 8099` until `.expo/types/router.d.ts` mentions the route, then stop it

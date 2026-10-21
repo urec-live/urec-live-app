@@ -25,7 +25,7 @@ npm install   # once, to pick up the Jest dev dependencies
 npm test
 ```
 
-You should see `Tests: 212 passed` across 23 files for the whole app suite; the help request files account for 130 of them, across 11 files, and the rest cover equipment issues. The backend and navigation are mocked, so no server is needed.
+You should see `Tests: 315 passed` across 34 files for the whole app suite; the help request checks below account for 130 of them, and the rest cover equipment issues and saved data. `machine-call-staff.test.tsx` also has 2 saved-data tests, listed in `MINOR_FIXES_TESTING.md`. The backend and navigation are mocked, so no server is needed.
 
 | File | What it covers |
 |---|---|
@@ -59,7 +59,7 @@ You should see `Tests: 212 passed` across 23 files for the whole app suite; the 
 Type check and lint:
 
 ```bash
-npx tsc --noEmit   # two existing errors: the tracker passes a time to startRest(), which takes none
+npx tsc --noEmit   # no errors (startRest() now takes the watch's start time)
 npx expo lint      # the files this branch adds or changes are clean
 ```
 

@@ -38,20 +38,25 @@ Also fixed: `startRest()` now takes the watch's start time. That was `tsc`'s onl
 
 **The backend branch** sends each machine's exercise names and muscle groups with it, and loads the machine list with one query. Without it, the app still works: the Equipment tab and machine page fetch each machine's exercises in the background, like before but without making you wait.
 
+**Merged with main's equipment issue reports.** The branch now includes main as of PR #16. Where the two features meet:
+- **Out of Order on saved data.** The Equipment tab, the machine picker and the machine page show main's Out of order state from their saved copies. When staff take a machine out of service or put it back, the live update changes all three at once, without pull-to-refresh: the card's label, the picker's disabled card, and the machine page's notice in place of **Scan QR to Check In**.
+- **Machine page.** It still opens from the Equipment tab's saved copy. Main's issue banner loads on its own each time the page is shown and isn't saved, so a report you just filed shows when you come back. **Report a problem** sits under check-in, as on main.
+- **Tracker, Profile, scan.** Main's **Report** button in the tracker, the **My Equipment Reports** row in Profile settings and the scan screen's report option came through unchanged.
+
 ## Automated tests
 
 ```bash
 npm test
 ```
 
-You should see `Tests: 229 passed` across 22 files: the 130 from before plus 99 new. The backend, navigation and storage are mocked, so no server is needed.
+You should see `Tests: 315 passed` across 34 files: main's 212, 99 from this branch, and 4 for where it meets the equipment issue features. The backend, navigation and storage are mocked, so no server is needed.
 
 | File | What it covers |
 |---|---|
 | `resourceCache.test.ts` (18) | Saving to memory and storage; reading a copy back after a restart; the startup preload, which skips unrelated and broken entries; listeners hear only real changes; one shared request per key; a failed fetch keeps the saved copy; a fetch started before sign-out isn't saved; freshness by age, by invalidation (per member) and by the live connection; live updates patch lists, floor plans and single machines, keeping each list's own exercise, and are re-applied to a fetch that was running when they arrived; after a reconnect, only the machine data on screen is refetched; sign-out wipes members' data in memory and storage, and still works when storage fails |
 | `useCachedResource.test.tsx` (15) | Spinner only when nothing is saved; a fresh copy shows with no request; a stale copy shows at once and is swapped for the new one; copies found in storage; screens share one request; errors with and without a saved copy; `revalidate` fetches only when stale, while `refresh` always fetches and reports `refreshing`; `initialData`; a null key; a live update redraws without a request; the multi-key version: per-key fetches, failures and refresh, and a stable result |
 | `workout-screens.test.tsx` (13) | **Strength:** saved list on the next visit, and Retry. **Muscle screen:** counts and "No machines"; a live update changes the counts with no request; the next visit is instant; lists are refetched when live updates weren't connected. **Picker:** opens from the muscle screen's saved list with no request; doesn't wait for floor plans; check-in from the response, no reload; live updates for machines whose main exercise is another one (the old screen ignored those); Stop with nothing logged warns, and Keep going stays put; End frees the machine and goes back without reloading; with sets, it stops straight away |
-| `equipment-tab.test.tsx` (8) | One request for the cards (muscle groups and exercise names); doesn't wait for floor plans; **Locate** once they arrive; with an older backend, the list comes first and the exercises fill in after; the next visit is instant; a live update changes a card; pull-to-refresh fetches the list and the floor plans once each; the empty state |
+| `equipment-tab.test.tsx` (9) | One request for the cards (muscle groups and exercise names); doesn't wait for floor plans; **Locate** once they arrive; with an older backend, the list comes first and the exercises fill in after; the next visit is instant; a live update changes a card, including to **Out of order**, and the card keeps its exercises; pull-to-refresh fetches the list and the floor plans once each; the empty state |
 | `member-screens.test.tsx` (8) | **Profile:** no reload when reopened soon after; after a workout, keeps the stats on screen while the new ones load; opens from the saved copy. **League:** refreshes in the background once 30 s old. **DM inbox:** checks every visit, with the saved list showing meanwhile. **History:** picks up a session saved after the tab was opened, sending offline sessions first; offline it shows the saved copy, or else this session's workouts, with the offline note |
 | `machine-call-staff.test.tsx` (10, 2 new) | Uses the exercises sent with the machine; shows the Equipment tab's copy while its own request runs (plus the existing Call staff checks) |
 | `WorkoutContext.test.tsx` (7) | Saves a session with sets (today's list, history, backend); an empty session ends without saving or queueing anything; empty set list; cardio after 59 s versus 60 s; a saved session marks only that member's data stale; an offline session is queued and the data still marked stale; `startRest(time)` |
@@ -60,6 +65,10 @@ You should see `Tests: 229 passed` across 22 files: the 130 from before plus 99 
 | `liveMachineUpdates.test.tsx` (5) | Nothing while signed out; connects at sign-in and patches saved data; fresh only while connected since the fetch; disconnects at sign-out; refetches what's on screen after a reconnect, but not on the first connect |
 | `websocketService.test.ts` (6) | One client even with two connects at once; no client when `disconnect()` comes while `connect()` reads the token; `getConnectedSince()` and connect listeners, including STOMP's auto-reconnect; unsubscribing; late close events from a replaced client are ignored; machine updates reach every subscriber |
 | `AuthContext-cache.test.tsx` (3) | Saved data is in memory before the signed-in screens show; sign-out wipes the member's data but keeps the gym's; so does a session that expires |
+| `machine-details.test.tsx` (main's 6, plus 2) | Staff take the machine out of service while the page is open: the live update swaps check-in for the notice, with no new request. Opened from the Equipment tab's saved copy of an out-of-order machine: the notice shows with no spinner, and the issue banner still loads |
+| `exercise-machines.test.tsx` (main's 1, plus 1) | An open picker disables a machine as soon as staff take it out of service |
+
+Main's tests for screens that now use saved data (`equipment-list`, `exercise-machines`, `machine-details`, `profile-settings`) needed the AsyncStorage mock and a `clearCache()` before each test. `ActiveExerciseTracker` only needed the mock: the tracker writes check-out results to saved lists but never reads them. `exercise-machines` also mocks the signed-in member, whose history the picker saves. Their checks are unchanged.
 
 **Mutation-checked.** Each of these 29 temporary breaks makes at least one of the tests above fail:
 - the cache telling listeners about unchanged data
@@ -92,6 +101,8 @@ You should see `Tests: 229 passed` across 22 files: the 130 from before plus 99 
 - History not refreshing when reopened
 - Profile reloading on every visit
 
+After the merge, 5 more, aimed at where the features meet, each fail the new tests: live updates skipping single machines; the machine page saving its copy under a key live updates skip; the machine page ignoring the Equipment tab's copy; the Equipment tab never showing Out of order; the picker leaving out-of-order machines clickable.
+
 Type check and lint:
 
 ```bash
@@ -111,14 +122,17 @@ I replayed each screen's requests against a local backend with Neon behind it, 5
 | Muscle group screen | 1 + 8 requests, list 0.06 s | same | same on the first visit; reopening: none |
 | Strength | 1 request, 0.10 s | 0.07 s | 0.06 s; reopening: none |
 
+These were measured before the merge. Since then the machine page also asks for main's issue summary, which loads on its own and doesn't hold up the page.
+
 On a phone talking to Railway, each request takes longer. Before, the Equipment tab paid that delay about 19 times in a row (95 requests, 5 at a time). Now it pays it once.
 
 ## Manual checks
 
-**Setup.** Put the backend on the branch first. The app's checkout is already on it.
+**Setup.** Switch both checkouts to the branch. `android/` is the same on the branch as on main, so your local changes there carry over.
 
 ```bash
 cd /c/Users/abelv/portfolio/getmefit/urec-live-backend && git switch minor-fixes-and-speed-ups
+cd /c/Users/abelv/portfolio/getmefit/urec-live-app && git switch minor-fixes-and-speed-ups
 ```
 
 Then run TERMINAL 1–3 from `commands.txt` (or `./runall.sh`), and sign in as a member.
@@ -140,3 +154,13 @@ Then run TERMINAL 1–3 from `commands.txt` (or `./runall.sh`), and sign in as a
 
 **Sign-out**
 10. Sign out and sign in as a different member. None of the first member's stats, history or messages show, not even briefly.
+
+**With the equipment issue features**
+
+Use an admin account whose role is `ROLE_ADMIN`: the Equipment page returns 403 for one promoted through the dashboard (role `ADMIN`; see "Admin role naming" in the backend's `EQUIPMENT_ISSUES_TESTING.md`). The **Out of order** switch under **Equipment Issues** works for both, once the machine has a report.
+
+11. Open the **Equipment** tab. On the admin dashboard's **Equipment** page, edit a machine and set its status to **Out of Order**. Within a second or two the card says **Out of order**, and it keeps its muscle groups and exercises.
+12. Open that machine's page. The out-of-service notice replaces **Scan QR to Check In**. With the page still open, set the machine back to **Available** on the dashboard: **Scan QR to Check In** comes back without leaving the page.
+13. Do the same from **Workout → Strength**, on the exercise's machine list. The machine greys out with no **Start** button, and comes back when it's set to Available.
+    If you were already checked in to it, **End Workout** still ends the session. It's saved only if you logged a set, like any other session (step 7).
+14. On a machine's page, tap **Report a problem**, file a report, and go back. The banner about the open report is already there.
