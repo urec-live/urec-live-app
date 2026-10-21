@@ -8,10 +8,15 @@ import type { HelpRequest } from "@/services/helpRequestAPI";
 import { clearCache, writeCached } from "@/services/resourceCache";
 
 const mockRouter = { back: jest.fn(), replace: jest.fn(), push: jest.fn() };
-jest.mock("expo-router", () => ({
-  useRouter: () => mockRouter,
-  useLocalSearchParams: () => ({ id: "12" }),
-}));
+jest.mock("expo-router", () => {
+  const { useEffect } = jest.requireActual("react");
+  return {
+    useRouter: () => mockRouter,
+    useLocalSearchParams: () => ({ id: "12" }),
+    // The machine page loads its equipment-issue banner on focus; behave like a first focus
+    useFocusEffect: (effect: () => void | (() => void)) => useEffect(effect, [effect]),
+  };
+});
 
 const mockContext = {
   activeRequest: null as HelpRequest | null,
@@ -25,6 +30,14 @@ jest.mock("@/services/machineAPI", () => ({
   machineAPI: {
     getMachineById: (...args: unknown[]) => mockGetMachineById(...args),
     getExercisesByEquipmentId: (...args: unknown[]) => mockGetExercises(...args),
+  },
+}));
+
+// The machine page also shows the equipment-issue banner; nothing is reported here
+jest.mock("@/services/issueAPI", () => ({
+  issueAPI: {
+    getMachineIssueStatus: () =>
+      Promise.resolve({ equipmentId: 12, openReportCount: 0, worstSeverity: null, status: null }),
   },
 }));
 

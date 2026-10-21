@@ -1,9 +1,13 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import CallStaffCard from "@/components/CallStaffCard";
+import MachineIssueBanner from "@/components/MachineIssueBanner";
+import { isOutOfOrder, OUT_OF_ORDER_COLOR, OUT_OF_ORDER_ICON } from "@/constants/machineStatus";
 import { useCachedResource } from "@/hooks/useCachedResource";
 import { cacheKeys, STALE_MS } from "@/services/cachedResources";
+import { issueAPI, MachineIssueStatus } from "@/services/issueAPI";
 import { machineAPI, Exercise, MachineDto } from "@/services/machineAPI";
 import { patchCachedMachine, peekCached } from "@/services/resourceCache";
 
@@ -16,6 +20,7 @@ export default function MachineDetails() {
   const machineId = Number(id);
   const router = useRouter();
   const [updating, setUpdating] = useState(false);
+  const [issue, setIssue] = useState<MachineIssueStatus | null>(null);
 
   const { data: machine, loading: machineLoading, error } = useCachedResource<MachineDto>(
     cacheKeys.machine(machineId),
@@ -33,6 +38,24 @@ export default function MachineDetails() {
   const muscleGroups = machine?.muscleGroups ?? [...new Set((fetchedExercises ?? []).map((e) => e.muscleGroup))];
   // Wait for the exercises too, so Call staff knows the exercise when the machine has just one
   const loading = machineLoading || (needsExercises && exercisesLoading);
+
+  // Refetch on focus so the banner shows up right after the member files a report
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      issueAPI
+        .getMachineIssueStatus(machineId)
+        .then((status) => {
+          if (!cancelled) setIssue(status);
+        })
+        .catch(() => {
+          // Non-critical: the page still works without the banner
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [machineId])
+  );
 
   useEffect(() => {
     if (error && !machine) {
@@ -96,14 +119,35 @@ export default function MachineDetails() {
         {status.toUpperCase()}
       </Text>
 
+      {issue && <MachineIssueBanner issue={issue} />}
+
       {/* Near the top: the workout tracker overlay covers the bottom of the screen */}
       <CallStaffCard
         equipmentId={machine.id}
         exerciseName={exerciseNames.length === 1 ? exerciseNames[0] : undefined}
       />
 
-      <TouchableOpacity style={styles.scanButton} onPress={() => router.push("/scan")}>
-        <Text style={styles.scanButtonText}>Scan QR to Check In</Text>
+      {isOutOfOrder(status) ? (
+        <View style={styles.outOfOrderNotice}>
+          <MaterialCommunityIcons name={OUT_OF_ORDER_ICON} size={18} color={OUT_OF_ORDER_COLOR} />
+          <Text style={styles.outOfOrderText}>
+            Staff have taken this machine out of service, so check-in is unavailable.
+          </Text>
+        </View>
+      ) : (
+        <TouchableOpacity style={styles.scanButton} onPress={() => router.push("/scan")}>
+          <Text style={styles.scanButtonText}>Scan QR to Check In</Text>
+        </TouchableOpacity>
+      )}
+
+      <TouchableOpacity
+        style={styles.reportButton}
+        onPress={() =>
+          router.push({ pathname: "/report-issue", params: { id: String(machine.id) } })
+        }
+      >
+        <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#D32F2F" />
+        <Text style={styles.reportButtonText}>Report a problem</Text>
       </TouchableOpacity>
 
       {exerciseNames.length > 0 && (
@@ -146,6 +190,8 @@ const getStatusColor = (status: string) => {
       return "#4CAF50";
     case "in use":
       return "#FF5722";
+    case "out of order":
+      return OUT_OF_ORDER_COLOR;
     default:
       return "#999";
   }
@@ -280,12 +326,45 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderWidth: 2,
     borderColor: "#2e7d32",
-    marginBottom: 20,
+    marginBottom: 12,
     alignItems: "center",
   },
   scanButtonText: {
     color: "#ffffff",
     fontWeight: "900",
+    fontSize: 14,
+  },
+  outOfOrderNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#eeeeee",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+  },
+  outOfOrderText: {
+    flex: 1,
+    color: "#424242",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  reportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#ffffff",
+    borderRadius: 10,
+    paddingVertical: 11,
+    borderWidth: 1.5,
+    borderColor: "#F5C2C0",
+    marginBottom: 20,
+  },
+  reportButtonText: {
+    color: "#D32F2F",
+    fontWeight: "800",
     fontSize: 14,
   },
 });
