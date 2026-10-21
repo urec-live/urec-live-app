@@ -129,6 +129,19 @@ describe("Equipment tab", () => {
     expect(mockApi.listAll).toHaveBeenCalledTimes(1);
   });
 
+  it("marks a machine Out of order when staff take it out of service, from the live update", async () => {
+    render(<Equipment />);
+    await screen.findByText("Cable Station");
+    expect(screen.queryByText("Out of order")).toBeNull();
+
+    act(() => patchCachedMachine(cable("Out of Order")));
+
+    expect(screen.getByText("Out of order")).toBeTruthy();
+    // The update carries the machine's exercises, so the card keeps them
+    expect(screen.getByText("Back, Chest, Triceps")).toBeTruthy();
+    expect(mockApi.listAll).toHaveBeenCalledTimes(1);
+  });
+
   it("pull-to-refresh refetches the list and the floor plans once each", async () => {
     render(<Equipment />);
     await screen.findByText("Cable Station");

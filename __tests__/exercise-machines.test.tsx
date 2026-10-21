@@ -1,8 +1,8 @@
-import { render, screen } from "@testing-library/react-native";
+import { act, render, screen } from "@testing-library/react-native";
 import React from "react";
 
 import ExerciseMachines from "@/app/(tabs)/workout/equipment/[exercise]";
-import { clearCache } from "@/services/resourceCache";
+import { clearCache, patchCachedMachine } from "@/services/resourceCache";
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: jest.fn(), back: jest.fn() }),
@@ -42,6 +42,7 @@ jest.mock("@react-native-async-storage/async-storage", () =>
 
 describe("Machines for an exercise", () => {
   beforeEach(async () => {
+    jest.clearAllMocks();
     await clearCache();
   });
 
@@ -58,5 +59,20 @@ describe("Machines for an exercise", () => {
     expect(screen.getByText("Leg Press B")).not.toBeDisabled();
     // Only the available machine can be started
     expect(screen.getAllByText("Start")).toHaveLength(1);
+  });
+
+  it("disables a machine staff take out of service while the list is open", async () => {
+    mockGetByExercise.mockResolvedValue([
+      { id: 2, code: "LPB", name: "Leg Press B", status: "Available", exercise: "Leg Press" },
+    ]);
+    render(<ExerciseMachines />);
+    expect(await screen.findByText("Leg Press B")).not.toBeDisabled();
+
+    act(() => patchCachedMachine({ id: 2, code: "LPB", status: "Out of Order", exercise: "Leg Press" }));
+
+    expect(screen.getByText("Out of order")).toBeTruthy();
+    expect(screen.getByText("Leg Press B")).toBeDisabled();
+    expect(screen.queryByText("Start")).toBeNull();
+    expect(mockGetByExercise).toHaveBeenCalledTimes(1);
   });
 });
