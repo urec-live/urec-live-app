@@ -11,6 +11,8 @@ import {
     TextInput,
     View,
 } from "react-native";
+import { UNREACHABLE_COPY } from "@/constants/backendStatus";
+import { unreachableKind } from "@/services/backendStatus";
 import { useAuth } from "../../contexts/AuthContext";
 
 export default function LoginScreen() {
@@ -45,7 +47,9 @@ export default function LoginScreen() {
         Alert.alert("Success", "Registration successful!");
         router.replace("/(tabs)");
       } catch (error: any) {
-        Alert.alert("Registration Failed", error.response?.data?.message || "Failed to register. Please try again.");
+        const unreachable = unreachableKind(error);
+        if (unreachable) Alert.alert("Couldn't register", UNREACHABLE_COPY[unreachable].short);
+        else Alert.alert("Registration Failed", error.response?.data?.message || "Failed to register. Please try again.");
       } finally {
         setLoading(false);
       }
@@ -55,7 +59,10 @@ export default function LoginScreen() {
         await signIn(username, password);
         router.replace("/(tabs)");
       } catch (error: any) {
-        Alert.alert("Login Failed", error.response?.data?.message || "Invalid credentials. Please try again.");
+        // Without this, a server that can't be reached looked like a wrong password
+        const unreachable = unreachableKind(error);
+        if (unreachable) Alert.alert("Couldn't sign in", UNREACHABLE_COPY[unreachable].short);
+        else Alert.alert("Login Failed", error.response?.data?.message || "Invalid credentials. Please try again.");
       } finally {
         setLoading(false);
       }

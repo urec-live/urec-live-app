@@ -8,6 +8,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLiveMachineUpdates } from '@/hooks/useLiveMachineUpdates';
 import ActiveExerciseTracker from '../components/ActiveExerciseTracker';
+import BackendUnreachableNotice from '../components/BackendUnreachableNotice';
 import DailyWorkoutSummary from '../components/DailyWorkoutSummary';
 import HelpRequestBanner from '../components/HelpRequestBanner';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
@@ -26,6 +27,7 @@ function RootLayoutNav() {
 
   return (
     <>
+      <BackendUnreachableNotice />
       <HelpRequestBanner />
       <DailyWorkoutSummary />
       <Stack screenOptions={{ headerShown: false }}>

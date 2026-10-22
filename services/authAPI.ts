@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import { noteRequestAnswered, noteRequestError, noteRequestStarted, unreachableKind } from './backendStatus';
 import { API_BASE_URL } from './networkConfig';
 
 // Called when refresh token fails — register via setAuthFailureHandler
@@ -8,14 +9,17 @@ export const setAuthFailureHandler = (handler: () => void) => {
   authFailureHandler = handler;
 };
 
+const REQUEST_TIMEOUT_MS = 10000;
+
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: REQUEST_TIMEOUT_MS,
 });
 
 // Add token to requests
 api.interceptors.request.use(
   async (config) => {
+    noteRequestStarted(config);
     const token = await AsyncStorage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -25,21 +29,30 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Handle token refresh on 401
+// Tell the "can't reach UREC Live" notice about every answer and failure,
+// and handle token refresh on 401
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    noteRequestAnswered();
+    return response;
+  },
   async (error) => {
+    noteRequestError(error);
     const originalRequest = error.config;
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
-      
+      const refreshNumber = noteRequestStarted();
+
       try {
         const refreshToken = await AsyncStorage.getItem('refreshToken');
         if (refreshToken) {
-          const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-            refreshToken,
-          });
+          const response = await axios.post(
+            `${API_BASE_URL}/auth/refresh`,
+            { refreshToken },
+            { timeout: REQUEST_TIMEOUT_MS },
+          );
+          noteRequestAnswered();
 
           const { accessToken, refreshToken: newRefreshToken } = response.data;
           await AsyncStorage.setItem('accessToken', accessToken);
@@ -48,7 +61,13 @@ api.interceptors.response.use(
           originalRequest.headers.Authorization = `Bearer ${accessToken}`;
           return api(originalRequest);
         }
-      } catch {
+      } catch (refreshError) {
+        // The bare refresh call skips these interceptors, so report it here
+        noteRequestError(refreshError, refreshNumber);
+        if (unreachableKind(refreshError)) {
+          // The server couldn't be asked, so the refresh token may still be good: stay signed in
+          return Promise.reject(refreshError);
+        }
         // Refresh failed — clear tokens and notify AuthContext
         await AsyncStorage.removeItem('accessToken');
         await AsyncStorage.removeItem('refreshToken');
