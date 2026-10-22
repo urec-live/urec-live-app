@@ -21,7 +21,7 @@ npm install   # once, to pick up the new dev dependencies
 npm test
 ```
 
-You should see `Tests: 315 passed` across 34 files for the whole app suite; the equipment-issue files below account for 81 of them, and the rest cover the app's other features. `profile-settings.test.tsx` (4) checks that Profile → Settings keeps both My Equipment Reports and gamify's Public Profile switch working. The suite uses Jest with `jest-expo` and React Native Testing Library, which are dev dependencies only, configured in `package.json` under `"jest"`. Test files live in `__tests__/`, outside `app/`, so Expo Router doesn't treat them as screens. The backend and navigation are mocked, so no server is needed.
+You should see `Tests: 362 passed` across 38 files for the whole app suite; the equipment-issue files below account for 81 of them, and the rest cover the app's other features. `profile-settings.test.tsx` (4) checks that Profile → Settings keeps both My Equipment Reports and gamify's Public Profile switch working. The suite uses Jest with `jest-expo` and React Native Testing Library, which are dev dependencies only, configured in `package.json` under `"jest"`. Test files live in `__tests__/`, outside `app/`, so Expo Router doesn't treat them as screens. The backend and navigation are mocked, so no server is needed.
 
 | File | What it covers |
 |---|---|

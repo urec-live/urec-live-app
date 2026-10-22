@@ -1,6 +1,6 @@
 # Testing: minor fixes and speed-ups (mobile app)
 
-Branch `minor-fixes-and-speed-ups`, here and in `urec-live-backend`. It changes two things:
+Branch `minor-fixes-and-speed-ups`, here and in `urec-live-backend`. It changes three things; the third, a notice when the server can't be reached, has its own guide: `BACKEND_UNREACHABLE_TESTING.md`.
 
 **1. Screens show saved data first, and stop refetching what they already have.**
 - **Saved copies.** A screen shows what it loaded last time right away, also after an app restart, and refreshes in the background only when that copy is stale. It redraws only if the new data is different. A spinner shows only when nothing has been saved yet.
@@ -34,6 +34,11 @@ Branch `minor-fixes-and-speed-ups`, here and in `urec-live-backend`. It changes 
 - Cardio is timed rather than logged in sets, so a cardio session is saved once it has lasted a minute.
 - This applies to every way a session ends: **End Workout** in the tracker, **Stop** in the machine picker, and the watch. `utils/workoutSession.ts` holds the rule, and `WorkoutContext.checkOut()` applies it.
 
+**3. A notice when the app can't reach the server.**
+- A temporary bar above every screen says so and what to try next: check Wi-Fi or mobile data, then try again, or close and reopen the app.
+- Screens keep showing their saved copies meanwhile.
+- How it works and how to test it: `BACKEND_UNREACHABLE_TESTING.md`.
+
 Also fixed: `startRest()` now takes the watch's start time. That was `tsc`'s only two errors.
 
 **The backend branch** sends each machine's exercise names and muscle groups with it, and loads the machine list with one query. Without it, the app still works: the Equipment tab and machine page fetch each machine's exercises in the background, like before but without making you wait.
@@ -49,7 +54,7 @@ Also fixed: `startRest()` now takes the watch's start time. That was `tsc`'s onl
 npm test
 ```
 
-You should see `Tests: 315 passed` across 34 files: main's 212, 99 from this branch, and 4 for where it meets the equipment issue features. The backend, navigation and storage are mocked, so no server is needed.
+You should see `Tests: 362 passed` across 38 files: main's 212, 99 for saved data and empty sessions, 4 for where they meet the equipment issue features, and 47 for the unreachable notice (listed in `BACKEND_UNREACHABLE_TESTING.md`). The backend, navigation and storage are mocked, so no server is needed.
 
 | File | What it covers |
 |---|---|

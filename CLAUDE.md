@@ -59,6 +59,7 @@ components/                   # Reusable UI components
 ├── DailyWorkoutSummary.tsx
 ├── CallStaffCard.tsx          # Machine page "Call staff" card
 ├── HelpRequestBanner.tsx      # Help request status bar above every screen
+├── BackendUnreachableNotice.tsx # "Can't reach UREC Live" bar above every screen, sign-in included
 ├── DemoGif.tsx                # Inline GIF player (expo-image; Pause/Play on native)
 ├── DemoVideo.tsx              # Native: hands the clip to the in-app browser's video player
 ├── DemoVideo.web.tsx          # Web: inline <video> element
@@ -70,7 +71,8 @@ contexts/
 └── HelpRequestContext.tsx     # The open help request: loads on sign-in, polls every 5 s while open
 
 services/
-├── authAPI.ts                 # Axios client + JWT auto-refresh interceptor
+├── authAPI.ts                 # Axios client + JWT auto-refresh interceptor; reports every answer/failure to backendStatus
+├── backendStatus.ts           # Whether requests reach the backend (no answer, or 502/503/504 = unreachable)
 ├── machineAPI.ts              # 18 functions for equipment/exercise API calls
 ├── sessionAPI.ts              # postSession(), getMyHistory(), getMyStats()
 ├── helpRequestAPI.ts          # /api/help-requests calls and types
@@ -91,6 +93,7 @@ hooks/
 └── use-theme-color.ts
 
 constants/
+├── backendStatus.ts           # The unreachable notice's wording and timings
 └── theme.ts                   # Colors, spacing
 ```
 
@@ -137,6 +140,12 @@ constants/
 
 ### Profile
 - User info display, logout functionality
+
+### Backend unreachable notice
+- Every API request goes through the one Axios client in `services/authAPI.ts`. Its response interceptor reports to `services/backendStatus.ts` (the bare token-refresh call reports there itself). No answer at all (offline, server down, the 10 s timeout) or a 502/503/504 from Railway's proxy means unreachable; any other answer, error codes included, means reachable. A failure from a request that started before a newer answer is ignored (requests are numbered as they start, not timed, so clock changes don't matter). Nothing extra is sent to check. Chat's STOMP connection doesn't report.
+- The refresh has the same 10 s timeout as `api`. A refresh that can't reach the server keeps the member signed in; only a refresh the server refuses signs them out.
+- `components/BackendUnreachableNotice.tsx` (root layout, above the help banner) shows what to try next. It hides itself after 10 s; once it's gone (on its own, closed, or turned into "Connected again" for 3 s), failures don't bring it back for 30 s. **Try again** (`GET /api/auth/test`) pauses the 10 s until the check is done. Wording and timings: `constants/backendStatus.ts`. The `useSyncExternalStore` call needs its server snapshot, or the static web export renders every page empty.
+- Use `unreachableKind(error)` for other messages about failed requests, with `UNREACHABLE_COPY[kind].short` for alerts. The sign-in screen does, so a server that can't be reached no longer reads as wrong credentials.
 
 ### Equipment Issue Reporting
 - Members report a machine as "Not working" or "Damaged / hard to use" with a required 10–1000 character description (`app/report-issue.tsx`, `services/issueAPI.ts`)
@@ -249,7 +258,7 @@ npx expo start
 - Jest resolves the native files, so test a `.web.tsx` component by importing it directly (see `__tests__/DemoVideo.web.test.tsx`)
 - `npx tsc --noEmit` (no errors) and `npx expo lint`
 - After adding a screen, regenerate typed routes so `router.push` type-checks: run `CI=1 npx expo start --offline --port 8099` until `.expo/types/router.d.ts` mentions the route, then stop it
-- Help request testing guide: `HELP_REQUESTS_TESTING.md`; saved data, live updates and empty sessions: `MINOR_FIXES_TESTING.md`
+- Help request testing guide: `HELP_REQUESTS_TESTING.md`; saved data, live updates and empty sessions: `MINOR_FIXES_TESTING.md`; the unreachable notice: `BACKEND_UNREACHABLE_TESTING.md`
 
 ## Jira Project
 - Project key: UREC

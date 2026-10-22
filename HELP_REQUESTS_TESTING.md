@@ -25,7 +25,7 @@ npm install   # once, to pick up the Jest dev dependencies
 npm test
 ```
 
-You should see `Tests: 315 passed` across 34 files for the whole app suite; the help request checks below account for 130 of them, and the rest cover equipment issues and saved data. `machine-call-staff.test.tsx` also has 2 saved-data tests, listed in `MINOR_FIXES_TESTING.md`. The backend and navigation are mocked, so no server is needed.
+You should see `Tests: 362 passed` across 38 files for the whole app suite; the help request checks below account for 130 of them, and the rest cover equipment issues, saved data and the unreachable notice. `machine-call-staff.test.tsx` also has 2 saved-data tests, listed in `MINOR_FIXES_TESTING.md`. The backend and navigation are mocked, so no server is needed.
 
 | File | What it covers |
 |---|---|
