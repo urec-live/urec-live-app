@@ -1,3 +1,7 @@
+## Shared team workflow
+
+Read `TEAM_WORKFLOW.md` before making changes. It defines the shared macOS/iOS and Windows/Android setup, verification, and handoff rules for both developers and coding agents. Verify architecture notes against source and stay within the current task.
+
 # CLAUDE.md — UREC Live Mobile App
 
 ## Project Overview
