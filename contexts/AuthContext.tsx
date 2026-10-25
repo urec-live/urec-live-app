@@ -11,6 +11,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   signIn: (username: string, password: string) => Promise<void>;
+  signInWithGoogle: (idToken: string) => Promise<void>;
   signUp: (username: string, email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   restoreToken: () => Promise<void>;
@@ -81,6 +82,37 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const persistAuthenticatedUser = async (response: {
+    accessToken: string;
+    refreshToken: string;
+    username: string;
+    email: string;
+  }) => {
+    await AsyncStorage.setItem('accessToken', response.accessToken);
+    await AsyncStorage.setItem('refreshToken', response.refreshToken);
+
+    const userData: User = {
+      username: response.username,
+      email: response.email,
+    };
+    await AsyncStorage.setItem('user', JSON.stringify(userData));
+    setUser(userData);
+    setIsSignedIn(true);
+  };
+
+  const signInWithGoogle = async (idToken: string) => {
+    try {
+      setLoading(true);
+      const response = await authAPI.loginWithGoogle(idToken);
+      await persistAuthenticatedUser(response);
+    } catch (error) {
+      console.error('Google sign in error:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const signUp = async (username: string, email: string, password: string) => {
     try {
       setLoading(true);
@@ -130,6 +162,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         user,
         loading,
         signIn,
+        signInWithGoogle,
         signUp,
         signOut,
         restoreToken,
