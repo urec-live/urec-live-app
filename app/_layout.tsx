@@ -19,29 +19,40 @@ export const unstable_settings = {
 };
 
 function RootLayoutNav() {
-  const { user } = useAuth();
+  const { loading, user } = useAuth();
+
+  if (loading) {
+    return null;
+  }
 
   return (
     <>
-      <HelpRequestBanner />
-      <DailyWorkoutSummary />
+      {user ? <HelpRequestBanner /> : null}
+      {user ? <DailyWorkoutSummary /> : null}
       <Stack screenOptions={{ headerShown: false }}>
-        {user ? (
-          <>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="settings/plan" options={{ headerShown: false }} />
-            <Stack.Screen name="progress/[exercise]" options={{ headerShown: false }} />
-            <Stack.Screen name="users/[username]" options={{ headerShown: false }} />
-            <Stack.Screen name="chat/community" options={{ headerShown: false }} />
-            <Stack.Screen name="chat/dm/index" options={{ headerShown: false }} />
-            <Stack.Screen name="chat/dm/[username]" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-          </>
-        ) : (
+        <Stack.Protected guard={!user}>
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        )}
+        </Stack.Protected>
+        <Stack.Protected guard={!!user}>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="chat" options={{ headerShown: false }} />
+          <Stack.Screen name="chat/community" options={{ headerShown: false }} />
+          <Stack.Screen name="chat/dm/index" options={{ headerShown: false }} />
+          <Stack.Screen name="chat/dm/[username]" options={{ headerShown: false }} />
+          <Stack.Screen name="demo-player" options={{ headerShown: false }} />
+          <Stack.Screen name="help-request" options={{ headerShown: false }} />
+          <Stack.Screen name="machine/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="my-reports" options={{ headerShown: false }} />
+          <Stack.Screen name="progress/[exercise]" options={{ headerShown: false }} />
+          <Stack.Screen name="report-issue" options={{ headerShown: false }} />
+          <Stack.Screen name="scan" options={{ headerShown: false }} />
+          <Stack.Screen name="settings/plan" options={{ headerShown: false }} />
+          <Stack.Screen name="summary" options={{ headerShown: false }} />
+          <Stack.Screen name="users/[username]" options={{ headerShown: false }} />
+          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        </Stack.Protected>
       </Stack>
-      <ActiveExerciseTracker />
+      {user ? <ActiveExerciseTracker /> : null}
     </>
   );
 }
