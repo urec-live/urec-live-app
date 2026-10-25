@@ -13,6 +13,11 @@ const api = axios.create({
   timeout: 10000,
 });
 
+// Render's free web service can take several minutes to resume after going idle.
+// Keep the Google credential exchange alive while the backend wakes up; ordinary
+// API calls retain the shorter timeout above.
+export const GOOGLE_AUTH_TIMEOUT_MS = 210000;
+
 // Add token to requests
 api.interceptors.request.use(
   async (config) => {
@@ -80,7 +85,7 @@ export const authAPI = {
   },
 
   loginWithGoogle: async (idToken: string) => {
-    const response = await api.post('/auth/google', { idToken });
+    const response = await api.post('/auth/google', { idToken }, { timeout: GOOGLE_AUTH_TIMEOUT_MS });
     return response.data;
   },
 

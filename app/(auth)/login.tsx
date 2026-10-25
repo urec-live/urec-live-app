@@ -23,6 +23,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const { signIn, signInWithGoogle, signUp } = useAuth();
   const [googleError, setGoogleError] = useState<string | null>(null);
+  const [googlePending, setGooglePending] = useState(false);
   const router = useRouter();
 
   const handleAuth = async () => {
@@ -67,12 +68,18 @@ export default function LoginScreen() {
   const handleGoogleToken = async (idToken: string) => {
     try {
       setLoading(true);
+      setGooglePending(true);
       setGoogleError(null);
       await signInWithGoogle(idToken);
       router.replace("/(tabs)");
     } catch (error: any) {
-      setGoogleError(error.response?.data?.error || "Google sign-in failed. Please try again.");
+      setGoogleError(
+        error.code === "ECONNABORTED"
+          ? "The server took too long to wake up. Please try Google sign-in again."
+          : error.response?.data?.error || "Google sign-in failed. Please try again.",
+      );
     } finally {
+      setGooglePending(false);
       setLoading(false);
     }
   };
@@ -150,6 +157,9 @@ export default function LoginScreen() {
               <View style={styles.dividerLine} />
             </View>
             <GoogleSignInButton disabled={loading} onToken={handleGoogleToken} />
+            {googlePending ? (
+              <Text style={styles.statusText}>Signing you in. The server may take a few minutes to wake up.</Text>
+            ) : null}
             {googleError ? <Text style={styles.errorText}>{googleError}</Text> : null}
           </>
         )}
@@ -232,6 +242,13 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: "#b42318",
+    fontSize: 13,
+    marginTop: 8,
+    textAlign: "center",
+    width: "90%",
+  },
+  statusText: {
+    color: "#667085",
     fontSize: 13,
     marginTop: 8,
     textAlign: "center",
