@@ -58,7 +58,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signIn = async (username: string, password: string) => {
     try {
-      setLoading(true);
       const response = await authAPI.login(username, password);
 
       // Store tokens
@@ -77,8 +76,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (error) {
       console.error('Sign in error:', error);
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -102,20 +99,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signInWithGoogle = async (idToken: string) => {
     try {
-      setLoading(true);
       const response = await authAPI.loginWithGoogle(idToken);
       await persistAuthenticatedUser(response);
     } catch (error) {
       console.error('Google sign in error:', error);
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
 
   const signUp = async (username: string, email: string, password: string) => {
     try {
-      setLoading(true);
       const response = await authAPI.register(username, email, password);
 
       // Store tokens
@@ -134,8 +127,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (error) {
       console.error('Sign up error:', error);
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
 
