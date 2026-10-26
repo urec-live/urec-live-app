@@ -54,7 +54,7 @@ Also fixed: `startRest()` now takes the watch's start time. That was `tsc`'s onl
 npm test
 ```
 
-You should see `Tests: 362 passed` across 38 files: main's 212, 99 for saved data and empty sessions, 4 for where they meet the equipment issue features, and 47 for the unreachable notice (listed in `BACKEND_UNREACHABLE_TESTING.md`). The backend, navigation and storage are mocked, so no server is needed.
+You should see `Tests: 364 passed` across 38 files: main's 212, 99 for saved data and empty sessions, 4 for where they meet the equipment issue features, and 49 for the unreachable notice (listed in `BACKEND_UNREACHABLE_TESTING.md`). The backend, navigation and storage are mocked, so no server is needed.
 
 | File | What it covers |
 |---|---|

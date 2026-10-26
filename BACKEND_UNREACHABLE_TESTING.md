@@ -26,7 +26,7 @@ When the app can't reach the backend, a grey bar appears above every screen, the
 - If the server answers, the bar says Connected again. If not, it says **Still can't reach UREC Live** and stays another 10 seconds.
 - Closing the bar during a check keeps it closed. Once the grey bar has gone for any reason, a check still running no longer changes it.
 
-**Sign-in.** When the server can't be reached, signing in or registering used to say "Invalid credentials" or "Failed to register". Now the alert says **Couldn't sign in** (or **Couldn't register**): "Can't reach UREC Live right now. Check your Wi-Fi or mobile data, then try again." A real wrong password still says Invalid credentials.
+**Sign-in.** When the server can't be reached, signing in or registering used to say "Invalid credentials" or "Failed to register". Now the alert says **Couldn't sign in** (or **Couldn't register**): "Can't reach UREC Live right now. Check your Wi-Fi or mobile data, then try again." A real wrong password still says Invalid credentials. Google sign-in (from main) shows the same short message under its button, except when the server is just slow to wake up: that keeps its own "The server took too long to wake up" message.
 
 **Signed out by a dropped connection.** When a request got a 401 and the token refresh then couldn't reach the server, the member used to be signed out. Now they stay signed in and see the bar. A refresh the server refuses still signs them out. The refresh also gets the same 10 s timeout as every other request; before, it had none, so a hung refresh left its screen waiting indefinitely.
 
@@ -42,13 +42,13 @@ The wording and timings are in `constants/backendStatus.ts`.
 npm test
 ```
 
-You should see `Tests: 362 passed` across 38 files: the 47 below, plus the branch's other tests (see `MINOR_FIXES_TESTING.md`). Everything is mocked, so no server is needed.
+You should see `Tests: 364 passed` across 38 files: the 49 below, plus the branch's other tests (see `MINOR_FIXES_TESTING.md`). Everything is mocked, so no server is needed.
 
 | File | What it covers |
 |---|---|
 | `backendStatus.test.ts` (24) | **What counts:** no answer and timeouts are network problems; 502/503/504 mean the server is down; 400, 401, 403, 404, 409 and 500 are answers; cancelled requests and other errors are ignored. **The status:** records the kind and time; an error answer clears it; listeners hear only real changes. **Through the real shared client** (fake network adapter): a request with no answer and a 502 both report an outage; the next answer clears it; a slow request failing after a newer answer is ignored; failures after the phone's clock is set back are still reported. **Token refresh:** if it can't reach the server, the member stays signed in and the outage is reported; it has the same 10 s timeout; one failing after a newer answer is ignored, and the member stays signed in; if the server refuses it, they're signed out as before |
 | `BackendUnreachableNotice.test.tsx` (18) | **Showing:** nothing while requests are answered; the title, steps, **Try again** and the screen-reader announcement; the server-down wording for a 503. **Timing:** gone after 10 s even while a poll keeps failing; a change of wording doesn't extend it; quiet for 30 s after going, then back; closed, it stays away for 30 s while answers and failures take turns; a clock set back ends the quiet time. **Recovery:** Connected again for 3 s, only if the bar was up; failing again drops the green bar rather than flipping back. **Try again:** Checking…, a second tap sends nothing, then Connected again; the bar stays up however long the check takes; a poll answered during a hanging check shows Connected again for its 3 s, and the check's late failure can't bring the warning back; still failing says so and keeps it up another 10 s; closed during the check, it stays closed; an error answer counts as connected. **Web:** a server snapshot for the static web build |
-| `login-unreachable.test.tsx` (4) | Login with no answer says Couldn't sign in, not Invalid credentials; a 401 still says Invalid credentials; registering during a 503 says the server isn't responding; a refused registration keeps main's message |
+| `login-unreachable.test.tsx` (6) | Login with no answer says Couldn't sign in, not Invalid credentials; Google sign-in with no answer shows the short message, but a slow wake-up keeps Google's own message; a 401 still says Invalid credentials; registering during a 503 says the server isn't responding; a refused registration keeps main's message |
 | `notice-saved-data.test.tsx` (1) | The real Equipment tab, saved data and shared client together: with the server out of reach, the saved machines stay on screen and the bar appears |
 
 **Mutation-checked.** Each of these 28 temporary breaks makes at least one test fail:

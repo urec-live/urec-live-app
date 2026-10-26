@@ -1,6 +1,6 @@
 # Testing: "Call staff" help requests (mobile app)
 
-This branch adds:
+The checked-out app includes:
 - a **Call staff** card on the machine page, and a **Call staff** pill in the workout tracker's header
 - the help request screen (`app/help-request.tsx`):
   - a stepper: Request received → On the way / Too busy → Helped
@@ -16,16 +16,16 @@ This branch adds:
 
 **No dev-build rebuild is needed.** The demo player only uses `expo-image` and `expo-web-browser`, which are already in the dev build. `npx expo start --dev-client --android` picks everything up.
 
-The full walkthrough across backend, admin and app is in `urec-live-backend/HELP_REQUESTS_TESTING.md`.
+The full walkthrough across backend, admin, and app is in [`../backend/HELP_REQUESTS_TESTING.md`](../backend/HELP_REQUESTS_TESTING.md).
 
 ## Automated tests
 
 ```bash
-npm install   # once, to pick up the Jest dev dependencies
+npm ci
 npm test
 ```
 
-You should see `Tests: 362 passed` across 38 files for the whole app suite; the help request checks below account for 130 of them, and the rest cover equipment issues, saved data and the unreachable notice. `machine-call-staff.test.tsx` also has 2 saved-data tests, listed in `MINOR_FIXES_TESTING.md`. The backend and navigation are mocked, so no server is needed.
+The backend and navigation are mocked, so no server is needed. Report the current runner result rather than relying on a historical test count.
 
 | File | What it covers |
 |---|---|
@@ -59,8 +59,8 @@ You should see `Tests: 362 passed` across 38 files for the whole app suite; the 
 Type check and lint:
 
 ```bash
-npx tsc --noEmit   # no errors (startRest() now takes the watch's start time)
-npx expo lint      # the files this branch adds or changes are clean
+npx tsc --noEmit
+npm run lint
 ```
 
 After adding a screen, the typed routes in `.expo/types/router.d.ts` need regenerating, or `tsc` rejects `router.push("/demo-player")`. Run `CI=1 npx expo start --offline --port 8099` until the file mentions the route, then stop it.

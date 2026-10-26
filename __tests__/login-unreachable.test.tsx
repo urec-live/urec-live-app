@@ -11,7 +11,21 @@ jest.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: () => null }));
 
 const mockSignIn = jest.fn();
 const mockSignUp = jest.fn();
-jest.mock("../contexts/AuthContext", () => ({ useAuth: () => ({ signIn: mockSignIn, signUp: mockSignUp }) }));
+const mockSignInWithGoogle = jest.fn();
+jest.mock("../contexts/AuthContext", () => ({
+  useAuth: () => ({ signIn: mockSignIn, signUp: mockSignUp, signInWithGoogle: mockSignInWithGoogle }),
+}));
+// Stands in for Google's button: hands the screen an ID token when pressed
+jest.mock("../components/GoogleSignInButton", () => {
+  const { Pressable, Text } = jest.requireActual("react-native");
+  return {
+    GoogleSignInButton: ({ onToken }: { onToken: (idToken: string) => void }) => (
+      <Pressable onPress={() => onToken("google-id-token")}>
+        <Text>Continue with Google</Text>
+      </Pressable>
+    ),
+  };
+});
 
 const networkError = () => new AxiosError("Network Error", "ERR_NETWORK", { headers: new AxiosHeaders() });
 const answered = (status: number, data: unknown = {}) =>
@@ -72,6 +86,27 @@ describe("Login when the server can't be reached", () => {
     await waitFor(() =>
       expect(alert).toHaveBeenCalledWith("Couldn't register", "UREC Live isn't responding right now. Try again in a minute."),
     );
+  });
+
+  it("says UREC Live can't be reached when Google sign-in gets no answer", async () => {
+    mockSignInWithGoogle.mockRejectedValue(networkError());
+    render(<LoginScreen />);
+
+    fireEvent.press(screen.getByText("Continue with Google"));
+
+    expect(await screen.findByText(SHORT)).toBeTruthy();
+    expect(alert).not.toHaveBeenCalled();
+  });
+
+  it("keeps Google sign-in's own message when the server is slow to wake up", async () => {
+    mockSignInWithGoogle.mockRejectedValue(
+      new AxiosError("timeout of 210000ms exceeded", "ECONNABORTED", { headers: new AxiosHeaders() }),
+    );
+    render(<LoginScreen />);
+
+    fireEvent.press(screen.getByText("Continue with Google"));
+
+    expect(await screen.findByText("The server took too long to wake up. Please try Google sign-in again.")).toBeTruthy();
   });
 
   it("keeps the usual message when the server refuses the registration", async () => {

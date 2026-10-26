@@ -14,6 +14,7 @@ import {
 import { UNREACHABLE_COPY } from "@/constants/backendStatus";
 import { unreachableKind } from "@/services/backendStatus";
 import { useAuth } from "../../contexts/AuthContext";
+import { GoogleSignInButton } from "../../components/GoogleSignInButton";
 
 export default function LoginScreen() {
   const [isRegistering, setIsRegistering] = useState(false);
@@ -22,7 +23,9 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const { signIn, signUp } = useAuth();
+  const { signIn, signInWithGoogle, signUp } = useAuth();
+  const [googleError, setGoogleError] = useState<string | null>(null);
+  const [googlePending, setGooglePending] = useState(false);
   const router = useRouter();
 
   const handleAuth = async () => {
@@ -66,6 +69,28 @@ export default function LoginScreen() {
       } finally {
         setLoading(false);
       }
+    }
+  };
+
+  const handleGoogleToken = async (idToken: string) => {
+    try {
+      setLoading(true);
+      setGooglePending(true);
+      setGoogleError(null);
+      await signInWithGoogle(idToken);
+      router.replace("/(tabs)");
+    } catch (error: any) {
+      const unreachable = unreachableKind(error);
+      setGoogleError(
+        error.code === "ECONNABORTED"
+          ? "The server took too long to wake up. Please try Google sign-in again."
+          : unreachable
+            ? UNREACHABLE_COPY[unreachable].short
+            : error.response?.data?.error || "Google sign-in failed. Please try again.",
+      );
+    } finally {
+      setGooglePending(false);
+      setLoading(false);
     }
   };
 
@@ -134,6 +159,21 @@ export default function LoginScreen() {
           )}
         </Pressable>
 
+        {!isRegistering && (
+          <>
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+            <GoogleSignInButton disabled={loading} onToken={handleGoogleToken} />
+            {googlePending ? (
+              <Text style={styles.statusText}>Signing you in. The server may take a few minutes to wake up.</Text>
+            ) : null}
+            {googleError ? <Text style={styles.errorText}>{googleError}</Text> : null}
+          </>
+        )}
+
         <Pressable onPress={() => {
           setIsRegistering(!isRegistering);
           setUsername("");
@@ -194,6 +234,35 @@ const styles = StyleSheet.create({
   toggleText: {
     color: "#4CAF50",
     marginTop: 20,
+  },
+  dividerRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    marginVertical: 20,
+    width: "90%",
+  },
+  dividerLine: {
+    backgroundColor: "#d0d5dd",
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    color: "#667085",
+    marginHorizontal: 12,
+  },
+  errorText: {
+    color: "#b42318",
+    fontSize: 13,
+    marginTop: 8,
+    textAlign: "center",
+    width: "90%",
+  },
+  statusText: {
+    color: "#667085",
+    fontSize: 13,
+    marginTop: 8,
+    textAlign: "center",
+    width: "90%",
   },
 });
 
