@@ -21,16 +21,16 @@ npm install   # once, to pick up the new dev dependencies
 npm test
 ```
 
-You should see `Tests: 212 passed` for the whole app suite; the equipment-issue files below account for 78 of them, and the rest cover the app's other features. `profile-settings.test.tsx` (4) checks that Profile → Settings keeps both My Equipment Reports and gamify's Public Profile switch working. The suite uses Jest with `jest-expo` and React Native Testing Library, which are dev dependencies only, configured in `package.json` under `"jest"`. Test files live in `__tests__/`, outside `app/`, so Expo Router doesn't treat them as screens. The backend and navigation are mocked, so no server is needed.
+You should see `Tests: 364 passed` across 38 files for the whole app suite; the equipment-issue files below account for 81 of them, and the rest cover the app's other features. `profile-settings.test.tsx` (4) checks that Profile → Settings keeps both My Equipment Reports and gamify's Public Profile switch working. The suite uses Jest with `jest-expo` and React Native Testing Library, which are dev dependencies only, configured in `package.json` under `"jest"`. Test files live in `__tests__/`, outside `app/`, so Expo Router doesn't treat them as screens. The backend and navigation are mocked, so no server is needed.
 
 | File | What it covers |
 |---|---|
 | `report-issue.test.tsx` (12) | Loads the machine by id (machine page) or by QR code (scanner/tracker); a way back if it can't be found; Send stays disabled until a type is chosen and the description has 10+ characters once trimmed; the character counter; the trimmed payload; the success screen points to My Reports for withdrawing a report sent by mistake; the 409 "already reported" message with its link; retrying after a network error keeps the text |
 | `my-reports.test.tsx` (15) | Each card shows machine, problem type, description and status; each status's member-facing label; the progress strip fills up to the current step. **Withdrawing:** only offered on open reports; asks first, and Keep report changes nothing; the card then shows Withdrawn; failures are explained and the report stays open; a report closed in the meantime is reloaded. Also:  empty and error states; pull-to-refresh picks up new statuses |
 | `MachineIssueBanner.test.tsx` (7) | Hidden when nothing is open; headline per severity; status text per status; count for multiple reports; announced as an alert |
-| `machine-details.test.tsx` (6) | Banner shown or hidden; the page still works if the summary fails to load; Report a problem opens the form; **an out-of-order machine shows a notice instead of check-in**, while in-service machines keep it |
+| `machine-details.test.tsx` (8) | Banner shown or hidden; the page still works if the summary fails to load; Report a problem opens the form; **an out-of-order machine shows a notice instead of check-in**, while in-service machines keep it; the notice also appears live while the page is open, and straight away from the Equipment tab's saved copy |
 | `scan.test.tsx` (4) | Report a Problem after a valid scan, without checking in; not offered for a non-machine QR code; **a 409 explains the machine is out of order**; a server error never shows `[object Object]` |
-| `equipment-list.test.tsx` (1), `exercise-machines.test.tsx` (1) | **Out of order** labels in the Equipment tab; in a workout's machine list the card is disabled and has no Start button |
+| `equipment-list.test.tsx` (1), `exercise-machines.test.tsx` (2) | **Out of order** labels in the Equipment tab; in a workout's machine list the card is disabled and has no Start button, including when it goes out of order while the list is open |
 | `machineStatus.test.tsx` (11) | `isOutOfOrder` in any letter case; floor-map marker colour and legend entry |
 | `ActiveExerciseTracker.test.tsx` (3) | The Report button passes the machine's QR code; the tracker hides on the form and keeps entered reps/weights |
 | `issueErrors.test.ts` (13), `issueAPI.test.ts` (5) | Error-message mapping per status code and for network errors, for filing and for withdrawing; endpoints and payloads |
@@ -38,7 +38,7 @@ You should see `Tests: 212 passed` for the whole app suite; the equipment-issue 
 Type check and lint:
 
 ```bash
-npx tsc --noEmit   # one existing error in app/settings/plan.tsx predates this branch
+npx tsc --noEmit   # no errors
 npx expo lint
 ```
 
@@ -57,7 +57,7 @@ npx expo lint
    - Its machine page shows "Staff have taken this machine out of service…" instead of **Scan QR to Check In**.
    - In a workout's machine list it's grayed out with no **Start** button.
    - Scanning it and tapping **Confirm Check-In** shows "This machine is out of order…".
-10. If you were already checked in when it was marked out of order, **End Workout** still ends and saves the workout.
+10. If you were already checked in when it was marked out of order, **End Workout** still ends the workout. It's saved if you logged a set; with none, it first asks **End without saving?** (see `MINOR_FIXES_TESTING.md`).
 11. When the admin resolves the machine's last open report, it shows Available again.
 12. Try it on web (`npx expo start`, then `w`). Errors and success are shown on the page rather than in pop-up alerts, so they work in the browser too.
 13. **Withdraw a report filed by mistake:** in My Equipment Reports, tap **Reported by mistake? Withdraw** on an open report.

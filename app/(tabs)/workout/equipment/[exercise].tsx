@@ -1,12 +1,16 @@
+import { useAuth } from "@/contexts/AuthContext";
 import { useWorkout } from "@/contexts/WorkoutContext";
-import { FloorPlanResponse, machineAPI, MachineDto } from "@/services/machineAPI";
-import { sessionAPI, SessionResponse } from "@/services/sessionAPI";
+import { useCachedResource } from "@/hooks/useCachedResource";
+import { cacheKeys, fetchFloorPlans, fetchHistory, STALE_MS } from "@/services/cachedResources";
+import { machineAPI, MachineDto } from "@/services/machineAPI";
+import { patchCachedMachine } from "@/services/resourceCache";
 import { WatchService } from "@/services/watchService";
-import websocketService from "@/services/websocketService";
+import { confirmAsync } from "@/utils/confirm";
+import { emptySessionPrompt, sessionWillBeSaved } from "@/utils/workoutSession";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -32,22 +36,44 @@ export default function EquipmentAvailability() {
   const router = useRouter();
 
   const { checkIn, checkOut, currentSession } = useWorkout();
+  const { user } = useAuth();
 
-  const [machines, setMachines] = useState<MachineDto[]>([]);
+  // Usually saved already by the muscle group screen; live updates keep the statuses current
+  const {
+    data: machinesData,
+    loading,
+    refreshing,
+    refresh,
+  } = useCachedResource<MachineDto[]>(cacheKeys.machinesFor(name), () => machineAPI.getByExercise(name), {
+    live: true,
+    staleTime: STALE_MS.live,
+  });
+  const machines = machinesData ?? [];
+  // Only for Locate, so it loads on its own and never holds up the list
+  const { data: floorsData } = useCachedResource(cacheKeys.floorPlans, fetchFloorPlans, {
+    live: true,
+    staleTime: STALE_MS.live,
+  });
+  const floors = floorsData ?? [];
+
   const [selected, setSelected] = useState<MachineDto | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [busyCode, setBusyCode] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [isResting, setIsResting] = useState(false);
 
-  // History modal state
+  // History modal state: the History tab's saved sessions, fetched only if the modal opens first
   const [historyVisible, setHistoryVisible] = useState(false);
-  const [recentSessions, setRecentSessions] = useState<SessionResponse[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
+  const { data: history, loading: historyLoading } = useCachedResource(
+    historyVisible && user ? cacheKeys.user(user.username, "history") : null,
+    fetchHistory,
+    { staleTime: STALE_MS.user },
+  );
+  const recentSessions = useMemo(
+    () => (history ?? []).filter((s) => s.exerciseName?.toLowerCase() === name.toLowerCase()).slice(0, 3),
+    [history, name],
+  );
 
   // Map modal state
-  const [floors, setFloors] = useState<FloorPlanResponse[]>([]);
   const [mapModalVisible, setMapModalVisible] = useState(false);
   const [locateTarget, setLocateTarget] = useState<MachineDto | null>(null);
 
@@ -61,60 +87,12 @@ export default function EquipmentAvailability() {
   const [currentWeight, setCurrentWeight] = useState("");
   
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        const ms = await machineAPI.getByExercise(name);
-        setMachines(ms);
-
-        // Fetch floor plans for locate feature
-        try {
-          const fp = await machineAPI.getFloorPlans();
-          setFloors(fp);
-        } catch {
-          try {
-            const fp = await machineAPI.getFloorPlan();
-            setFloors([fp]);
-          } catch {
-            // no floor plans
-          }
-        }
-      } catch {
-        setMachines([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-
-    const unsubscribe = websocketService.subscribe((updatedMachine) => {
-      if (updatedMachine.exercise?.toLowerCase() === name.toLowerCase()) {
-        setMachines(prev =>
-          prev.map(m => m.id === updatedMachine.id ? updatedMachine : m)
-        );
-      }
-    });
-
-    return () => { unsubscribe(); };
-  }, [name]);
-
-  const refresh = async () => {
-    try {
-      setRefreshing(true);
-      const ms = await machineAPI.getByExercise(name);
-      setMachines(ms);
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
   const handleCheckIn = async (code: string) => {
     setBusyCode(code);
     try {
-      await machineAPI.checkIn(code);
+      // The response is the machine, now in use: shown everywhere without refetching the list
+      patchCachedMachine(await machineAPI.checkIn(code));
       checkIn(name, code, muscleGroup);
-      await refresh();
       setModalVisible(false);
     } finally {
       setBusyCode(null);
@@ -124,9 +102,8 @@ export default function EquipmentAvailability() {
   const handleCheckOut = async (code: string, details?: { setDetails?: { reps?: number; weightLbs?: number }[] }) => {
     setBusyCode(code);
     try {
-      await machineAPI.checkOut(code);
+      patchCachedMachine(await machineAPI.checkOut(code));
       checkOut(details);
-      await refresh();
       router.back();
     } finally {
       setBusyCode(null);
@@ -162,7 +139,6 @@ export default function EquipmentAvailability() {
   // Restored handleStopConfirm to use the original set logic
   const handleStopConfirm = async () => {
     if (!pendingStopCode) return;
-    WatchService.syncWorkout(name, pendingStopCode, 'END');
     const numSets = setsInput ? parseInt(setsInput, 10) : 0;
     const setDetails = numSets > 0
       ? Array.from({ length: numSets }, () => ({
@@ -170,27 +146,22 @@ export default function EquipmentAvailability() {
           weightLbs: weightInput ? parseFloat(weightInput) : undefined,
         }))
       : undefined;
+    // Nothing logged: it won't count as a workout, so check first
+    if (
+      currentSession &&
+      !sessionWillBeSaved(currentSession, Date.now(), setDetails) &&
+      !(await confirmAsync(emptySessionPrompt(currentSession)))
+    ) {
+      return;
+    }
+    WatchService.syncWorkout(name, pendingStopCode, 'END');
     
     // setWorkoutDetailsVisible(false);
     await handleCheckOut(pendingStopCode, setDetails ? { setDetails } : undefined);
     setPendingStopCode(null);
   };
 
-  const openHistory = async () => {
-    setHistoryVisible(true);
-    setHistoryLoading(true);
-    try {
-      const page = await sessionAPI.getMyHistory(0, 50);
-      const filtered = page.content
-        .filter((s) => s.exerciseName?.toLowerCase() === name.toLowerCase())
-        .slice(0, 3);
-      setRecentSessions(filtered);
-    } catch {
-      setRecentSessions([]);
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
+  const openHistory = () => setHistoryVisible(true);
 
   const openModal = (machine: MachineDto) => {
     const userHoldingOther = currentSession && currentSession.machineId !== machine.code;

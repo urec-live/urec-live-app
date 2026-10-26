@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react-native";
 import React from "react";
 
 import EquipmentScreen from "@/app/(tabs)/equipment";
+import { clearCache } from "@/services/resourceCache";
 
 jest.mock("expo-router", () => ({ useRouter: () => ({ push: jest.fn() }) }));
 
@@ -21,6 +22,9 @@ jest.mock("@/services/websocketService", () => ({
 }));
 jest.mock("@/components/MapModal", () => () => null);
 jest.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: () => null }));
+jest.mock("@react-native-async-storage/async-storage", () =>
+  jest.requireActual("@react-native-async-storage/async-storage/jest/async-storage-mock"),
+);
 
 const machine = (id: number, name: string, status: string) => ({
   id,
@@ -31,6 +35,10 @@ const machine = (id: number, name: string, status: string) => ({
 });
 
 describe("Equipment tab", () => {
+  beforeEach(async () => {
+    await clearCache();
+  });
+
   it("labels each machine Available, In Use or Out of order", async () => {
     mockListAll.mockResolvedValue([
       machine(1, "Leg Press A", "Available"),

@@ -2,6 +2,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { sessionAPI, CreateSessionRequest } from "@/services/sessionAPI";
 import { useAuth } from "@/contexts/AuthContext";
+import { cacheKeys } from "@/services/cachedResources";
+import { invalidateCached } from "@/services/resourceCache";
+import { sessionWillBeSaved } from "@/utils/workoutSession";
 
 export interface SetDetail {
   reps?: number;
@@ -30,8 +33,13 @@ interface WorkoutContextType {
   todayWorkouts: WorkoutSession[];
   workoutHistory: DailyWorkout[];
   checkIn: (exerciseName: string, machineId: string, muscleGroup: string) => void;
-  checkOut: (details?: { setDetails?: SetDetail[] }) => void;
-  startRest: () => void;
+  /**
+   * Ends the current session. Returns whether it was saved as a workout: an empty one isn't
+   * (see sessionWillBeSaved). Freeing the machine is up to the caller.
+   */
+  checkOut: (details?: { setDetails?: SetDetail[] }) => boolean;
+  /** Starts the rest timer, from `time` if given (e.g. when the watch started it) */
+  startRest: (time?: number) => void;
   endRest: () => void;
   resetWorkout: () => void;
   flushPendingSessions: () => Promise<void>;
@@ -44,7 +52,7 @@ const WorkoutContext = createContext<WorkoutContextType | undefined>(undefined);
 export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }: { children: React.ReactNode }) => {
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, user } = useAuth();
   const hasFlushed = useRef(false);
 
   const [currentSession, setCurrentSession] = useState<WorkoutSession | null>(null);
@@ -90,7 +98,7 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const persistSession = async (session: WorkoutSession, endTime: number) => {
+  const persistSession = async (session: WorkoutSession, endTime: number, username?: string) => {
     const durationSeconds = Math.floor((endTime - session.startTime) / 1000);
     const request: CreateSessionRequest = {
       exerciseName: session.exerciseName,
@@ -115,6 +123,8 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
         // Silently ignore storage errors
       }
     }
+    // Stats, history and the league now include it (or will, once the queue is sent)
+    if (username) invalidateCached(cacheKeys.userPrefix(username));
   };
 
   const checkIn = (exerciseName: string, machineId: string, muscleGroup: string) => {
@@ -125,19 +135,23 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const checkOut = (details?: { setDetails?: SetDetail[] }) => {
-    if (currentSession) {
-      const endTime = Date.now();
-      const completedSession: WorkoutSession = { ...currentSession, endTime, ...details };
+    if (!currentSession) return false;
+    const endTime = Date.now();
+    const completedSession: WorkoutSession = { ...currentSession, endTime, ...details };
 
-      setTodayWorkouts((prev) => [...prev, completedSession]);
-      updateWorkoutHistory(completedSession);
-      setCurrentSession(null);
-      setExerciseStartTime(null);
-      setRestStartTime(null);
+    setCurrentSession(null);
+    setExerciseStartTime(null);
+    setRestStartTime(null);
 
-      // Persist to backend (fire and forget — queues on failure)
-      persistSession(completedSession, endTime);
-    }
+    // Nothing logged: the session just ends, without counting as a workout anywhere
+    if (!sessionWillBeSaved(completedSession, endTime, completedSession.setDetails)) return false;
+
+    setTodayWorkouts((prev) => [...prev, completedSession]);
+    updateWorkoutHistory(completedSession);
+
+    // Persist to backend (fire and forget — queues on failure)
+    persistSession(completedSession, endTime, user?.username);
+    return true;
   };
 
   const updateWorkoutHistory = (session: WorkoutSession) => {
@@ -162,7 +176,7 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   };
 
-  const startRest = () => setRestStartTime(Date.now());
+  const startRest = (time?: number) => setRestStartTime(time ?? Date.now());
   const endRest = () => setRestStartTime(null);
 
   const resetWorkout = () => {

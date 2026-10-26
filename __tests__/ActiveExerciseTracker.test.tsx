@@ -31,6 +31,9 @@ jest.mock("@/contexts/HelpRequestContext", () => ({
 }));
 
 jest.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: () => null }));
+jest.mock("@react-native-async-storage/async-storage", () =>
+  jest.requireActual("@react-native-async-storage/async-storage/jest/async-storage-mock"),
+);
 
 describe("ActiveExerciseTracker", () => {
   beforeEach(() => {

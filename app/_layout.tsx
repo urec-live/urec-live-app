@@ -6,7 +6,9 @@ import 'react-native-reanimated';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useLiveMachineUpdates } from '@/hooks/useLiveMachineUpdates';
 import ActiveExerciseTracker from '../components/ActiveExerciseTracker';
+import BackendUnreachableNotice from '../components/BackendUnreachableNotice';
 import DailyWorkoutSummary from '../components/DailyWorkoutSummary';
 import HelpRequestBanner from '../components/HelpRequestBanner';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
@@ -20,6 +22,8 @@ export const unstable_settings = {
 
 function RootLayoutNav() {
   const { loading, user } = useAuth();
+  // Machine statuses stay live on every screen, not just the Equipment tab (before the early return: it's a hook)
+  useLiveMachineUpdates(!!user);
 
   if (loading) {
     return null;
@@ -27,6 +31,8 @@ function RootLayoutNav() {
 
   return (
     <>
+      {/* Signed in or not: the sign-in screen needs it too */}
+      <BackendUnreachableNotice />
       {user ? <HelpRequestBanner /> : null}
       {user ? <DailyWorkoutSummary /> : null}
       <Stack screenOptions={{ headerShown: false }}>

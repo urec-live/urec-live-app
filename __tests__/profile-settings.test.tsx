@@ -3,6 +3,7 @@ import React from "react";
 import { Switch, Text } from "react-native";
 
 import Profile from "@/app/(tabs)/profile";
+import { clearCache } from "@/services/resourceCache";
 
 const mockRouter = { push: jest.fn(), replace: jest.fn() };
 jest.mock("expo-router", () => {
@@ -18,6 +19,9 @@ jest.mock("expo-linear-gradient", () => ({
   LinearGradient: ({ children }: { children: React.ReactNode }) => children,
 }));
 jest.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: () => null }));
+jest.mock("@react-native-async-storage/async-storage", () =>
+  jest.requireActual("@react-native-async-storage/async-storage/jest/async-storage-mock"),
+);
 
 jest.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ signOut: jest.fn(), user: { username: "jdoe", email: "jdoe@example.com" } }),
@@ -51,7 +55,11 @@ jest.mock("@/services/socialAPI", () => ({
  * this branch's My Equipment Reports link both sit under Workout Plan.
  */
 describe("Profile settings", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    // Saved profile data would otherwise carry over from the previous test
+    await clearCache();
+  });
 
   async function renderProfile(): Promise<void> {
     render(<Profile />);

@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react-native";
+import { act, render, screen } from "@testing-library/react-native";
 import React from "react";
 
 import ExerciseMachines from "@/app/(tabs)/workout/equipment/[exercise]";
+import { clearCache, patchCachedMachine } from "@/services/resourceCache";
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: jest.fn(), back: jest.fn() }),
@@ -11,6 +12,8 @@ jest.mock("expo-router", () => ({
 jest.mock("@/contexts/WorkoutContext", () => ({
   useWorkout: () => ({ checkIn: jest.fn(), checkOut: jest.fn(), currentSession: null }),
 }));
+// The picker keys the member's saved history by username
+jest.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { username: "sam" } }) }));
 
 const mockGetByExercise = jest.fn();
 jest.mock("@/services/machineAPI", () => ({
@@ -33,8 +36,16 @@ jest.mock("expo-linear-gradient", () => ({
   LinearGradient: ({ children }: { children?: unknown }) => children,
 }));
 jest.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: () => null }));
+jest.mock("@react-native-async-storage/async-storage", () =>
+  jest.requireActual("@react-native-async-storage/async-storage/jest/async-storage-mock"),
+);
 
 describe("Machines for an exercise", () => {
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    await clearCache();
+  });
+
   it("shows out-of-order machines as unavailable, with no Start button", async () => {
     mockGetByExercise.mockResolvedValue([
       { id: 1, code: "LPA", name: "Leg Press A", status: "Out of Order", exercise: "Leg Press" },
@@ -48,5 +59,20 @@ describe("Machines for an exercise", () => {
     expect(screen.getByText("Leg Press B")).not.toBeDisabled();
     // Only the available machine can be started
     expect(screen.getAllByText("Start")).toHaveLength(1);
+  });
+
+  it("disables a machine staff take out of service while the list is open", async () => {
+    mockGetByExercise.mockResolvedValue([
+      { id: 2, code: "LPB", name: "Leg Press B", status: "Available", exercise: "Leg Press" },
+    ]);
+    render(<ExerciseMachines />);
+    expect(await screen.findByText("Leg Press B")).not.toBeDisabled();
+
+    act(() => patchCachedMachine({ id: 2, code: "LPB", status: "Out of Order", exercise: "Leg Press" }));
+
+    expect(screen.getByText("Out of order")).toBeTruthy();
+    expect(screen.getByText("Leg Press B")).toBeDisabled();
+    expect(screen.queryByText("Start")).toBeNull();
+    expect(mockGetByExercise).toHaveBeenCalledTimes(1);
   });
 });
