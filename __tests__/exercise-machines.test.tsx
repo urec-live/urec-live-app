@@ -1,10 +1,11 @@
-import { render, screen } from "@testing-library/react-native";
+import { fireEvent, render, screen } from "@testing-library/react-native";
 import React from "react";
 
 import ExerciseMachines from "@/app/(tabs)/workout/equipment/[exercise]";
 
+const mockRouter = { push: jest.fn(), back: jest.fn(), replace: jest.fn(), dismissTo: jest.fn(), canGoBack: jest.fn() };
 jest.mock("expo-router", () => ({
-  useRouter: () => ({ push: jest.fn(), back: jest.fn() }),
+  useRouter: () => mockRouter,
   useLocalSearchParams: () => ({ exercise: "Leg Press", muscle: "Legs" }),
 }));
 
@@ -35,6 +36,33 @@ jest.mock("expo-linear-gradient", () => ({
 jest.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: () => null }));
 
 describe("Machines for an exercise", () => {
+  beforeEach(() => { jest.clearAllMocks(); mockGetByExercise.mockResolvedValue([]); });
+
+  it("returns to the previous screen when navigation history exists", async () => {
+    mockRouter.canGoBack.mockReturnValue(true);
+    render(<ExerciseMachines />);
+    await screen.findByText("Leg Press Machines");
+    fireEvent.press(screen.getByLabelText("Go back"));
+    expect(mockRouter.back).toHaveBeenCalledTimes(1);
+    expect(mockRouter.replace).not.toHaveBeenCalled();
+  });
+
+  it("returns to the workout library when opened without history", async () => {
+    mockRouter.canGoBack.mockReturnValue(false);
+    render(<ExerciseMachines />);
+    await screen.findByText("Leg Press Machines");
+    fireEvent.press(screen.getByLabelText("Go back"));
+    expect(mockRouter.replace).toHaveBeenCalledWith("/workout");
+    expect(mockRouter.back).not.toHaveBeenCalled();
+  });
+
+  it("offers a direct route to the workout library", async () => {
+    render(<ExerciseMachines />);
+    await screen.findByText("Leg Press Machines");
+    fireEvent.press(screen.getByLabelText("Go to workout library"));
+    expect(mockRouter.dismissTo).toHaveBeenCalledWith("/workout");
+  });
+
   it("shows out-of-order machines as unavailable, with no Start button", async () => {
     mockGetByExercise.mockResolvedValue([
       { id: 1, code: "LPA", name: "Leg Press A", status: "Out of Order", exercise: "Leg Press" },

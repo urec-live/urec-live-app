@@ -1,5 +1,7 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { Stack, usePathname, Link } from 'expo-router';
+import { Text, View } from 'react-native';
+import { GymProvider, useGym } from '@/contexts/GymContext';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
 import 'react-native-reanimated';
@@ -20,16 +22,23 @@ export const unstable_settings = {
 
 function RootLayoutNav() {
   const { loading, user } = useAuth();
+  const { gym, loading: gymLoading } = useGym();
+  const pathname = usePathname();
+  const gymRoute = ['/equipment','/scan','/machine/','/report-issue','/workout/equipment/'].some(prefix => pathname.startsWith(prefix));
 
   if (loading) {
     return null;
   }
 
+  if (user && gymRoute && (gymLoading || !gym)) return <View style={{ padding: 28, gap: 16 }}>
+    <Text>{gymLoading ? 'Loading your gym…' : 'Connect to a gym to use equipment, maps and QR check-in.'}</Text>
+    <Link href="/settings/gym">Connect to a gym in Settings</Link><Link href="/workout">Browse all exercises</Link>
+  </View>;
   return (
     <>
       {user ? <HelpRequestBanner /> : null}
       {user ? <DailyWorkoutSummary /> : null}
-      <Stack screenOptions={{ headerShown: false }}>
+      <Stack key={gym?.id ?? "independent"} screenOptions={{ headerShown: false }}>
         <Stack.Protected guard={!user}>
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         </Stack.Protected>
@@ -46,6 +55,9 @@ function RootLayoutNav() {
           <Stack.Screen name="progress/[exercise]" options={{ headerShown: false }} />
           <Stack.Screen name="report-issue" options={{ headerShown: false }} />
           <Stack.Screen name="scan" options={{ headerShown: false }} />
+          <Stack.Screen name="settings/gym" options={{ headerShown: false }} />
+          <Stack.Screen name="exercise/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="exercise/custom" options={{ headerShown: false }} />
           <Stack.Screen name="settings/plan" options={{ headerShown: false }} />
           <Stack.Screen name="summary" options={{ headerShown: false }} />
           <Stack.Screen name="users/[username]" options={{ headerShown: false }} />
@@ -64,7 +76,7 @@ export default function RootLayout() {
     <AuthProvider>
       <WorkoutProvider>
         <PlanProvider>
-          <HelpRequestProvider>
+          <HelpRequestProvider><GymProvider>
             <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
               <SafeAreaProvider>
                 <SafeAreaView style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
@@ -73,7 +85,7 @@ export default function RootLayout() {
                 </SafeAreaView>
               </SafeAreaProvider>
             </ThemeProvider>
-          </HelpRequestProvider>
+          </GymProvider></HelpRequestProvider>
         </PlanProvider>
       </WorkoutProvider>
     </AuthProvider>

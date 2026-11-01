@@ -3,11 +3,16 @@ import api from './authAPI';
 export interface SetDetail {
   reps?: number;
   weightLbs?: number;
+  durationSeconds?: number;
+  distanceMeters?: number;
 }
 
 export interface CreateSessionRequest {
   exerciseName: string;
-  machineCode: string;
+  machineCode?: string;
+  exerciseId?: number;
+  clientSessionId?: string;
+  ownerUsername?: string;
   muscleGroup: string;
   startTime: number;       // epoch milliseconds
   endTime: number;         // epoch milliseconds
@@ -20,11 +25,14 @@ export interface SessionSetDetail {
   setNumber: number;
   reps: number | null;
   weightLbs: number | null;
+  durationSeconds?: number | null;
+  distanceMeters?: number | null;
 }
 
 export interface SessionResponse {
   id: number;
   exerciseName: string | null;
+  exerciseId?: number | null;
   machineName: string | null;
   machineCode: string | null;
   muscleGroup: string;
