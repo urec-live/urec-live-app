@@ -101,7 +101,7 @@ export default function DailyWorkoutSummary() {
                         size={16}
                         color="#ccc"
                       />
-                      <Text style={styles.detailText}>{workout.machineId}</Text>
+                      <Text style={styles.detailText}>{workout.machineCode}</Text>
                     </View>
                     <View style={styles.detailRow}>
                       <MaterialCommunityIcons
@@ -130,10 +130,10 @@ export default function DailyWorkoutSummary() {
                           <View key={si} style={styles.setTableRow}>
                             <Text style={[styles.setCell, styles.setCellLabel]}>{si + 1}</Text>
                             <Text style={[styles.setCell, styles.setCellValue]}>
-                              {s.reps !== undefined ? `${s.reps}` : "—"}
+                              {s.durationSeconds !== undefined ? `${s.durationSeconds} sec` : s.reps !== undefined ? `${s.reps} reps` : "—"}
                             </Text>
                             <Text style={[styles.setCell, styles.setCellValue]}>
-                              {s.weightLbs !== undefined ? `${s.weightLbs} lbs` : "—"}
+                              {s.distanceMeters !== undefined ? `${s.distanceMeters} m` : s.weightLbs !== undefined ? `${s.weightLbs} lbs` : "—"}
                             </Text>
                           </View>
                         ))}

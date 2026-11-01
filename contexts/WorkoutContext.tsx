@@ -1,16 +1,27 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { sessionAPI, CreateSessionRequest } from "@/services/sessionAPI";
 import { useAuth } from "@/contexts/AuthContext";
 
 export interface SetDetail {
   reps?: number;
   weightLbs?: number;
+  durationSeconds?: number;
+  distanceMeters?: number;
 }
 
 export interface WorkoutSession {
   exerciseName: string;
-  machineId: string;
+  machineCode?: string;
+  exerciseId?: number;
+  clientSessionId?: string;
+  loggingMode?: import("@/services/exerciseAPI").LoggingMode;
   muscleGroup: string;
   startTime: number;
   endTime?: number;
@@ -29,9 +40,16 @@ interface WorkoutContextType {
   restStartTime: number | null;
   todayWorkouts: WorkoutSession[];
   workoutHistory: DailyWorkout[];
-  checkIn: (exerciseName: string, machineId: string, muscleGroup: string) => void;
-  checkOut: (details?: { setDetails?: SetDetail[] }) => void;
-  startRest: () => void;
+  checkIn: (
+    exerciseName: string,
+    machineCode: string | undefined,
+    muscleGroup: string,
+    exerciseId?: number,
+    loggingMode?: import("@/services/exerciseAPI").LoggingMode,
+  ) => void;
+  checkOut: (details?: { setDetails?: SetDetail[] }) => Promise<void>;
+  updateSets: (sets: SetDetail[]) => void;
+  startRest: (time?: number) => void;
   endRest: () => void;
   resetWorkout: () => void;
   flushPendingSessions: () => Promise<void>;
@@ -43,100 +61,165 @@ const WorkoutContext = createContext<WorkoutContextType | undefined>(undefined);
 
 export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
-}: { children: React.ReactNode }) => {
-  const { isSignedIn } = useAuth();
-  const hasFlushed = useRef(false);
+}: {
+  children: React.ReactNode;
+}) => {
+  const { isSignedIn, user } = useAuth();
+  const accountRef = useRef(user?.username);
+  accountRef.current = user?.username;
+  const finishing = useRef(false);
+  const queueWork = useRef<Promise<void>>(Promise.resolve());
+  const serialize = (task: () => Promise<void>) => {
+    const next = queueWork.current.then(task, task);
+    queueWork.current = next.catch(() => {});
+    return next;
+  };
 
-  const [currentSession, setCurrentSession] = useState<WorkoutSession | null>(null);
-  const [exerciseStartTime, setExerciseStartTime] = useState<number | null>(null);
+  const [currentSession, setCurrentSession] = useState<WorkoutSession | null>(
+    null,
+  );
+  const [exerciseStartTime, setExerciseStartTime] = useState<number | null>(
+    null,
+  );
   const [restStartTime, setRestStartTime] = useState<number | null>(null);
   const [todayWorkouts, setTodayWorkouts] = useState<WorkoutSession[]>([]);
   const [workoutHistory, setWorkoutHistory] = useState<DailyWorkout[]>([]);
 
-  // Flush pending sessions only after the user is confirmed authenticated
-  useEffect(() => {
-    if (isSignedIn && !hasFlushed.current) {
-      hasFlushed.current = true;
-      flushPendingSessions();
-    }
-    if (!isSignedIn) {
-      hasFlushed.current = false;
-    }
-  }, [isSignedIn]);
-
+  // All queue operations are serialized; unknown legacy queues are never assigned to a user.
   const flushPendingSessions = async () => {
-    try {
-      const raw = await AsyncStorage.getItem(PENDING_SESSIONS_KEY);
-      if (!raw) return;
-      const pending: CreateSessionRequest[] = JSON.parse(raw);
-      if (!pending.length) return;
-
+    const account = user?.username;
+    if (!account) return;
+    await serialize(async () => {
+      const key = `${PENDING_SESSIONS_KEY}:${account}`;
+      const pending: CreateSessionRequest[] = JSON.parse(
+        (await AsyncStorage.getItem(key)) || "[]",
+      );
       const failed: CreateSessionRequest[] = [];
-      for (const session of pending) {
+      for (const request of pending) {
+        if (accountRef.current !== account) {
+          failed.push(request);
+          continue;
+        }
         try {
-          await sessionAPI.postSession(session);
+          await sessionAPI.postSession(request);
         } catch {
-          failed.push(session);
+          failed.push(request);
         }
       }
-
-      if (failed.length > 0) {
-        await AsyncStorage.setItem(PENDING_SESSIONS_KEY, JSON.stringify(failed));
-      } else {
-        await AsyncStorage.removeItem(PENDING_SESSIONS_KEY);
-      }
-    } catch {
-      // Silently ignore flush errors
-    }
+      await AsyncStorage.setItem(key, JSON.stringify(failed));
+    });
   };
+  useEffect(() => {
+    setCurrentSession(null);
+    setExerciseStartTime(null);
+    setRestStartTime(null);
+    setTodayWorkouts([]);
+    setWorkoutHistory([]);
+    if (isSignedIn && user) {
+      const account = user.username;
+      void AsyncStorage.getItem(`active_workout:${account}`)
+        .then((raw) => {
+          if (raw && accountRef.current === account) {
+            const draft: WorkoutSession = JSON.parse(raw);
+            setCurrentSession(draft);
+            setExerciseStartTime(draft.startTime);
+          }
+        })
+        .catch(() => {});
+      void flushPendingSessions().catch(() => {});
+    }
+    const timer = setInterval(() => {
+      if (isSignedIn) void flushPendingSessions().catch(() => {});
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [isSignedIn, user?.username]);
 
   const persistSession = async (session: WorkoutSession, endTime: number) => {
-    const durationSeconds = Math.floor((endTime - session.startTime) / 1000);
+    const account = user?.username;
+    if (!account) throw new Error("Sign in to save");
     const request: CreateSessionRequest = {
+      exerciseId: session.exerciseId,
+      clientSessionId: session.clientSessionId,
+      ownerUsername: account,
       exerciseName: session.exerciseName,
-      machineCode: session.machineId,
+      machineCode: session.machineCode,
       muscleGroup: session.muscleGroup,
       startTime: session.startTime,
       endTime,
-      durationSeconds,
+      durationSeconds: Math.floor((endTime - session.startTime) / 1000),
       setDetails: session.setDetails,
     };
-
-    try {
-      await sessionAPI.postSession(request);
-    } catch {
-      // Queue for retry when back online
-      try {
-        const raw = await AsyncStorage.getItem(PENDING_SESSIONS_KEY);
-        const pending: CreateSessionRequest[] = raw ? JSON.parse(raw) : [];
-        pending.push(request);
-        await AsyncStorage.setItem(PENDING_SESSIONS_KEY, JSON.stringify(pending));
-      } catch {
-        // Silently ignore storage errors
-      }
-    }
+    await serialize(async () => {
+      const key = `${PENDING_SESSIONS_KEY}:${account}`;
+      const pending: CreateSessionRequest[] = JSON.parse(
+        (await AsyncStorage.getItem(key)) || "[]",
+      );
+      pending.push(request);
+      await AsyncStorage.setItem(key, JSON.stringify(pending));
+    });
+    void flushPendingSessions().catch(() => {});
   };
 
-  const checkIn = (exerciseName: string, machineId: string, muscleGroup: string) => {
+  const checkIn = (
+    exerciseName: string,
+    machineCode: string | undefined,
+    muscleGroup: string,
+    exerciseId?: number,
+    loggingMode?: import("@/services/exerciseAPI").LoggingMode,
+  ) => {
+    if (currentSession) return;
     const now = Date.now();
-    const session: WorkoutSession = { exerciseName, machineId, muscleGroup, startTime: now };
+    const session: WorkoutSession = {
+      exerciseName,
+      machineCode,
+      muscleGroup,
+      exerciseId,
+      loggingMode,
+      clientSessionId: `${now}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`,
+      startTime: now,
+    };
     setCurrentSession(session);
+    if (user)
+      void AsyncStorage.setItem(
+        `active_workout:${user.username}`,
+        JSON.stringify(session),
+      ).catch(() => {});
     setExerciseStartTime(now);
   };
 
-  const checkOut = (details?: { setDetails?: SetDetail[] }) => {
-    if (currentSession) {
-      const endTime = Date.now();
-      const completedSession: WorkoutSession = { ...currentSession, endTime, ...details };
+  const updateSets = (setDetails: SetDetail[]) => {
+    if (!currentSession || !user) return;
+    const draft = { ...currentSession, setDetails };
+    setCurrentSession(draft);
+    void AsyncStorage.setItem(
+      `active_workout:${user.username}`,
+      JSON.stringify(draft),
+    ).catch(() => {});
+  };
+  const checkOut = async (details?: { setDetails?: SetDetail[] }) => {
+    if (currentSession && !finishing.current) {
+      finishing.current = true;
+      const account = user?.username;
+      try {
+        const endTime = Date.now();
+        const completedSession: WorkoutSession = {
+          ...currentSession,
+          endTime,
+          ...details,
+        };
 
-      setTodayWorkouts((prev) => [...prev, completedSession]);
-      updateWorkoutHistory(completedSession);
-      setCurrentSession(null);
-      setExerciseStartTime(null);
-      setRestStartTime(null);
-
-      // Persist to backend (fire and forget — queues on failure)
-      persistSession(completedSession, endTime);
+        await persistSession(completedSession, endTime);
+        if (user)
+          await AsyncStorage.removeItem(`active_workout:${user.username}`);
+        if (accountRef.current !== account) return;
+        setTodayWorkouts((prev) => [...prev, completedSession]);
+        updateWorkoutHistory(completedSession);
+        setCurrentSession(null);
+        setExerciseStartTime(null);
+        setRestStartTime(null);
+      } finally {
+        finishing.current = false;
+      }
     }
   };
 
@@ -149,20 +232,26 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
       if (existingDayIndex >= 0) {
         const updated = [...prev];
         updated[existingDayIndex].sessions.push(session);
-        if (!updated[existingDayIndex].muscleGroups.includes(session.muscleGroup)) {
+        if (
+          !updated[existingDayIndex].muscleGroups.includes(session.muscleGroup)
+        ) {
           updated[existingDayIndex].muscleGroups.push(session.muscleGroup);
         }
         return updated;
       } else {
         return [
           ...prev,
-          { date: today, sessions: [session], muscleGroups: [session.muscleGroup] },
+          {
+            date: today,
+            sessions: [session],
+            muscleGroups: [session.muscleGroup],
+          },
         ];
       }
     });
   };
 
-  const startRest = () => setRestStartTime(Date.now());
+  const startRest = (time?: number) => setRestStartTime(time ?? Date.now());
   const endRest = () => setRestStartTime(null);
 
   const resetWorkout = () => {
@@ -171,8 +260,7 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
     setRestStartTime(null);
     setTodayWorkouts([]);
     setWorkoutHistory([]);
-    // Clear the offline queue so stale sessions don't replay after re-login
-    AsyncStorage.removeItem(PENDING_SESSIONS_KEY).catch(() => {});
+    // Account-scoped completed sessions survive sign-out for their original owner.
   };
 
   const value: WorkoutContextType = {
@@ -183,6 +271,7 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
     workoutHistory,
     checkIn,
     checkOut,
+    updateSets,
     startRest,
     endRest,
     resetWorkout,

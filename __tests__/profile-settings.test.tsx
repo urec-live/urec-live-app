@@ -4,6 +4,8 @@ import { Switch, Text } from "react-native";
 
 import Profile from "@/app/(tabs)/profile";
 
+jest.mock("@/contexts/GymContext", () => ({ useGym: () => ({ gym: null }) }));
+
 const mockRouter = { push: jest.fn(), replace: jest.fn() };
 jest.mock("expo-router", () => {
   const { useEffect } = jest.requireActual("react");

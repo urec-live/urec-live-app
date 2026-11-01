@@ -3,17 +3,35 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Tabs } from "expo-router";
-import { StyleSheet } from "react-native";
+import { Platform, StyleSheet } from "react-native";
+
+import { useGym } from "@/contexts/GymContext";
 
 export default function TabLayout() {
+  const { gym } = useGym();
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: "transparent", borderTopWidth: 0, elevation: 0 },
-        tabBarBackground: () => <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />,
-        tabBarActiveTintColor: "#00ff88",
-        tabBarInactiveTintColor: "#777",
+        tabBarStyle: {
+          backgroundColor: "#FFFFFF",
+          borderTopWidth: 1,
+          borderTopColor: "#E1E7E3",
+          elevation: 0,
+          paddingTop: 7,
+          height: Platform.OS === "web" ? 64 : undefined,
+          paddingBottom: Platform.OS === "web" ? 8 : undefined,
+        },
+        tabBarBackground: () => (
+          <BlurView
+            intensity={60}
+            tint="light"
+            style={StyleSheet.absoluteFill}
+          />
+        ),
+        tabBarActiveTintColor: "#216C50",
+        tabBarInactiveTintColor: "#839088",
+        tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
       }}
     >
       <Tabs.Screen
@@ -36,6 +54,7 @@ export default function TabLayout() {
         name="equipment"
         options={{
           title: "Equipment",
+          href: gym ? "/equipment" : null,
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="dumbbell" size={size} color={color} />
           ),
@@ -64,7 +83,11 @@ export default function TabLayout() {
         options={{
           title: "Profile",
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="account-circle" size={size} color={color} />
+            <MaterialCommunityIcons
+              name="account-circle"
+              size={size}
+              color={color}
+            />
           ),
         }}
       />

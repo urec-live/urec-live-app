@@ -11,7 +11,7 @@ jest.mock("expo-router", () => ({
   usePathname: () => mockPathname,
 }));
 
-let mockSession: { exerciseName: string; machineId: string; muscleGroup: string; startTime: number } | null = null;
+let mockSession: { exerciseName: string; machineCode: string; muscleGroup: string; startTime: number } | null = null;
 
 jest.mock("@/contexts/WorkoutContext", () => ({
   useWorkout: () => ({
@@ -38,7 +38,7 @@ describe("ActiveExerciseTracker", () => {
     jest.clearAllMocks();
     mockPathname = "/workout";
     // machineId holds the machine's QR code (see WorkoutContext)
-    mockSession = { exerciseName: "Leg Press", machineId: "LP01", muscleGroup: "Legs", startTime: Date.now() };
+    mockSession = { exerciseName: "Leg Press", machineCode: "LP01", muscleGroup: "Legs", startTime: Date.now() };
   });
 
   afterEach(() => {

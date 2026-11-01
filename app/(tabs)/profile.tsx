@@ -1,3 +1,4 @@
+import { useGym } from "@/contexts/GymContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -44,6 +45,7 @@ function formatVolume(lbs: number): string {
 }
 
 export default function Profile() {
+  const { gym } = useGym();
   const { signOut, user } = useAuth();
   const { resetWorkout } = useWorkout();
   const { activePlan } = usePlan();
@@ -260,6 +262,10 @@ export default function Profile() {
         {/* Settings */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Settings</Text>
+          <Pressable style={styles.settingsRow} onPress={() => router.push('/settings/gym')}>
+            <View><Text style={styles.settingsLabel}>{gym ? 'My gym' : 'Connect to a gym'}</Text>
+            <Text style={styles.settingsDescription}>{gym?.name || 'Optional · Train anywhere without a gym connection'}</Text></View>
+          </Pressable>
           <Pressable
             style={styles.settingsRow}
             onPress={() => router.push("/settings/plan" as any)}

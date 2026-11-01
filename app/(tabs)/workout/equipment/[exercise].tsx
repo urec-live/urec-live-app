@@ -26,12 +26,17 @@ import MapModal from "../../../../components/MapModal";
 import { isOutOfOrder, OUT_OF_ORDER_COLOR, OUT_OF_ORDER_ICON } from "@/constants/machineStatus";
 
 export default function EquipmentAvailability() {
-  const { exercise, muscle } = useLocalSearchParams();
+  const { exercise, muscle, exerciseId, loggingMode } = useLocalSearchParams();
   const name = (exercise as string) || "Bench Press";
   const muscleGroup = (muscle as string) || "Chest";
   const router = useRouter();
 
   const { checkIn, checkOut, currentSession } = useWorkout();
+
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace("/workout");
+  };
 
   const [machines, setMachines] = useState<MachineDto[]>([]);
   const [selected, setSelected] = useState<MachineDto | null>(null);
@@ -113,7 +118,7 @@ export default function EquipmentAvailability() {
     setBusyCode(code);
     try {
       await machineAPI.checkIn(code);
-      checkIn(name, code, muscleGroup);
+      checkIn(name, code, muscleGroup, exerciseId ? Number(exerciseId) : undefined, loggingMode as import("@/services/exerciseAPI").LoggingMode | undefined);
       await refresh();
       setModalVisible(false);
     } finally {
@@ -125,7 +130,7 @@ export default function EquipmentAvailability() {
     setBusyCode(code);
     try {
       await machineAPI.checkOut(code);
-      checkOut(details);
+      await checkOut(details);
       await refresh();
       router.back();
     } finally {
@@ -146,7 +151,7 @@ export default function EquipmentAvailability() {
     if (!currentSession) return;
     const newRestState = !isResting;
     setIsResting(newRestState);
-    WatchService.syncWorkout(name, currentSession.machineId, newRestState ? 'PAUSE' : 'START');
+    WatchService.syncWorkout(name, currentSession.machineCode || "", newRestState ? 'PAUSE' : 'START');
   };
 
 
@@ -193,7 +198,7 @@ export default function EquipmentAvailability() {
   };
 
   const openModal = (machine: MachineDto) => {
-    const userHoldingOther = currentSession && currentSession.machineId !== machine.code;
+    const userHoldingOther = currentSession && currentSession.machineCode !== machine.code;
     const statusUpper = machine.status.toUpperCase();
     const lockedByOther = !machine.heldByMe && (statusUpper === "IN_USE" || statusUpper === "IN USE");
     if (lockedByOther || userHoldingOther) return;
@@ -209,6 +214,16 @@ export default function EquipmentAvailability() {
   return (
     <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
       <View style={styles.container}>
+        <View style={styles.navigationRow}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={goBack} style={styles.navigationButton}>
+            <MaterialCommunityIcons name="arrow-left" size={20} color="#216C50" />
+            <Text style={styles.navigationText}>Back</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Go to workout library" onPress={() => router.dismissTo("/workout")} style={styles.navigationButton}>
+            <MaterialCommunityIcons name="view-grid-outline" size={18} color="#216C50" />
+            <Text style={styles.navigationText}>Workout library</Text>
+          </Pressable>
+        </View>
         <View style={styles.titleRow}>
           <Text style={styles.title}>{name} Machines</Text>
           <TouchableOpacity style={styles.historyButton} onPress={openHistory}>
@@ -244,7 +259,7 @@ export default function EquipmentAvailability() {
               />
             }
             renderItem={({ item }) => {
-              const isMyEngagement = currentSession?.machineId === item.code;
+              const isMyEngagement = currentSession?.machineCode === item.code;
               const userHoldingOther = currentSession && !isMyEngagement;
               const statusUpper = item.status.toUpperCase();
               const outOfOrder = isOutOfOrder(item.status);
@@ -369,7 +384,7 @@ export default function EquipmentAvailability() {
                 </Pressable>
               )}
 
-              {selected?.status === "AVAILABLE" && currentSession && currentSession.machineId !== selected?.code && (
+              {selected?.status === "AVAILABLE" && currentSession && currentSession.machineCode !== selected?.code && (
                 <Text style={styles.modalSubtitle}>
                   You are already using equipment.
                 </Text>
@@ -558,7 +573,10 @@ export default function EquipmentAvailability() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, paddingTop: 60 },
+  container: { flex: 1, padding: 20, paddingTop: 20 },
+  navigationRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16 },
+  navigationButton: { flexDirection: "row", alignItems: "center", gap: 7, minHeight: 44, paddingHorizontal: 8, paddingVertical: 10 },
+  navigationText: { fontSize: 14, fontWeight: "600", color: "#216C50" },
   titleRow: {
     flexDirection: "row",
     alignItems: "center",
