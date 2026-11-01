@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import React from "react";
 
 import MachineDetails from "@/app/machine/[id]";
+import { cacheKeys } from "@/services/cachedResources";
 import { clearCache, patchCachedMachine, writeCached } from "@/services/resourceCache";
 
 const mockRouter = { push: jest.fn(), back: jest.fn() };
@@ -113,7 +114,7 @@ describe("Machine details screen", () => {
   });
 
   it("shows the notice straight away when the Equipment tab's saved list has the machine out of order", async () => {
-    writeCached("machines", [
+    writeCached(cacheKeys.machines, [
       { id: 12, code: "LP01", name: "Leg Press", status: "Out of Order", exercise: "Leg Press", exerciseNames: ["Leg Press"], muscleGroups: ["Quads"] },
     ]);
     mockGetMachineById.mockReturnValue(new Promise(() => {}));

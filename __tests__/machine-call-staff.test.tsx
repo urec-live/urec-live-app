@@ -5,6 +5,7 @@ import React from "react";
 import MachineDetails from "@/app/machine/[id]";
 import CallStaffCard from "@/components/CallStaffCard";
 import type { HelpRequest } from "@/services/helpRequestAPI";
+import { cacheKeys } from "@/services/cachedResources";
 import { clearCache, writeCached } from "@/services/resourceCache";
 
 const mockRouter = { back: jest.fn(), replace: jest.fn(), push: jest.fn() };
@@ -172,7 +173,7 @@ describe("Machine page", () => {
   });
 
   it("shows the machine from the Equipment tab's saved list while its own request runs", async () => {
-    writeCached("machines", [
+    writeCached(cacheKeys.machines, [
       { id: 12, code: "LP01", name: "Leg Press", status: "In Use", exercise: "Leg Press", exerciseNames: ["Leg Press"], muscleGroups: ["Quads"] },
     ]);
     mockGetMachineById.mockReturnValue(new Promise(() => {}));

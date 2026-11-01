@@ -65,6 +65,8 @@ jest.mock("@/contexts/WorkoutContext", () => ({
   useWorkout: () => ({ resetWorkout: jest.fn(), workoutHistory: mockLocalHistory, flushPendingSessions: mockFlushPending }),
 }));
 jest.mock("@/contexts/PlanContext", () => ({ usePlan: () => ({ activePlan: null }) }));
+// Profile shows the member's gym (from main's gym settings); none here
+jest.mock("@/contexts/GymContext", () => ({ useGym: () => ({ gym: null }) }));
 
 // Profile's cards print what they were given; the charts and calendars render nothing
 jest.mock("@/components/StatsCard", () => function MockStatsCard({ label, value }: { label: string; value: unknown }) {
@@ -262,7 +264,7 @@ describe("History", () => {
       {
         date: "2026-10-15",
         muscleGroups: ["Back"],
-        sessions: [{ exerciseName: "Lat Pulldown", machineId: "LP001", muscleGroup: "Back", startTime: 0, endTime: 60_000 }],
+        sessions: [{ exerciseName: "Lat Pulldown", machineCode: "LP001", muscleGroup: "Back", startTime: 0, endTime: 60_000 }],
       },
     ];
 

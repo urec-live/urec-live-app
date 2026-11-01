@@ -38,14 +38,17 @@ async function start(exerciseName: string, muscleGroup: string) {
   act(() => workout.checkIn(exerciseName, "BP001", muscleGroup));
 }
 
-function end(details?: Parameters<ReturnType<typeof useWorkout>["checkOut"]>[0], afterSeconds = 120) {
+async function end(details?: Parameters<ReturnType<typeof useWorkout>["checkOut"]>[0], afterSeconds = 120) {
   now = T0 + afterSeconds * 1000;
   let saved = false;
-  act(() => {
-    saved = workout.checkOut(details);
+  await act(async () => {
+    saved = await workout.checkOut(details);
   });
   return saved;
 }
+
+// Completed sessions wait here (per account) until the backend takes them
+const queued = async () => JSON.parse((await AsyncStorage.getItem("pending_workout_sessions:sam")) ?? "[]");
 
 beforeEach(async () => {
   jest.clearAllMocks();
@@ -64,7 +67,7 @@ describe("ending a session", () => {
   it("saves a session with sets: today's list, history and the backend", async () => {
     await start("Bench Press", "Chest");
 
-    expect(end({ setDetails: [{ reps: 10, weightLbs: 135 }] })).toBe(true);
+    expect(await end({ setDetails: [{ reps: 10, weightLbs: 135 }] })).toBe(true);
 
     expect(workout.currentSession).toBeNull();
     expect(workout.todayWorkouts).toHaveLength(1);
@@ -84,8 +87,8 @@ describe("ending a session", () => {
   it("ends an empty session without saving it anywhere", async () => {
     await start("Bench Press", "Chest");
 
-    expect(end(undefined, 15 * 60)).toBe(false);
-    expect(end()).toBe(false); // nothing left to end
+    expect(await end(undefined, 15 * 60)).toBe(false);
+    expect(await end()).toBe(false); // nothing left to end
 
     expect(workout.currentSession).toBeNull();
     expect(workout.exerciseStartTime).toBeNull();
@@ -93,24 +96,26 @@ describe("ending a session", () => {
     expect(workout.workoutHistory).toEqual([]);
     await act(async () => {});
     expect(mockPostSession).not.toHaveBeenCalled();
-    expect(await AsyncStorage.getItem("pending_workout_sessions")).toBeNull();
+    expect(await queued()).toEqual([]);
+    // The in-progress draft that survives a restart is gone too
+    expect(await AsyncStorage.getItem("active_workout:sam")).toBeNull();
   });
 
   it("treats an empty set list like no sets", async () => {
     await start("Bench Press", "Chest");
 
-    expect(end({ setDetails: [] })).toBe(false);
+    expect(await end({ setDetails: [] })).toBe(false);
     await act(async () => {});
     expect(mockPostSession).not.toHaveBeenCalled();
   });
 
   it("saves cardio without sets once it lasted a minute, but not before", async () => {
     await start("Running", "Cardio");
-    expect(end(undefined, 59)).toBe(false);
+    expect(await end(undefined, 59)).toBe(false);
 
     now = T0;
     act(() => workout.checkIn("Running", "TM001", "Cardio"));
-    expect(end(undefined, 60)).toBe(true);
+    expect(await end(undefined, 60)).toBe(true);
     await waitFor(() => expect(mockPostSession).toHaveBeenCalledTimes(1));
     expect(mockPostSession).toHaveBeenCalledWith(expect.objectContaining({ exerciseName: "Running", durationSeconds: 60 }));
   });
@@ -122,7 +127,7 @@ describe("ending a session", () => {
     const fresh = (key: string) => isFresh(key, peekCached(key)!, { staleTime: 60 * 60 * 1000 });
     await start("Bench Press", "Chest");
 
-    end({ setDetails: [{ reps: 5 }] });
+    await end({ setDetails: [{ reps: 5 }] });
     await waitFor(() => expect(fresh("user:sam:history")).toBe(false));
 
     expect(fresh("user:sam:profile")).toBe(false);
@@ -134,12 +139,27 @@ describe("ending a session", () => {
     writeCached("user:sam:history", [], T0);
     await start("Bench Press", "Chest");
 
-    end({ setDetails: [{ reps: 5 }] });
+    await end({ setDetails: [{ reps: 5 }] });
 
     await waitFor(() => expect(isFresh("user:sam:history", peekCached("user:sam:history")!, { staleTime: 3_600_000 })).toBe(false));
     // Outdated only after the queue write, so it's already there
-    const queued = JSON.parse((await AsyncStorage.getItem("pending_workout_sessions"))!);
-    expect(queued).toEqual([expect.objectContaining({ exerciseName: "Bench Press", setDetails: [{ reps: 5 }] })]);
+    expect(await queued()).toEqual([expect.objectContaining({ exerciseName: "Bench Press", setDetails: [{ reps: 5 }] })]);
+  });
+
+  it("counts a standalone timed set as logged work (e.g. a 45 s plank with no machine)", async () => {
+    render(
+      <WorkoutProvider>
+        <Probe />
+      </WorkoutProvider>,
+    );
+    await act(async () => {});
+    act(() => workout.checkIn("Plank", undefined, "Core", 51, "DURATION"));
+
+    expect(await end({ setDetails: [{ durationSeconds: 45 }] })).toBe(true);
+    await waitFor(() => expect(mockPostSession).toHaveBeenCalledTimes(1));
+    expect(mockPostSession).toHaveBeenCalledWith(
+      expect.objectContaining({ exerciseName: "Plank", exerciseId: 51, setDetails: [{ durationSeconds: 45 }] }),
+    );
   });
 });
 

@@ -17,6 +17,19 @@ class WebSocketService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private subscribers: MachineUpdateCallback[] = [];
+  private gymId: number | null = null;
+  private machineSubscription: StompSubscription | null = null;
+  setGym(id: number | null) {
+    if (this.client?.connected) this.machineSubscription?.unsubscribe();
+    this.machineSubscription = null; this.gymId = id;
+    this.subscribeMachines();
+  }
+  private subscribeMachines() {
+    if (!this.client?.connected || this.gymId === null) return;
+    this.machineSubscription = this.client.subscribe(`/topic/gyms/${this.gymId}/machines`, message => {
+      try { const machine = JSON.parse(message.body); this.subscribers.forEach(cb => cb(machine)); } catch { /* Ignore malformed updates. */ }
+    });
+  }
 
   private communitySubscription: StompSubscription | null = null;
   private userQueueSubscription: StompSubscription | null = null;
@@ -55,6 +68,10 @@ class WebSocketService {
       const client: Client = new Client({
         webSocketFactory: () => new SockJS(WS_URL),
         connectHeaders,
+        beforeConnect: async () => {
+          const currentToken = await AsyncStorage.getItem('accessToken');
+          client.connectHeaders = currentToken ? { Authorization: `Bearer ${currentToken}` } : {};
+        },
         reconnectDelay: 5000,
         heartbeatIncoming: 4000,
         heartbeatOutgoing: 4000,
@@ -65,15 +82,8 @@ class WebSocketService {
           this.reconnectAttempts = 0;
           this.connectedSince = Date.now();
 
-          // Machines
-          this.client!.subscribe('/topic/machines', (message: IMessage) => {
-            try {
-              const machine = JSON.parse(message.body);
-              this.subscribers.forEach(cb => cb(machine));
-            } catch (error) {
-              console.error('[WS] Error parsing machine message:', error);
-            }
-          });
+          this.machineSubscription = null;
+          this.subscribeMachines();
 
           // Re-establish community subscription if callbacks are waiting
           if (this.communityCallbacks.length > 0 && !this.communitySubscription) {
@@ -126,7 +136,11 @@ class WebSocketService {
           console.error('[WS] WebSocket error:', event);
         },
         onWebSocketClose: () => {
+          // A replaced client's late close event must not reset the new connection
           if (this.client !== client) return;
+          this.machineSubscription = null;
+          this.communitySubscription = null;
+          this.userQueueSubscription = null;
           console.log('[WS] WebSocket closed, reconnect attempt:', this.reconnectAttempts);
           this.isConnected = false;
           this.connectedSince = null;

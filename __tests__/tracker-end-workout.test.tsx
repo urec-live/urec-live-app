@@ -8,7 +8,7 @@ import { clearCache, peekCached, writeCached } from "@/services/resourceCache";
 const mockRouter = { push: jest.fn(), replace: jest.fn() };
 jest.mock("expo-router", () => ({ useRouter: () => mockRouter, usePathname: () => "/workout" }));
 
-let mockSession: { exerciseName: string; machineId: string; muscleGroup: string; startTime: number } | null = null;
+let mockSession: { exerciseName: string; machineCode: string; muscleGroup: string; startTime: number } | null = null;
 const mockCheckOut = jest.fn();
 jest.mock("@/contexts/WorkoutContext", () => ({
   useWorkout: () => ({
@@ -46,7 +46,7 @@ const alertButton = (text: string): AlertButton =>
 function session(muscleGroup: string, startedSecondsAgo: number) {
   mockSession = {
     exerciseName: muscleGroup === "Cardio" ? "Running" : "Bench Press",
-    machineId: muscleGroup === "Cardio" ? "TM001" : "BP001",
+    machineCode: muscleGroup === "Cardio" ? "TM001" : "BP001",
     muscleGroup,
     startTime: Date.now() - startedSecondsAgo * 1000,
   };
@@ -62,7 +62,7 @@ beforeEach(async () => {
   await clearCache();
   alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
   mockMachineCheckOut.mockResolvedValue({ id: 3, code: "BP001", status: "Available", exercise: "Bench Press" });
-  mockCheckOut.mockReturnValue(false);
+  mockCheckOut.mockResolvedValue(false);
 });
 
 afterEach(() => {

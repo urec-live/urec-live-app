@@ -1,3 +1,4 @@
+import StandaloneExerciseTracker from "./StandaloneExerciseTracker";
 import { HELP_STATUS_DISPLAY } from "@/constants/helpRequests";
 import { useHelpRequest } from "@/contexts/HelpRequestContext";
 import { useWorkout } from "@/contexts/WorkoutContext";
@@ -52,7 +53,7 @@ export default function ActiveExerciseTracker() {
 
   // --- Logic: Watch Synchronization ---
   useEffect(() => {
-    if (!currentSession) return;
+    if (!currentSession?.machineCode) return;
     const unsubscribeWatch = WatchService.subscribeToWatch(
       (reps, weight) => {
         // Restored: Logic to handle incoming sets from Watch
@@ -104,7 +105,7 @@ export default function ActiveExerciseTracker() {
     if (!currentSession) return;
 
     // Notify Watch
-    WatchService.syncWorkout(currentSession.exerciseName, currentSession.machineId, "END", {
+    WatchService.syncWorkout(currentSession.exerciseName, currentSession.machineCode || "", "END", {
       exerciseStartTime: exerciseStartTime || Date.now(),
     });
 
@@ -112,13 +113,18 @@ export default function ActiveExerciseTracker() {
 
     try {
       // Every saved list shows the machine free right away, without waiting for the live update
-      patchCachedMachine(await machineAPI.checkOut(currentSession.machineId));
+      if (currentSession.machineCode) patchCachedMachine(await machineAPI.checkOut(currentSession.machineCode));
     } catch (e) {
       console.log("Checkout network error, continuing local flow");
     }
 
     const targetMuscleGroup = currentSession.muscleGroup;
-    checkOut(setDetails.length > 0 ? { setDetails } : undefined);
+    try {
+      await checkOut(setDetails.length > 0 ? { setDetails } : undefined);
+    } catch {
+      setHelpError("Could not save on this device. Keep the workout open and retry.");
+      return;
+    }
     setSetRows([{ reps: "", weightLbs: "" }]);
     
     setTimeout(() => {
@@ -143,13 +149,13 @@ export default function ActiveExerciseTracker() {
     const now = Date.now();
     if (!restStartTime) {
       startRest(now);
-      WatchService.syncWorkout(currentSession.exerciseName, currentSession.machineId, "PAUSE", {
+      WatchService.syncWorkout(currentSession.exerciseName, currentSession.machineCode || "", "PAUSE", {
         exerciseStartTime: exerciseStartTime!,
         restStartTime: now,
       });
     } else {
       endRest();
-      WatchService.syncWorkout(currentSession.exerciseName, currentSession.machineId, "START", {
+      WatchService.syncWorkout(currentSession.exerciseName, currentSession.machineCode || "", "START", {
         exerciseStartTime: exerciseStartTime!,
         restStartTime: 0,
       });
@@ -166,6 +172,8 @@ export default function ActiveExerciseTracker() {
   // Stays mounted (so entered sets survive) but out of the way on the screens it would cover:
   // the report form, the help request and the demo player
   if (pathname === "/report-issue" || pathname === "/help-request" || pathname === "/demo-player") return null;
+  if (!currentSession.machineCode || currentSession.loggingMode) return <StandaloneExerciseTracker key={currentSession.clientSessionId} />;
+
 
   const handleHelp = async () => {
     if (activeRequest) {
@@ -176,7 +184,7 @@ export default function ActiveExerciseTracker() {
     setHelpError(null);
     try {
       // machineId holds the QR code; the server ignores an exercise name that is really the code
-      await callStaff({ equipmentCode: currentSession.machineId, exerciseName: currentSession.exerciseName });
+      await callStaff({ equipmentCode: currentSession.machineCode || "", exerciseName: currentSession.exerciseName });
       router.push("/help-request");
     } catch (e) {
       const { message, alreadyOpen } = toHelpRequestError(e, "call");
@@ -206,11 +214,11 @@ export default function ActiveExerciseTracker() {
             {activeRequest ? `Help: ${HELP_STATUS_DISPLAY[activeRequest.status].label}` : "Call staff"}
           </Text>
         </TouchableOpacity>
-        {/* currentSession.machineId holds the machine's QR code */}
+        {/* currentSession.machineCode holds the machine's QR code */}
         <TouchableOpacity
           style={styles.reportButton}
           onPress={() =>
-            router.push({ pathname: "/report-issue", params: { code: currentSession.machineId } })
+            router.push({ pathname: "/report-issue", params: { code: currentSession.machineCode } })
           }
           accessibilityLabel="Report a problem with this machine"
         >

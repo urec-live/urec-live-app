@@ -3,10 +3,9 @@ import React from "react";
 import { Alert, AlertButton } from "react-native";
 
 import MachinePicker from "@/app/(tabs)/workout/equipment/[exercise]";
-import MuscleExercises from "@/app/(tabs)/workout/exercises/[muscle]";
-import StrengthWorkout from "@/app/(tabs)/workout/strength";
+import { cacheKeys } from "@/services/cachedResources";
 import type { MachineDto } from "@/services/machineAPI";
-import { clearCache, patchCachedMachine, peekCached, setLiveSinceSource } from "@/services/resourceCache";
+import { clearCache, patchCachedMachine, peekCached, setLiveSinceSource, writeCached } from "@/services/resourceCache";
 
 const mockRouter = { push: jest.fn(), replace: jest.fn(), back: jest.fn() };
 let mockParams: Record<string, string> = {};
@@ -16,8 +15,6 @@ jest.mock("expo-router", () => ({
 }));
 
 const mockApi = {
-  getMuscleGroups: jest.fn(),
-  getExercisesByMuscleGroup: jest.fn(),
   getByExercise: jest.fn(),
   getFloorPlans: jest.fn(),
   getFloorPlan: jest.fn(),
@@ -29,7 +26,7 @@ jest.mock("@/services/machineAPI", () => ({
 }));
 jest.mock("@/services/sessionAPI", () => ({ sessionAPI: { getMyHistory: jest.fn() } }));
 
-let mockSession: { exerciseName: string; machineId: string; muscleGroup: string; startTime: number } | null = null;
+let mockSession: { exerciseName: string; machineCode: string; muscleGroup: string; startTime: number } | null = null;
 const mockWorkout = { checkIn: jest.fn(), checkOut: jest.fn() };
 jest.mock("@/contexts/WorkoutContext", () => ({
   useWorkout: () => ({ ...mockWorkout, currentSession: mockSession, todayWorkouts: [] }),
@@ -53,7 +50,6 @@ const machine = (id: number, status: string, exercise: string, extra: Partial<Ma
   ...extra,
 });
 
-const exercise = (id: number, name: string) => ({ id, name, muscleGroup: "Chest", gifUrl: "" });
 const never = () => new Promise<never>(() => {});
 
 const MACHINES: Record<string, MachineDto[]> = {
@@ -68,95 +64,8 @@ beforeEach(async () => {
   // Live updates connected the whole time, so saved machine lists stay fresh between screens
   setLiveSinceSource(() => 0);
   mockSession = null;
-  mockApi.getMuscleGroups.mockResolvedValue(["Back", "Chest"]);
-  mockApi.getExercisesByMuscleGroup.mockResolvedValue([
-    exercise(1, "Bench Press"),
-    exercise(2, "Chest Fly"),
-    exercise(3, "Cable Crossover"),
-  ]);
   mockApi.getByExercise.mockImplementation((name: string) => Promise.resolve(MACHINES[name]));
   mockApi.getFloorPlans.mockResolvedValue([]);
-});
-
-describe("Strength", () => {
-  it("loads the muscle groups once, then shows the saved list on the next visit", async () => {
-    const first = render(<StrengthWorkout />);
-    expect(screen.getByText("Loading muscle groups...")).toBeTruthy();
-    expect(await screen.findByText("Chest")).toBeTruthy();
-    first.unmount();
-
-    render(<StrengthWorkout />);
-
-    expect(screen.queryByText("Loading muscle groups...")).toBeNull();
-    expect(screen.getByText("Chest")).toBeTruthy();
-    await act(async () => {});
-    expect(mockApi.getMuscleGroups).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows Retry when nothing is saved and the request fails", async () => {
-    mockApi.getMuscleGroups.mockRejectedValueOnce(new Error("offline"));
-    render(<StrengthWorkout />);
-
-    fireEvent.press(await screen.findByText("Retry"));
-
-    expect(await screen.findByText("Chest")).toBeTruthy();
-    expect(mockApi.getMuscleGroups).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe("Muscle group exercises", () => {
-  beforeEach(() => {
-    mockParams = { muscle: "Chest" };
-  });
-
-  it("shows each exercise's availability, and 'No machines' for one without any", async () => {
-    render(<MuscleExercises />);
-
-    expect(await screen.findByText("1/2 Available")).toBeTruthy();
-    expect(screen.getByText("1/1 Available")).toBeTruthy();
-    expect(screen.getByText("No machines")).toBeTruthy();
-    expect(mockApi.getExercisesByMuscleGroup).toHaveBeenCalledTimes(1);
-    expect(mockApi.getByExercise).toHaveBeenCalledTimes(3);
-  });
-
-  it("updates the counts from a live update without refetching anything", async () => {
-    render(<MuscleExercises />);
-    await screen.findByText("1/2 Available");
-
-    act(() => patchCachedMachine(machine(2, "Available", "Bench Press")));
-
-    expect(screen.getByText("2/2 Available")).toBeTruthy();
-    await act(async () => {});
-    expect(mockApi.getByExercise).toHaveBeenCalledTimes(3);
-    expect(mockApi.getExercisesByMuscleGroup).toHaveBeenCalledTimes(1);
-  });
-
-  it("opens straight from saved data on the next visit (e.g. after ending a workout)", async () => {
-    const first = render(<MuscleExercises />);
-    await screen.findByText("1/2 Available");
-    first.unmount();
-
-    render(<MuscleExercises />);
-
-    expect(screen.queryByText("Loading exercises...")).toBeNull();
-    expect(screen.getByText("1/2 Available")).toBeTruthy();
-    await act(async () => {});
-    expect(mockApi.getExercisesByMuscleGroup).toHaveBeenCalledTimes(1);
-    expect(mockApi.getByExercise).toHaveBeenCalledTimes(3);
-  });
-
-  it("refetches the machine lists when live updates weren't connected", async () => {
-    const first = render(<MuscleExercises />);
-    await screen.findByText("1/2 Available");
-    first.unmount();
-    setLiveSinceSource(() => null);
-
-    render(<MuscleExercises />);
-
-    expect(screen.getByText("1/2 Available")).toBeTruthy(); // the saved copy, while it refetches
-    await waitFor(() => expect(mockApi.getByExercise).toHaveBeenCalledTimes(6));
-    expect(mockApi.getExercisesByMuscleGroup).toHaveBeenCalledTimes(1); // the exercise list is still fresh
-  });
 });
 
 describe("Machine picker", () => {
@@ -164,17 +73,15 @@ describe("Machine picker", () => {
     mockParams = { exercise: "Bench Press", muscle: "Chest" };
   });
 
-  it("opens with the list the muscle group screen saved, without a request or spinner", async () => {
-    const muscle = render(<MuscleExercises />);
-    await screen.findByText("1/2 Available");
-    muscle.unmount();
+  it("opens straight from a saved list, without a request or spinner (e.g. after ending a workout)", async () => {
+    writeCached(cacheKeys.machinesFor("Bench Press"), MACHINES["Bench Press"]);
 
     render(<MachinePicker />);
 
     expect(screen.queryByText("Loading machines...")).toBeNull();
     expect(screen.getByText("Machine 1")).toBeTruthy();
     await act(async () => {});
-    expect(mockApi.getByExercise).toHaveBeenCalledTimes(3); // only the muscle screen's
+    expect(mockApi.getByExercise).not.toHaveBeenCalled();
   });
 
   it("shows the machines without waiting for the floor plans", async () => {
@@ -196,8 +103,9 @@ describe("Machine picker", () => {
     await waitFor(() => expect(mockWorkout.checkIn).toHaveBeenCalled());
 
     expect(mockApi.checkIn).toHaveBeenCalledWith("M1");
-    expect(mockWorkout.checkIn).toHaveBeenCalledWith("Bench Press", "M1", "Chest");
-    expect(peekCached<MachineDto[]>("machines-by-exercise:bench press")?.data[0].status).toBe("In Use");
+    // No catalog exercise id or logging mode in this route's params
+    expect(mockWorkout.checkIn).toHaveBeenCalledWith("Bench Press", "M1", "Chest", undefined, undefined);
+    expect(peekCached<MachineDto[]>(cacheKeys.machinesFor("Bench Press"))?.data[0].status).toBe("In Use");
     expect(screen.queryByText("Start")).toBeNull();
     expect(mockApi.getByExercise).toHaveBeenCalledTimes(1);
   });
@@ -211,7 +119,7 @@ describe("Machine picker", () => {
     act(() => patchCachedMachine(machine(1, "In Use", "Chest Fly")));
 
     expect(screen.queryByText("Start")).toBeNull();
-    expect(peekCached<MachineDto[]>("machines-by-exercise:bench press")?.data[0].exercise).toBe("Bench Press");
+    expect(peekCached<MachineDto[]>(cacheKeys.machinesFor("Bench Press"))?.data[0].exercise).toBe("Bench Press");
   });
 
   describe("Stop on the member's own machine", () => {
@@ -221,7 +129,7 @@ describe("Machine picker", () => {
 
     beforeEach(() => {
       alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
-      mockSession = { exerciseName: "Bench Press", machineId: "M1", muscleGroup: "Chest", startTime: Date.now() - 60_000 };
+      mockSession = { exerciseName: "Bench Press", machineCode: "M1", muscleGroup: "Chest", startTime: Date.now() - 60_000 };
       MACHINES["Bench Press"] = [machine(1, "In Use", "Bench Press", { heldByMe: true }), machine(2, "In Use", "Bench Press")];
       mockApi.checkOut.mockResolvedValue(machine(1, "Available", "Bench Press"));
     });

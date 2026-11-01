@@ -99,6 +99,7 @@ Do not add personal LAN addresses to source or duplicate base URLs in individual
 - Keys, freshness and shared fetchers live in `services/cachedResources.ts`. A member's data goes under `cacheKeys.user(username, …)`: it's wiped on sign-out and marked stale when a session is saved.
 - Keys starting with `machines`, `machine:` or `floor-plans` are live: `hooks/useLiveMachineUpdates.ts` connects at sign-in and patches them, and they count as fresh only while the socket has stayed connected since the fetch. Apply a check-in/out response with `patchCachedMachine` instead of refetching a list.
 - Tab screens stay mounted: call `revalidate()` from `useFocusEffect` to refresh when the tab is reopened.
+- Machine and floor-plan keys are per gym (`machines@<gym id>`): the root layout calls `setCacheGymScope(gym?.id)` before the screens build their keys, and a gym switch marks that gym's saved copies stale, since live updates only arrive for the current gym.
 - Not everything is saved: the machine page's equipment-issue banner and My Equipment Reports fetch on every focus, so a report the member just filed shows straight away.
 - Ending a session with no sets doesn't save it (cardio counts after a minute): `utils/workoutSession.ts`, applied by `WorkoutContext.checkOut()`.
 

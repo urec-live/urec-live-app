@@ -23,11 +23,11 @@ function groupSessionsByDate(sessions: SessionResponse[]): DailyWorkout[] {
     const day = map.get(date)!;
     day.sessions.push({
       exerciseName,
-      machineId: s.machineCode ?? "",
+      machineCode: s.machineCode ?? "",
       muscleGroup,
       startTime: new Date(s.startedAt).getTime(),
       endTime: s.endedAt ? new Date(s.endedAt).getTime() : undefined,
-      setDetails: s.setDetails?.map((d) => ({ reps: d.reps ?? undefined, weightLbs: d.weightLbs ?? undefined })),
+      setDetails: s.setDetails?.map((d) => ({ reps: d.reps ?? undefined, weightLbs: d.weightLbs ?? undefined, durationSeconds: d.durationSeconds ?? undefined, distanceMeters: d.distanceMeters ?? undefined })),
     });
     if (!day.muscleGroups.includes(muscleGroup)) {
       day.muscleGroups.push(muscleGroup);
@@ -154,7 +154,7 @@ export default function HistoryScreen() {
                       <MaterialCommunityIcons name="dumbbell" size={16} color="#00FF7F" />
                       <Text style={styles.exerciseName}>{session.exerciseName}</Text>
                     </View>
-                    <Text style={styles.machineText}>{session.machineId}</Text>
+                    <Text style={styles.machineText}>{session.machineCode}</Text>
                     <Text style={styles.durationText}>
                       Duration: {formatDuration(session.startTime, session.endTime)}
                     </Text>
@@ -165,6 +165,8 @@ export default function HistoryScreen() {
                             Set {i + 1}
                             {s.reps != null ? `: ${s.reps} reps` : ""}
                             {s.weightLbs != null ? ` · ${s.weightLbs} lbs` : ""}
+                            {s.durationSeconds != null ? ` · ${s.durationSeconds} sec` : ""}
+                            {s.distanceMeters != null ? ` · ${s.distanceMeters} m` : ""}
                           </Text>
                         ))}
                       </View>

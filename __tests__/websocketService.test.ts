@@ -119,18 +119,20 @@ describe("websocketService", () => {
     expect(ws.getConnectionStatus()).toBe(true);
   });
 
-  it("hands each machine update to every subscriber", async () => {
+  it("hands each machine update for the member's gym to every subscriber", async () => {
     const first = jest.fn();
     const second = jest.fn();
     ws.subscribe(first);
     ws.subscribe(second);
     await ws.connect();
     connectNow(mockClients[0], 1_000);
+    expect(mockClients[0].subscribe).not.toHaveBeenCalled(); // no gym yet, so no machine updates
 
+    ws.setGym(3);
     const [topic, onMessage] = mockClients[0].subscribe.mock.calls[0];
     onMessage({ body: JSON.stringify({ id: 1, status: "In Use" }) });
 
-    expect(topic).toBe("/topic/machines");
+    expect(topic).toBe("/topic/gyms/3/machines");
     expect(first).toHaveBeenCalledWith({ id: 1, status: "In Use" });
     expect(second).toHaveBeenCalledWith({ id: 1, status: "In Use" });
   });

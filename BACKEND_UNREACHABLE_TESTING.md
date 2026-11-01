@@ -42,7 +42,7 @@ The wording and timings are in `constants/backendStatus.ts`.
 npm test
 ```
 
-You should see `Tests: 364 passed` across 38 files: the 49 below, plus the branch's other tests (see `MINOR_FIXES_TESTING.md`). Everything is mocked, so no server is needed.
+Every test should pass; report the runner's own result. The notice's files are below; the branch's others are in `MINOR_FIXES_TESTING.md`. Everything is mocked, so no server is needed.
 
 | File | What it covers |
 |---|---|
@@ -98,7 +98,7 @@ npx expo lint      # the files this branch adds or changes are clean
 cd /c/Users/abelv/portfolio/getmefit/urec-live-app && git switch minor-fixes-and-speed-ups
 ```
 
-Then run TERMINAL 1–3 from `commands.txt` (or `./runall.sh`), and sign in. Each section starts with the backend running.
+Then run TERMINAL 1–3 from `commands.txt` (or `./runall.sh`), and sign in. Since main's gym settings (#24), equipment, maps and QR check-in need a gym: connect one in **Profile → Settings → Gym** first. Each section starts with the backend running.
 
 **Server down**
 1. Open the **Equipment** tab. Stop the backend with Ctrl+C in TERMINAL 1, then pull to refresh. The grey **Can't reach UREC Live** bar appears at the top, with the steps and **Try again**.
