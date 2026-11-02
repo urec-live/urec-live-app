@@ -1,10 +1,13 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useMemo } from "react";
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
-import { sessionAPI, SessionResponse } from "@/services/sessionAPI";
-import { useWorkout } from "../../contexts/WorkoutContext";
-import { DailyWorkout } from "../../contexts/WorkoutContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCachedResource } from "@/hooks/useCachedResource";
+import { cacheKeys, fetchHistory, STALE_MS } from "@/services/cachedResources";
+import type { SessionResponse } from "@/services/sessionAPI";
+import { DailyWorkout, useWorkout } from "../../contexts/WorkoutContext";
 
 function groupSessionsByDate(sessions: SessionResponse[]): DailyWorkout[] {
   const map = new Map<string, DailyWorkout>();
@@ -36,34 +39,32 @@ function groupSessionsByDate(sessions: SessionResponse[]): DailyWorkout[] {
 
 export default function HistoryScreen() {
   const { workoutHistory: localHistory, flushPendingSessions } = useWorkout();
-  const [history, setHistory] = useState<DailyWorkout[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [apiError, setApiError] = useState(false);
-
-  const loadHistory = useCallback(async () => {
-    try {
+  const { user } = useAuth();
+  const { data, loading, error, refreshing, refresh, revalidate } = useCachedResource(
+    user ? cacheKeys.user(user.username, "history") : null,
+    async () => {
+      // Sessions saved while offline go up first, so they're in the list
       await flushPendingSessions();
-      const page = await sessionAPI.getMyHistory(0, 100);
-      setHistory(groupSessionsByDate(page.content));
-      setApiError(false);
-    } catch {
-      // Fall back to in-memory context history
-      setHistory(localHistory);
-      setApiError(true);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [localHistory]);
+      return fetchHistory();
+    },
+    { staleTime: STALE_MS.user },
+  );
+  // Tabs stay mounted, so refresh on focus: a finished workout marks the saved copy stale
+  useFocusEffect(
+    useCallback(() => {
+      revalidate();
+    }, [revalidate])
+  );
 
-  useEffect(() => {
-    loadHistory();
-  }, []);
+  const apiError = error != null;
+  const history = useMemo(
+    // Offline with nothing saved: fall back to this session's workouts in memory
+    () => (data ? groupSessionsByDate(data) : apiError ? localHistory : []),
+    [data, apiError, localHistory]
+  );
 
   const onRefresh = () => {
-    setRefreshing(true);
-    loadHistory();
+    refresh();
   };
 
   const formatDate = (dateString: string) => {

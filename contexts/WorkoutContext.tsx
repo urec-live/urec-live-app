@@ -8,6 +8,9 @@ import React, {
 } from "react";
 import { sessionAPI, CreateSessionRequest } from "@/services/sessionAPI";
 import { useAuth } from "@/contexts/AuthContext";
+import { cacheKeys } from "@/services/cachedResources";
+import { invalidateCached } from "@/services/resourceCache";
+import { sessionWillBeSaved } from "@/utils/workoutSession";
 
 export interface SetDetail {
   reps?: number;
@@ -47,8 +50,13 @@ interface WorkoutContextType {
     exerciseId?: number,
     loggingMode?: import("@/services/exerciseAPI").LoggingMode,
   ) => void;
-  checkOut: (details?: { setDetails?: SetDetail[] }) => Promise<void>;
+  /**
+   * Ends the current session. Resolves to whether it was saved as a workout: an empty one isn't
+   * (see sessionWillBeSaved). Freeing the machine is up to the caller.
+   */
+  checkOut: (details?: { setDetails?: SetDetail[] }) => Promise<boolean>;
   updateSets: (sets: SetDetail[]) => void;
+  /** Starts the rest timer, from `time` if given (e.g. when the watch started it) */
   startRest: (time?: number) => void;
   endRest: () => void;
   resetWorkout: () => void;
@@ -157,6 +165,8 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
       pending.push(request);
       await AsyncStorage.setItem(key, JSON.stringify(pending));
     });
+    // Saved stats, history and the league now include it (or will, once the queue is sent)
+    invalidateCached(cacheKeys.userPrefix(account));
     void flushPendingSessions().catch(() => {});
   };
 
@@ -197,29 +207,33 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({
     ).catch(() => {});
   };
   const checkOut = async (details?: { setDetails?: SetDetail[] }) => {
-    if (currentSession && !finishing.current) {
-      finishing.current = true;
-      const account = user?.username;
-      try {
-        const endTime = Date.now();
-        const completedSession: WorkoutSession = {
-          ...currentSession,
-          endTime,
-          ...details,
-        };
+    if (!currentSession || finishing.current) return false;
+    finishing.current = true;
+    const account = user?.username;
+    try {
+      const endTime = Date.now();
+      const completedSession: WorkoutSession = {
+        ...currentSession,
+        endTime,
+        ...details,
+      };
+      // Nothing logged: the session just ends, without counting as a workout anywhere
+      const saved = sessionWillBeSaved(completedSession, endTime, completedSession.setDetails);
 
-        await persistSession(completedSession, endTime);
-        if (user)
-          await AsyncStorage.removeItem(`active_workout:${user.username}`);
-        if (accountRef.current !== account) return;
+      if (saved) await persistSession(completedSession, endTime);
+      if (user)
+        await AsyncStorage.removeItem(`active_workout:${user.username}`);
+      if (accountRef.current !== account) return saved;
+      if (saved) {
         setTodayWorkouts((prev) => [...prev, completedSession]);
         updateWorkoutHistory(completedSession);
-        setCurrentSession(null);
-        setExerciseStartTime(null);
-        setRestStartTime(null);
-      } finally {
-        finishing.current = false;
       }
+      setCurrentSession(null);
+      setExerciseStartTime(null);
+      setRestStartTime(null);
+      return saved;
+    } finally {
+      finishing.current = false;
     }
   };
 

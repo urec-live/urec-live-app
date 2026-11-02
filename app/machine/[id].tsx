@@ -5,29 +5,46 @@ import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacit
 import CallStaffCard from "@/components/CallStaffCard";
 import MachineIssueBanner from "@/components/MachineIssueBanner";
 import { isOutOfOrder, OUT_OF_ORDER_COLOR, OUT_OF_ORDER_ICON } from "@/constants/machineStatus";
+import { useCachedResource } from "@/hooks/useCachedResource";
+import { cacheKeys, STALE_MS } from "@/services/cachedResources";
 import { issueAPI, MachineIssueStatus } from "@/services/issueAPI";
-import { machineAPI, Machine, Exercise } from "@/services/machineAPI";
+import { machineAPI, Exercise, MachineDto } from "@/services/machineAPI";
+import { patchCachedMachine, peekCached } from "@/services/resourceCache";
+
+/** The machine as the Equipment tab last saw it, so the page shows it before its own fetch returns */
+const machineFromList = (id: number) =>
+  peekCached<MachineDto[]>(cacheKeys.machines)?.data.find((m) => m.id === id);
 
 export default function MachineDetails() {
   const { id } = useLocalSearchParams();
+  const machineId = Number(id);
   const router = useRouter();
-  const [machine, setMachine] = useState<Machine | null>(null);
-  const [status, setStatus] = useState<string>("");
-  const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
-  const [exercises, setExercises] = useState<Exercise[]>([]);
   const [issue, setIssue] = useState<MachineIssueStatus | null>(null);
 
-  useEffect(() => {
-    loadMachine();
-  }, [id]);
+  const { data: machine, loading: machineLoading, error } = useCachedResource<MachineDto>(
+    cacheKeys.machine(machineId),
+    () => machineAPI.getMachineById(machineId),
+    { live: true, staleTime: STALE_MS.live, initialData: machineFromList(machineId) },
+  );
+  // Only a backend that doesn't send each machine's exercises with it needs a second request
+  const needsExercises = !!machine && machine.exerciseNames === undefined;
+  const { data: fetchedExercises, loading: exercisesLoading } = useCachedResource<Exercise[]>(
+    needsExercises ? cacheKeys.machineExercises(machineId) : null,
+    () => machineAPI.getExercisesByEquipmentId(machineId),
+    { staleTime: STALE_MS.catalog },
+  );
+  const exerciseNames = machine?.exerciseNames ?? fetchedExercises?.map((e) => e.name) ?? [];
+  const muscleGroups = machine?.muscleGroups ?? [...new Set((fetchedExercises ?? []).map((e) => e.muscleGroup))];
+  // Wait for the exercises too, so Call staff knows the exercise when the machine has just one
+  const loading = machineLoading || (needsExercises && exercisesLoading);
 
   // Refetch on focus so the banner shows up right after the member files a report
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       issueAPI
-        .getMachineIssueStatus(Number(id))
+        .getMachineIssueStatus(machineId)
         .then((status) => {
           if (!cancelled) setIssue(status);
         })
@@ -37,32 +54,16 @@ export default function MachineDetails() {
       return () => {
         cancelled = true;
       };
-    }, [id])
+    }, [machineId])
   );
 
-  const loadMachine = async () => {
-    try {
-      setLoading(true);
-      const data = await machineAPI.getMachineById(Number(id));
-      setMachine(data);
-      setStatus(data.status);
-      
-      // Fetch exercises for this machine
-      try {
-        const machineExercises = await machineAPI.getExercisesByEquipmentId(Number(id));
-        setExercises(machineExercises);
-      } catch (err) {
-        console.error("Error loading exercises:", err);
-        setExercises([]);
-      }
-    } catch (error) {
+  useEffect(() => {
+    if (error && !machine) {
       console.error("Error loading machine:", error);
       Alert.alert("Error", "Failed to load machine details");
       router.back();
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [error, machine, router]);
 
   const handleAction = async (action: string) => {
     if (!machine) return;
@@ -73,9 +74,8 @@ export default function MachineDetails() {
 
     try {
       setUpdating(true);
-      const updated = await machineAPI.updateMachineStatus(machine.id, newStatus);
-      setStatus(updated.status);
-      setMachine(updated);
+      // Updates this page and every saved list that shows the machine
+      patchCachedMachine(await machineAPI.updateMachineStatus(machine.id, newStatus));
       Alert.alert("Success", `Machine status updated to ${newStatus}`);
     } catch (error) {
       console.error("Error updating machine:", error);
@@ -105,6 +105,7 @@ export default function MachineDetails() {
     );
   }
 
+  const status = machine.status;
   const statusLower = status.toLowerCase();
 
   return (
@@ -123,7 +124,7 @@ export default function MachineDetails() {
       {/* Near the top: the workout tracker overlay covers the bottom of the screen */}
       <CallStaffCard
         equipmentId={machine.id}
-        exerciseName={exercises.length === 1 ? exercises[0].name : undefined}
+        exerciseName={exerciseNames.length === 1 ? exerciseNames[0] : undefined}
       />
 
       {isOutOfOrder(status) ? (
@@ -149,16 +150,16 @@ export default function MachineDetails() {
         <Text style={styles.reportButtonText}>Report a problem</Text>
       </TouchableOpacity>
 
-      {exercises.length > 0 && (
+      {exerciseNames.length > 0 && (
         <View style={styles.exercisesContainer}>
           <Text style={styles.muscleGroupTitle}>MUSCLE GROUPS</Text>
           <Text style={styles.muscleGroupText}>
-            {[...new Set(exercises.map(e => e.muscleGroup))].join(", ")}
+            {muscleGroups.join(", ")}
           </Text>
-          
+
           <Text style={styles.relatedExercisesTitle}>EXERCISES</Text>
           <Text style={styles.relatedExercisesText}>
-            {exercises.map(e => e.name).join(", ")}
+            {exerciseNames.join(", ")}
           </Text>
         </View>
       )}

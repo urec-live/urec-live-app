@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -10,22 +10,27 @@ import {
   Text,
   View,
 } from "react-native";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCachedResource } from "@/hooks/useCachedResource";
+import { cacheKeys } from "@/services/cachedResources";
 import { messagingAPI, ConversationSummary } from "@/services/messagingAPI";
 
 export default function DMInboxScreen() {
   const router = useRouter();
-  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
 
+  // Shows the saved list at once, then refetches on every visit: a message may have come in
+  const { data, loading, revalidate } = useCachedResource(
+    user ? cacheKeys.user(user.username, "dm-conversations") : null,
+    messagingAPI.getConversations,
+    { staleTime: 0 },
+  );
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
-      messagingAPI.getConversations()
-        .then(setConversations)
-        .catch(() => {})
-        .finally(() => setLoading(false));
-    }, [])
+      revalidate();
+    }, [revalidate])
   );
+  const conversations = data ?? [];
 
   const renderItem = ({ item }: { item: ConversationSummary }) => (
     <Pressable

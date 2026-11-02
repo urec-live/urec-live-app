@@ -8,7 +8,10 @@ import 'react-native-reanimated';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useLiveMachineUpdates } from '@/hooks/useLiveMachineUpdates';
+import { setCacheGymScope } from '@/services/cachedResources';
 import ActiveExerciseTracker from '../components/ActiveExerciseTracker';
+import BackendUnreachableNotice from '../components/BackendUnreachableNotice';
 import DailyWorkoutSummary from '../components/DailyWorkoutSummary';
 import HelpRequestBanner from '../components/HelpRequestBanner';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
@@ -25,17 +28,27 @@ function RootLayoutNav() {
   const { gym, loading: gymLoading } = useGym();
   const pathname = usePathname();
   const gymRoute = ['/equipment','/scan','/machine/','/report-issue','/workout/equipment/'].some(prefix => pathname.startsWith(prefix));
+  // Machine statuses stay live on every screen, not just the Equipment tab (before the early return: it's a hook)
+  useLiveMachineUpdates(!!user);
+  // Saved machine lists and floor plans are per gym. Set before the screens below build their keys;
+  // the Stack is keyed by gym, so they remount when it changes.
+  setCacheGymScope(gym?.id ?? null);
 
   if (loading) {
     return null;
   }
 
-  if (user && gymRoute && (gymLoading || !gym)) return <View style={{ padding: 28, gap: 16 }}>
-    <Text>{gymLoading ? 'Loading your gym…' : 'Connect to a gym to use equipment, maps and QR check-in.'}</Text>
-    <Link href="/settings/gym">Connect to a gym in Settings</Link><Link href="/workout">Browse all exercises</Link>
-  </View>;
+  if (user && gymRoute && (gymLoading || !gym)) return <>
+    <BackendUnreachableNotice />
+    <View style={{ padding: 28, gap: 16 }}>
+      <Text>{gymLoading ? 'Loading your gym…' : 'Connect to a gym to use equipment, maps and QR check-in.'}</Text>
+      <Link href="/settings/gym">Connect to a gym in Settings</Link><Link href="/workout">Browse all exercises</Link>
+    </View>
+  </>;
   return (
     <>
+      {/* Signed in or not: the sign-in screen needs it too */}
+      <BackendUnreachableNotice />
       {user ? <HelpRequestBanner /> : null}
       {user ? <DailyWorkoutSummary /> : null}
       <Stack key={gym?.id ?? "independent"} screenOptions={{ headerShown: false }}>

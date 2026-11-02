@@ -6,6 +6,9 @@ export interface MachineDto {
   name: string;
   status: string;
   exercise: string;
+  /** Every exercise the machine supports and their muscle groups (sorted). Older backends leave them out. */
+  exerciseNames?: string[];
+  muscleGroups?: string[];
   heldByMe?: boolean;
   floorX?: number | null;
   floorY?: number | null;
@@ -66,7 +69,7 @@ export const machineAPI = {
   },
 
   // Get a specific machine by ID
-  getMachineById: async (id: number): Promise<Machine> => {
+  getMachineById: async (id: number): Promise<MachineDto> => {
     const response = await api.get(`/machines/${id}`);
     return response.data;
   },
@@ -101,7 +104,7 @@ export const machineAPI = {
   },
 
   // Update machine status
-  updateMachineStatus: async (id: number, status: string): Promise<Machine> => {
+  updateMachineStatus: async (id: number, status: string): Promise<MachineDto> => {
     const response = await api.put(`/machines/${id}/status`, { status });
     return response.data;
   },

@@ -9,102 +9,66 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
-import {
-  MachineDto,
-  FloorPlanResponse,
-  machineAPI,
-  Exercise,
-} from "@/services/machineAPI";
-import websocketService from "@/services/websocketService";
+import React, { useMemo, useState } from "react";
 import { isOutOfOrder, OUT_OF_ORDER_COLOR, OUT_OF_ORDER_ICON } from "@/constants/machineStatus";
+import { useCachedResource, useCachedResources } from "@/hooks/useCachedResource";
+import { cacheKeys, fetchFloorPlans, STALE_MS } from "@/services/cachedResources";
+import { MachineDto, machineAPI, Exercise } from "@/services/machineAPI";
 import MapModal from "../../components/MapModal";
 
 export default function Equipment() {
   const router = useRouter();
-  const [machines, setMachines] = useState<MachineDto[]>([]);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [exercisesByEquipment, setExercisesByEquipment] = useState<
-    Record<number, Exercise[]>
-  >({});
-  const [floors, setFloors] = useState<FloorPlanResponse[]>([]);
+
+  // One request for everything the cards show; live updates keep the statuses (and the map) current
+  const {
+    data: machinesData,
+    loading,
+    refresh: refreshMachines,
+  } = useCachedResource<MachineDto[]>(cacheKeys.machines, machineAPI.listAll, {
+    live: true,
+    staleTime: STALE_MS.live,
+  });
+  const machines = useMemo(() => machinesData ?? [], [machinesData]);
+  // Only for Locate, so it loads on its own and never holds up the list
+  const { data: floorsData, refresh: refreshFloors } = useCachedResource(cacheKeys.floorPlans, fetchFloorPlans, {
+    live: true,
+    staleTime: STALE_MS.live,
+  });
+  const floors = floorsData ?? [];
+
+  // A backend that doesn't send each machine's exercises with it needs a request per machine.
+  // Those run in the background and are saved, so they never hold up the list.
+  const exerciseRequests = useMemo(
+    () =>
+      machines
+        .filter((m) => m.exerciseNames === undefined)
+        .map((m) => ({
+          key: cacheKeys.machineExercises(m.id),
+          fetcher: () => machineAPI.getExercisesByEquipmentId(m.id),
+        })),
+    [machines],
+  );
+  const { data: exercisesByKey } = useCachedResources<Exercise[]>(exerciseRequests, {
+    staleTime: STALE_MS.catalog,
+  });
+  const exercisesOf = (machine: MachineDto) => {
+    if (machine.exerciseNames) return { names: machine.exerciseNames, muscleGroups: machine.muscleGroups ?? [] };
+    const fetched = exercisesByKey[cacheKeys.machineExercises(machine.id)] ?? [];
+    return { names: fetched.map((e) => e.name), muscleGroups: [...new Set(fetched.map((e) => e.muscleGroup))] };
+  };
 
   // Map modal state
   const [mapModalVisible, setMapModalVisible] = useState(false);
   const [locateTarget, setLocateTarget] = useState<MachineDto | null>(null);
 
-  const loadMachines = async (isRefresh = false) => {
+  const onRefresh = async () => {
+    setRefreshing(true);
     try {
-      if (isRefresh) setRefreshing(true);
-      const res = await machineAPI.listAll();
-      setMachines(res);
-
-      // Fetch exercises for each machine
-      const exercisesMap: Record<number, Exercise[]> = {};
-      await Promise.all(
-        res.map(async (machine) => {
-          try {
-            const exercises = await machineAPI.getExercisesByEquipmentId(
-              machine.id
-            );
-            exercisesMap[machine.id] = exercises;
-          } catch {
-            exercisesMap[machine.id] = [];
-          }
-        })
-      );
-      setExercisesByEquipment(exercisesMap);
-
-      // Fetch floor plans
-      try {
-        const fp = await machineAPI.getFloorPlans();
-        setFloors(fp);
-      } catch {
-        try {
-          const fp = await machineAPI.getFloorPlan();
-          setFloors([fp]);
-        } catch {
-          // no floor plans
-        }
-      }
-    } catch (error) {
-      console.error("Error loading machines:", error);
-      setMachines([]);
+      await Promise.all([refreshMachines(), refreshFloors()]);
     } finally {
-      setLoading(false);
       setRefreshing(false);
     }
-  };
-
-  useEffect(() => {
-    loadMachines();
-
-    websocketService.connect();
-
-    const unsubscribe = websocketService.subscribe((updatedMachine) => {
-      setMachines((prev) =>
-        prev.map((m) => (m.id === updatedMachine.id ? updatedMachine : m))
-      );
-      setFloors((prev) =>
-        prev.map((floor) => ({
-          ...floor,
-          equipment: floor.equipment.map((eq) =>
-            eq.id === updatedMachine.id
-              ? { ...eq, status: updatedMachine.status }
-              : eq
-          ),
-        }))
-      );
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, []);
-
-  const onRefresh = () => {
-    loadMachines(true);
   };
 
   const openLocateModal = (machine: MachineDto) => {
@@ -163,10 +127,8 @@ export default function Equipment() {
           const statusUpper = item.status.toUpperCase();
           const isAvailable = statusUpper === "AVAILABLE";
           const outOfOrder = isOutOfOrder(item.status);
-          const exercises = exercisesByEquipment[item.id] || [];
-          const muscleGroupsStr = [
-            ...new Set(exercises.map((e) => e.muscleGroup)),
-          ].join(", ");
+          const { names: exerciseNames, muscleGroups } = exercisesOf(item);
+          const muscleGroupsStr = muscleGroups.join(", ");
 
           // Check if this equipment is placed on any floor
           const isOnFloor = floors.some((f) =>
@@ -224,7 +186,7 @@ export default function Equipment() {
                     {outOfOrder ? "Out of order" : isAvailable ? "Available" : "In Use"}
                   </Text>
                 </View>
-                {exercises.length > 0 && (
+                {exerciseNames.length > 0 && (
                   <View style={styles.exercisesContainer}>
                     {muscleGroupsStr ? (
                       <Text style={styles.muscleGroupText}>
@@ -232,11 +194,8 @@ export default function Equipment() {
                       </Text>
                     ) : null}
                     <Text style={styles.exercisesText} numberOfLines={2}>
-                      {exercises
-                        .slice(0, 3)
-                        .map((e) => e.name)
-                        .join(", ")}
-                      {exercises.length > 3 ? "..." : ""}
+                      {exerciseNames.slice(0, 3).join(", ")}
+                      {exerciseNames.length > 3 ? "..." : ""}
                     </Text>
                   </View>
                 )}
