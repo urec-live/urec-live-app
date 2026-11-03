@@ -19,8 +19,9 @@ export default function TabLayout() {
           borderTopColor: "#E1E7E3",
           elevation: 0,
           paddingTop: 7,
-          height: Platform.OS === "web" ? 64 : undefined,
-          paddingBottom: Platform.OS === "web" ? 8 : undefined,
+          // Web only. On a phone, even `height: undefined` here replaces the height and bottom inset
+          // React Navigation works out, and the tab bar collapses to nothing.
+          ...(Platform.OS === "web" && { height: 64, paddingBottom: 8 }),
         },
         tabBarBackground: () => (
           <BlurView
