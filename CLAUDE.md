@@ -31,6 +31,7 @@ The native `ios/` and `android/` projects are generated locally and ignored by G
 - Session persistence includes sets/reps/weight, notes, history, stats, streaks, weekly activity, personal records, and weight progression.
 - Weekly plans use `PlanContext` and `planAPI.ts`.
 - Help requests use `HelpRequestContext`, five-second foreground polling while open, cancellation/completion actions, status feedback, and placeholder demo media.
+- Chat: community chat (`app/chat/community.tsx`, from the League tab) and DMs (`app/chat/dm/`), with GIFs, stickers, reactions, delete and report (see Chat below).
 
 ## Project structure
 
@@ -51,12 +52,15 @@ services/
   sessionAPI.ts
   planAPI.ts
   helpRequestAPI.ts
-  chatAPI.ts
+  chatAPI.ts                 # AI chatbot (no backend endpoint yet)
+  messagingAPI.ts            # community chat + DMs: history pages, reactions, delete, report
+  klipyAPI.ts                # GIF/sticker search through the backend
   websocketService.ts
   networkConfig.ts
 hooks/
   useCachedResource.ts       # saved copy first, background refresh when stale
   useLiveMachineUpdates.ts   # live machine updates from sign-in (app/_layout.tsx)
+  useChatMessages.ts         # one chat room: paged history, live upserts, pending/failed sends
 utils/
   workoutSession.ts          # whether ending a session saves it
 constants/
@@ -80,7 +84,6 @@ Do not add personal LAN addresses to source or duplicate base URLs in individual
 
 - `app/chat.tsx` and `services/chatAPI.ts` call `POST /api/chat`, but the checked-out backend has no matching REST endpoint. Treat the chatbot as client UI, not an end-to-end completed feature.
 - `machineAPI.getMyEngagement()` calls `GET /api/machines/my-engagement`, which is absent from the checked-out backend and is not currently consumed by a screen.
-- The backend contains social, badge, league, community-chat, and direct-message APIs; this client has no matching services/screens.
 - Wearable/HealthKit/Google Fit sync, diet/nutrition, push notifications, and equipment reservations are not implemented.
 - Native, web, hosted, and provider behavior require separate validation; a passing TypeScript or Jest check is not device proof.
 
@@ -118,6 +121,16 @@ Do not add personal LAN addresses to source or duplicate base URLs in individual
 - `components/MachineIssueBanner.tsx` warns every member when a machine has open reports (no reporter details)
 - Errors/success are shown inline, not via `Alert` (Alert buttons don't work on web)
 
+### Chat
+- Both screens are thin wrappers around `components/chat/ChatRoom.tsx`, which uses `hooks/useChatMessages.ts`. The list is an inverted `FlatList` (newest at the bottom); scrolling up loads the page before the oldest message (`?before=<id>`, 50 at a time).
+- The server re-broadcasts the whole message on every change (new, reaction, delete, staff removal), so the hook replaces by id. An unknown id older than the loaded page is ignored.
+- Sends: each gets a `clientId` and shows at once as "Sending…". The echo carrying that `clientId` replaces it; an error on `/user/queue/errors`, a closed socket, or no echo within 10 s marks it failed ("Tap to retry", same `clientId`, so the server never saves it twice). After a reconnect the hook refetches the newest page.
+- GIFs and stickers come from KLIPY through the backend (`klipyAPI.ts`; the key never ships in the app). `GifStickerPicker` shows "Powered by KLIPY", which KLIPY's terms require. `expo-image` plays them. A 503 means the server has no `KLIPY_API_KEY`.
+- Long press opens `MessageActionsSheet`: the six quick reactions (one per member; tapping yours removes it), then Delete (own) or Report (others'). Reaction chips under a message toggle too. Deleted and staff-removed messages stay as placeholders.
+- iOS can't present a modal or alert while another modal is closing, so actions from the sheet run 350 ms after it closes. `ChatRoom` clears that timer on unmount, so backing out within the delay can't pop a dialog over the next screen.
+- Limits mirror the backend in `constants/chat.ts` (500-character messages, 300-character report notes).
+- Keyboard: `KeyboardAvoidingView` measures itself within its parent, so it needs `keyboardVerticalOffset` = how far down the window the screen starts (the root `SafeAreaView`'s status bar inset, plus any banner above the stack). Android runs edge-to-edge (`edgeToEdgeEnabled`), so the window doesn't shrink for the keyboard either, and there `measureInWindow` leaves the status bar out while the keyboard's position includes it, so the message bar ended up ~one status bar behind the keyboard. `ChatRoom` and `GifStickerPicker` pad by `useKeyboardHeight()` on Android instead; React Native reports that height without the navigation bar, which the root `SafeAreaView` already keeps screens above (the picker's modal isn't inside it, so it adds the bottom inset itself). iOS keeps `KeyboardAvoidingView` with `keyboardVerticalOffset` set to the screen's measured top.
+
 ### Out of Order machines
 - Staff can set a machine's status to "Out of Order"; use `isOutOfOrder()` from `constants/machineStatus.ts` (case-insensitive) rather than comparing strings
 - It shows gray (`OUT_OF_ORDER_COLOR`, wrench icon) in the equipment list, workout machine list and floor map; the machine page replaces check-in with a notice
@@ -142,7 +155,7 @@ npm run android
 
 Follow `TEAM_WORKFLOW.md` before prebuild or native validation. After adding a route, regenerate typed routes if necessary by starting Expo, then rerun TypeScript.
 
-Help-request-specific manual and automated checks are documented in `HELP_REQUESTS_TESTING.md`; saved data, live updates and empty sessions in `MINOR_FIXES_TESTING.md`; the unreachable notice in `BACKEND_UNREACHABLE_TESTING.md`.
+Help-request-specific manual and automated checks are documented in `HELP_REQUESTS_TESTING.md`; saved data, live updates and empty sessions in `MINOR_FIXES_TESTING.md`; the unreachable notice in `BACKEND_UNREACHABLE_TESTING.md`; chat GIFs, stickers, reactions and reporting in `CHAT_MEDIA_TESTING.md`.
 
 AsyncStorage throws under Jest without its mock: add `jest.mock("@react-native-async-storage/async-storage", () => jest.requireActual("@react-native-async-storage/async-storage/jest/async-storage-mock"))` to any test that loads `services/resourceCache.ts`, and `await clearCache()` in `beforeEach`, since saved data is module-level.
 

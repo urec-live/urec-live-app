@@ -11,6 +11,31 @@ export interface ChatMessageCallback {
   (message: any): void;
 }
 
+/** What the app sends for a chat message; the server echoes clientId back on the saved message. */
+export interface OutgoingChatMessage {
+  clientId: string;
+  kind: 'TEXT' | 'GIF' | 'STICKER';
+  content?: string;
+  media?: {
+    url: string;
+    previewUrl?: string | null;
+    width?: number | null;
+    height?: number | null;
+    providerId?: string;
+  };
+}
+
+/** A rejected send, from /user/queue/errors. */
+export interface ChatSendError {
+  clientId: string | null;
+  code: string;
+  message: string;
+}
+
+export interface ChatErrorCallback {
+  (error: ChatSendError): void;
+}
+
 class WebSocketService {
   private client: Client | null = null;
   private isConnected = false;
@@ -35,6 +60,8 @@ class WebSocketService {
   private userQueueSubscription: StompSubscription | null = null;
   private communityCallbacks: ChatMessageCallback[] = [];
   private userQueueCallbacks: ChatMessageCallback[] = [];
+  private errorSubscription: StompSubscription | null = null;
+  private errorCallbacks: ChatErrorCallback[] = [];
 
   // When the current connection came up (null while disconnected), and who to tell when it does
   private connectedSince: number | null = null;
@@ -119,6 +146,11 @@ class WebSocketService {
             );
           }
 
+          // Re-establish the chat error queue if a chat screen is open
+          if (this.errorCallbacks.length > 0 && !this.errorSubscription) {
+            this.subscribeErrorQueue();
+          }
+
           this.connectListeners.forEach(listener => listener());
         },
         onDisconnect: () => {
@@ -128,6 +160,7 @@ class WebSocketService {
           this.connectedSince = null;
           this.communitySubscription = null;
           this.userQueueSubscription = null;
+          this.errorSubscription = null;
         },
         onStompError: (frame) => {
           console.error('[WS] STOMP error:', frame.headers['message'], frame.body);
@@ -141,6 +174,7 @@ class WebSocketService {
           this.machineSubscription = null;
           this.communitySubscription = null;
           this.userQueueSubscription = null;
+          this.errorSubscription = null;
           console.log('[WS] WebSocket closed, reconnect attempt:', this.reconnectAttempts);
           this.isConnected = false;
           this.connectedSince = null;
@@ -168,8 +202,10 @@ class WebSocketService {
       this.subscribers = [];
       this.communityCallbacks = [];
       this.userQueueCallbacks = [];
+      this.errorCallbacks = [];
       this.communitySubscription = null;
       this.userQueueSubscription = null;
+      this.errorSubscription = null;
     }
   }
 
@@ -230,17 +266,17 @@ class WebSocketService {
     };
   }
 
-  sendCommunityMessage(content: string) {
-    console.log('[WS] sendCommunityMessage — client.connected:', this.client?.connected, 'content:', content);
+  /** Publishes a community message; false if the socket is down and nothing was sent. */
+  sendCommunityMessage(message: OutgoingChatMessage): boolean {
     if (!this.client?.connected) {
       console.warn('[WS] sendCommunityMessage dropped — not connected');
-      return;
+      return false;
     }
     this.client.publish({
       destination: '/app/chat.community.send',
-      body: JSON.stringify({ content }),
+      body: JSON.stringify(message),
     });
-    console.log('[WS] Published to /app/chat.community.send');
+    return true;
   }
 
   // ── Direct messages ────────────────────────────────────────────────────
@@ -272,11 +308,44 @@ class WebSocketService {
     };
   }
 
-  sendDM(recipient: string, content: string) {
-    if (!this.client?.connected) return;
+  /** Publishes a DM; false if the socket is down and nothing was sent. */
+  sendDM(recipient: string, message: OutgoingChatMessage): boolean {
+    if (!this.client?.connected) return false;
     this.client.publish({
       destination: '/app/chat.dm.send',
-      body: JSON.stringify({ recipient, content }),
+      body: JSON.stringify({ ...message, recipient }),
+    });
+    return true;
+  }
+
+  // ── Chat send errors ───────────────────────────────────────────────────
+
+  /** Rejected chat sends for this user (e.g. too long, unknown recipient). Returns an unsubscribe. */
+  subscribeToChatErrors(callback: ChatErrorCallback): () => void {
+    this.errorCallbacks.push(callback);
+
+    // Subscribe immediately if already connected; otherwise onConnect will handle it
+    if (this.client?.connected && !this.errorSubscription) {
+      this.subscribeErrorQueue();
+    }
+
+    return () => {
+      this.errorCallbacks = this.errorCallbacks.filter(cb => cb !== callback);
+      if (this.errorCallbacks.length === 0) {
+        this.errorSubscription?.unsubscribe();
+        this.errorSubscription = null;
+      }
+    };
+  }
+
+  private subscribeErrorQueue() {
+    this.errorSubscription = this.client!.subscribe('/user/queue/errors', (msg: IMessage) => {
+      try {
+        const error = JSON.parse(msg.body) as ChatSendError;
+        this.errorCallbacks.forEach(cb => cb(error));
+      } catch (e) {
+        console.error('[WS] Error parsing chat error:', e);
+      }
     });
   }
 }

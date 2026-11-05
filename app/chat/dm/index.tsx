@@ -43,7 +43,16 @@ export default function DMInboxScreen() {
       </View>
       <View style={styles.rowContent}>
         <Text style={styles.partnerName}>{item.partnerUsername}</Text>
-        <Text style={styles.preview} numberOfLines={1}>{item.lastMessage}</Text>
+        <View style={styles.previewRow}>
+          {(item.lastKind === "GIF" || item.lastKind === "STICKER") && (
+            <MaterialCommunityIcons
+              name={item.lastKind === "GIF" ? "file-gif-box" : "sticker-emoji"}
+              size={15}
+              color="#999"
+            />
+          )}
+          <Text style={styles.preview} numberOfLines={1}>{item.lastMessage}</Text>
+        </View>
       </View>
     </Pressable>
   );
@@ -155,7 +164,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1a1a1a",
   },
+  previewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   preview: {
+    flexShrink: 1,
     fontSize: 13,
     color: "#888",
   },
