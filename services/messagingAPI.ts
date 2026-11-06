@@ -1,17 +1,27 @@
-import { HISTORY_PAGE_SIZE } from '@/constants/chat';
+import { HISTORY_PAGE_SIZE, PHOTO_UPLOAD_TIMEOUT_MS } from '@/constants/chat';
 import api from './authAPI';
 
 /** URL segment for a chat room: the global community chat or direct messages. */
 export type ChatChannel = 'community' | 'dm';
 
 /** What a message holds. Messages from before media existed come back as TEXT. */
-export type MessageKind = 'TEXT' | 'GIF' | 'STICKER';
+export type MessageKind = 'TEXT' | 'GIF' | 'STICKER' | 'IMAGE';
 
 export interface ChatMedia {
+  /** For photos, an expiring URL (it changes on every fetch); may be relative to the backend. */
   url: string;
   previewUrl?: string | null;
   width?: number | null;
   height?: number | null;
+  /** Photos only: a stable id to cache the image by, since its URL keeps changing. */
+  mediaId?: number | null;
+}
+
+/** A photo stored on the server, ready to send as an IMAGE message. */
+export interface UploadedPhoto {
+  mediaId: number;
+  width: number;
+  height: number;
 }
 
 export interface ChatMessageResponse {
@@ -36,7 +46,7 @@ export interface ChatMessageResponse {
 
 export interface ConversationSummary {
   partnerUsername: string;
-  /** The text, or a label such as "GIF", "Sticker" or "Message deleted". */
+  /** The text, or a label such as "GIF", "Sticker", "Photo" or "Message deleted". */
   lastMessage: string;
   lastSentAt: string;
   lastKind?: MessageKind;
@@ -95,6 +105,29 @@ export const messagingAPI = {
   /** Deletes one of my own messages; resolves to its placeholder. */
   deleteMessage: async (channel: ChatChannel, id: number): Promise<ChatMessageResponse> => {
     const res = await api.delete(messageUrl(channel, id));
+    return res.data;
+  },
+
+  /**
+   * Uploads a JPEG for chat (POST /messaging/media) and resolves to its mediaId. `onProgress` gets
+   * the fraction sent, 0 to 1. Rejects with the axios error (413 too big, 429 too many, ...).
+   */
+  uploadPhoto: async (
+    uri: string,
+    onProgress?: (fraction: number) => void,
+    signal?: AbortSignal,
+  ): Promise<UploadedPhoto> => {
+    const form = new FormData();
+    // React Native reads the file from the URI itself
+    form.append('file', { uri, name: 'photo.jpg', type: 'image/jpeg' } as unknown as Blob);
+    const res = await api.post('/messaging/media', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: PHOTO_UPLOAD_TIMEOUT_MS,
+      signal,
+      onUploadProgress: (event) => {
+        if (onProgress && event.total) onProgress(Math.min(1, event.loaded / event.total));
+      },
+    });
     return res.data;
   },
 

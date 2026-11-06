@@ -31,7 +31,7 @@ The native `ios/` and `android/` projects are generated locally and ignored by G
 - Session persistence includes sets/reps/weight, notes, history, stats, streaks, weekly activity, personal records, and weight progression.
 - Weekly plans use `PlanContext` and `planAPI.ts`.
 - Help requests use `HelpRequestContext`, five-second foreground polling while open, cancellation/completion actions, status feedback, and placeholder demo media.
-- Chat: community chat (`app/chat/community.tsx`, from the League tab) and DMs (`app/chat/dm/`), with GIFs, stickers, reactions, delete and report (see Chat below).
+- Chat: community chat (`app/chat/community.tsx`, from the League tab) and DMs (`app/chat/dm/`), with photos, GIFs, stickers, reactions, delete and report (see Chat below).
 
 ## Project structure
 
@@ -53,7 +53,7 @@ services/
   planAPI.ts
   helpRequestAPI.ts
   chatAPI.ts                 # AI chatbot (no backend endpoint yet)
-  messagingAPI.ts            # community chat + DMs: history pages, reactions, delete, report
+  messagingAPI.ts            # community chat + DMs: history pages, photo upload, reactions, delete, report
   klipyAPI.ts                # GIF/sticker search through the backend
   websocketService.ts
   networkConfig.ts
@@ -128,7 +128,9 @@ Do not add personal LAN addresses to source or duplicate base URLs in individual
 - GIFs and stickers come from KLIPY through the backend (`klipyAPI.ts`; the key never ships in the app). `GifStickerPicker` shows "Powered by KLIPY", which KLIPY's terms require. `expo-image` plays them. A 503 means the server has no `KLIPY_API_KEY`.
 - Long press opens `MessageActionsSheet`: the six quick reactions (one per member; tapping yours removes it), then Delete (own) or Report (others'). Reaction chips under a message toggle too. Deleted and staff-removed messages stay as placeholders.
 - iOS can't present a modal or alert while another modal is closing, so actions from the sheet run 350 ms after it closes. `ChatRoom` clears that timer on unmount, so backing out within the delay can't pop a dialog over the next screen.
-- Limits mirror the backend in `constants/chat.ts` (500-character messages, 300-character report notes).
+- Photos: the 📷 button (in `ChatComposer`'s `leading` slot) opens `PhotoSourceSheet`. `utils/chatPhotos.ts` picks with `expo-image-picker` (camera permission asked first; the library picker needs none) and resizes with `expo-image-manipulator` to 1600 px, JPEG 0.75. `PhotoPreviewModal` adds an optional caption. The hook uploads (`messagingAPI.uploadPhoto`, multipart, with progress) and then sends `{kind: "IMAGE", content: caption, media: {mediaId}}` on the usual send path. The echo timeout starts only after the upload. Retry uploads again if the upload never finished (or the server answered `INVALID_MEDIA`); otherwise it resends the same `clientId` and `mediaId`. Leaving the room or discarding aborts the upload.
+- Photo URLs expire and change on every fetch, so bubbles and `PhotoViewer` load them with `cacheKey: chat-media-<mediaId>`. URLs starting with `/` (the backend's local storage mode) are resolved against `BACKEND_ORIGIN` (`resolveMediaUrl` in `components/chat/chatUtils.ts`). A photo that fails to load shows "Photo unavailable". `expo-image-picker` and `expo-image-manipulator` are native: adding or upgrading them needs a dev-client rebuild.
+- Limits mirror the backend in `constants/chat.ts` (500-character messages and captions, 300-character report notes; photos resized to 1600 px before upload).
 - Keyboard: `KeyboardAvoidingView` measures itself within its parent, so it needs `keyboardVerticalOffset` = how far down the window the screen starts (the root `SafeAreaView`'s status bar inset, plus any banner above the stack). Android runs edge-to-edge (`edgeToEdgeEnabled`), so the window doesn't shrink for the keyboard either, and there `measureInWindow` leaves the status bar out while the keyboard's position includes it, so the message bar ended up ~one status bar behind the keyboard. `ChatRoom` and `GifStickerPicker` pad by `useKeyboardHeight()` on Android instead; React Native reports that height without the navigation bar, which the root `SafeAreaView` already keeps screens above (the picker's modal isn't inside it, so it adds the bottom inset itself). iOS keeps `KeyboardAvoidingView` with `keyboardVerticalOffset` set to the screen's measured top.
 
 ### Out of Order machines
@@ -155,7 +157,7 @@ npm run android
 
 Follow `TEAM_WORKFLOW.md` before prebuild or native validation. After adding a route, regenerate typed routes if necessary by starting Expo, then rerun TypeScript.
 
-Help-request-specific manual and automated checks are documented in `HELP_REQUESTS_TESTING.md`; saved data, live updates and empty sessions in `MINOR_FIXES_TESTING.md`; the unreachable notice in `BACKEND_UNREACHABLE_TESTING.md`; chat GIFs, stickers, reactions and reporting in `CHAT_MEDIA_TESTING.md`.
+Help-request-specific manual and automated checks are documented in `HELP_REQUESTS_TESTING.md`; saved data, live updates and empty sessions in `MINOR_FIXES_TESTING.md`; the unreachable notice in `BACKEND_UNREACHABLE_TESTING.md`; chat GIFs, stickers, reactions and reporting in `CHAT_MEDIA_TESTING.md`; chat photos in `CHAT_PHOTOS_TESTING.md`.
 
 AsyncStorage throws under Jest without its mock: add `jest.mock("@react-native-async-storage/async-storage", () => jest.requireActual("@react-native-async-storage/async-storage/jest/async-storage-mock"))` to any test that loads `services/resourceCache.ts`, and `await clearCache()` in `beforeEach`, since saved data is module-level.
 

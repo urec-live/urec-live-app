@@ -18,6 +18,7 @@ import { ChatRow, useChatMessages } from "@/hooks/useChatMessages";
 import { useKeyboardHeight } from "@/hooks/useKeyboardHeight";
 import { ChatChannel, ChatMessageResponse, messagingAPI, ReportReason } from "@/services/messagingAPI";
 import { toChatActionError } from "@/utils/chatErrors";
+import { PhotoPermissionError, PhotoSource, pickChatPhoto, PreparedPhoto } from "@/utils/chatPhotos";
 import { confirmAsync } from "@/utils/confirm";
 
 import ChatComposer from "./ChatComposer";
@@ -25,6 +26,9 @@ import { myReactionOf } from "./chatUtils";
 import GifStickerPicker from "./GifStickerPicker";
 import MessageActionsSheet from "./MessageActionsSheet";
 import MessageBubble from "./MessageBubble";
+import PhotoPreviewModal from "./PhotoPreviewModal";
+import PhotoSourceSheet from "./PhotoSourceSheet";
+import PhotoViewer from "./PhotoViewer";
 import ReportMessageModal from "./ReportMessageModal";
 
 const NOTICE_MS = 4000;
@@ -45,7 +49,7 @@ interface ChatRoomProps {
 
 /**
  * A chat screen: messages (newest at the bottom, older ones loading as you scroll up), the
- * composer with the GIF/sticker picker, and long-press reactions, delete and report.
+ * composer with the photo button and the GIF/sticker picker, and long-press reactions, delete and report.
  */
 export default function ChatRoom({ channel, partner, title, placeholder, emptyText, onIncoming }: ChatRoomProps) {
   const router = useRouter();
@@ -57,6 +61,9 @@ export default function ChatRoom({ channel, partner, title, placeholder, emptyTe
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selected, setSelected] = useState<ChatMessageResponse | null>(null);
   const [reporting, setReporting] = useState<ChatMessageResponse | null>(null);
+  const [photoSourceOpen, setPhotoSourceOpen] = useState(false);
+  const [pickedPhoto, setPickedPhoto] = useState<PreparedPhoto | null>(null);
+  const [viewing, setViewing] = useState<ChatMessageResponse | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sheetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -140,17 +147,45 @@ export default function ChatRoom({ channel, partner, title, placeholder, emptyTe
     }, AFTER_SHEET_MS);
   };
 
+  /** Closes the photo options, then opens the camera or library once the sheet has gone. */
+  const pickPhoto = (source: PhotoSource) => {
+    setPhotoSourceOpen(false);
+    if (sheetTimer.current) clearTimeout(sheetTimer.current);
+    sheetTimer.current = setTimeout(async () => {
+      sheetTimer.current = null;
+      try {
+        const photo = await pickChatPhoto(source);
+        if (photo) setPickedPhoto(photo);
+      } catch (e) {
+        showNotice(
+          e instanceof PhotoPermissionError
+            ? "Allow camera access in Settings to take photos."
+            : "Couldn't open that photo. Try another one.",
+        );
+      }
+    }, AFTER_SHEET_MS);
+  };
+
+  const sendPhoto = (caption: string) => {
+    if (!pickedPhoto) return;
+    chat.send({ kind: "IMAGE", photo: pickedPhoto, caption });
+    setPickedPhoto(null);
+  };
+
   const renderItem = ({ item }: { item: ChatRow }) => (
     <MessageBubble
       message={item.message}
       me={me}
       status={item.status}
       error={item.error}
+      progress={item.progress}
+      localUri={item.localUri}
       showSender={channel === "community"}
       onOpenActions={() => setSelected(item.message)}
       onPressFailed={() => item.message.clientId && chat.retry(item.message.clientId)}
       onPressSender={(username) => router.push(`/users/${username}` as any)}
       onToggleReaction={(emoji) => toggleReaction(item.message, emoji)}
+      onOpenPhoto={() => setViewing(item.message)}
     />
   );
 
@@ -213,6 +248,17 @@ export default function ChatRoom({ channel, partner, title, placeholder, emptyTe
             placeholder={placeholder}
             onSendText={(content) => chat.send({ kind: "TEXT", content })}
             onOpenPicker={() => setPickerOpen(true)}
+            leading={
+              <Pressable
+                style={styles.photoBtn}
+                onPress={() => setPhotoSourceOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Send a photo"
+                hitSlop={6}
+              >
+                <MaterialCommunityIcons name="camera-outline" size={26} color="#4CAF50" />
+              </Pressable>
+            }
           />
         </KeyboardAvoidingView>
 
@@ -242,6 +288,12 @@ export default function ChatRoom({ channel, partner, title, placeholder, emptyTe
           onReport={fromSheet(setReporting)}
           onClose={() => setSelected(null)}
         />
+
+        <PhotoSourceSheet visible={photoSourceOpen} onPick={pickPhoto} onClose={() => setPhotoSourceOpen(false)} />
+
+        <PhotoPreviewModal photo={pickedPhoto} onSend={sendPhoto} onClose={() => setPickedPhoto(null)} />
+
+        <PhotoViewer message={viewing} onClose={() => setViewing(null)} />
 
         <ReportMessageModal
           visible={!!reporting}
@@ -288,6 +340,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   older: { marginVertical: 12 },
+  photoBtn: { width: 38, height: 42, alignItems: "center", justifyContent: "center" },
   notice: {
     marginHorizontal: 12,
     marginBottom: 6,
