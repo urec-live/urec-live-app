@@ -220,6 +220,18 @@ describe("DM inbox", () => {
     expect(screen.getByText("See you at 6")).toBeTruthy();
     await waitFor(() => expect(mockApi.getConversations).toHaveBeenCalledTimes(2));
   });
+
+  it("previews GIFs, stickers and deleted messages with the server's label", async () => {
+    mockApi.getConversations.mockResolvedValue([
+      { partnerUsername: "alex", lastMessage: "GIF", lastKind: "GIF", lastSentAt: "2026-11-03T12:00:00Z", unread: true },
+      { partnerUsername: "jo", lastMessage: "Sticker", lastKind: "STICKER", lastSentAt: "2026-11-03T11:00:00Z", unread: false },
+      { partnerUsername: "kim", lastMessage: "Message deleted", lastKind: "TEXT", lastSentAt: "2026-11-03T10:00:00Z", unread: false },
+    ]);
+    render(<DMInboxScreen />);
+    expect(await screen.findByText("GIF")).toBeTruthy();
+    expect(screen.getByText("Sticker")).toBeTruthy();
+    expect(screen.getByText("Message deleted")).toBeTruthy();
+  });
 });
 
 describe("History", () => {
