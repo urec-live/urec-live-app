@@ -6,6 +6,7 @@ import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -60,6 +61,7 @@ export default function Profile() {
   const router = useRouter();
 
   const [isPublic, setIsPublic] = useState(false);
+  const [deletionLinkError, setDeletionLinkError] = useState(false);
   const [chartMode, setChartMode] = useState<"sessions" | "volume">("sessions");
 
   // The saved copy shows at once on every visit; a stale one refreshes in the background
@@ -84,6 +86,15 @@ export default function Profile() {
       await socialAPI.updateMyProfile({ profileVisibility: value ? 'PUBLIC' : 'PRIVATE' });
     } catch {
       setIsPublic(!value);
+    }
+  };
+
+  const handleDeletionPress = async () => {
+    setDeletionLinkError(false);
+    try {
+      await Linking.openURL("https://urec-live-privacy.onrender.com/delete-account/");
+    } catch {
+      setDeletionLinkError(true);
     }
   };
 
@@ -303,6 +314,33 @@ export default function Profile() {
             </View>
             <MaterialCommunityIcons name="chevron-right" size={24} color="#ccc" />
           </Pressable>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Account</Text>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel="Delete account"
+            accessibilityHint="Opens the account-deletion request page in your browser"
+            style={styles.settingsRow}
+            onPress={handleDeletionPress}
+          >
+            <View style={styles.settingsLeft}>
+              <MaterialCommunityIcons name="account-remove-outline" size={24} color="#b3261e" />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingsLabel, { color: "#b3261e" }]}>Delete account</Text>
+                <Text style={styles.settingsDescription}>
+                  Request permanent deletion of your account and data
+                </Text>
+              </View>
+            </View>
+            <MaterialCommunityIcons name="open-in-new" size={20} color="#666" />
+          </Pressable>
+          {deletionLinkError && (
+            <Text accessibilityRole="alert" style={styles.settingsDescription}>
+              Couldn’t open the deletion page. Email mdasthanmay@gmail.com with the subject UREC Live account deletion request.
+            </Text>
+          )}
         </View>
 
         {/* Logout */}
