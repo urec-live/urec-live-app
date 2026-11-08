@@ -14,6 +14,7 @@ interface FakeClient {
   activate: jest.Mock;
   deactivate: jest.Mock;
   subscribe: jest.Mock;
+  publish: jest.Mock;
 }
 const mockClients: FakeClient[] = [];
 jest.mock("@stomp/stompjs", () => ({
@@ -29,6 +30,7 @@ jest.mock("@stomp/stompjs", () => ({
         client.active = false;
       }),
       subscribe: jest.fn(() => ({ unsubscribe: jest.fn() })),
+      publish: jest.fn(),
     };
     mockClients.push(client);
     return client;
@@ -135,5 +137,63 @@ describe("websocketService", () => {
     expect(topic).toBe("/topic/gyms/3/machines");
     expect(first).toHaveBeenCalledWith({ id: 1, status: "In Use" });
     expect(second).toHaveBeenCalledWith({ id: 1, status: "In Use" });
+  });
+});
+
+describe("websocketService chat", () => {
+  const gif = { url: "https://static.klipy.com/a.webp", previewUrl: null, width: 200, height: 150, providerId: "a" };
+
+  it("says a send didn't go out while disconnected", async () => {
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+    expect(ws.sendCommunityMessage({ clientId: "c1", kind: "TEXT", content: "hi" })).toBe(false);
+    await ws.connect();
+    expect(ws.sendDM("bob", { clientId: "c2", kind: "TEXT", content: "hi" })).toBe(false);
+    expect(mockClients[0].publish).not.toHaveBeenCalled();
+  });
+
+  it("publishes community messages and DMs with their clientId, kind and media", async () => {
+    await ws.connect();
+    connectNow(mockClients[0], 1_000);
+
+    expect(ws.sendCommunityMessage({ clientId: "c1", kind: "GIF", media: gif })).toBe(true);
+    expect(ws.sendDM("bob", { clientId: "c2", kind: "TEXT", content: "hey" })).toBe(true);
+
+    const [community, dm] = mockClients[0].publish.mock.calls.map(([frame]) => frame);
+    expect(community.destination).toBe("/app/chat.community.send");
+    expect(JSON.parse(community.body)).toEqual({ clientId: "c1", kind: "GIF", media: gif });
+    expect(dm.destination).toBe("/app/chat.dm.send");
+    expect(JSON.parse(dm.body)).toEqual({ clientId: "c2", kind: "TEXT", content: "hey", recipient: "bob" });
+  });
+
+  it("hands rejected sends from the error queue to subscribers, and resubscribes after a reconnect", async () => {
+    const onError = jest.fn();
+    const stop = ws.subscribeToChatErrors(onError);
+    await ws.connect();
+    connectNow(mockClients[0], 1_000);
+
+    const errorSubscriptions = () =>
+      mockClients[0].subscribe.mock.calls.filter(([destination]) => destination === "/user/queue/errors");
+    expect(errorSubscriptions()).toHaveLength(1);
+    const deliver = errorSubscriptions()[0][1];
+    jest.spyOn(console, "error").mockImplementation(() => {});
+    deliver({ body: JSON.stringify({ clientId: "c1", code: "TOO_LONG", message: "Too long" }) });
+    deliver({ body: "not json" });
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith({ clientId: "c1", code: "TOO_LONG", message: "Too long" });
+
+    mockClients[0].config.onWebSocketClose();
+    connectNow(mockClients[0], 2_000);
+    expect(errorSubscriptions()).toHaveLength(2);
+
+    stop();
+    const unsubscribe = mockClients[0].subscribe.mock.results[mockClients[0].subscribe.mock.results.length - 1].value.unsubscribe;
+    expect(unsubscribe).toHaveBeenCalled();
+  });
+
+  it("subscribes to the error queue straight away when already connected", async () => {
+    await ws.connect();
+    connectNow(mockClients[0], 1_000);
+    ws.subscribeToChatErrors(jest.fn());
+    expect(mockClients[0].subscribe).toHaveBeenCalledWith("/user/queue/errors", expect.any(Function));
   });
 });
