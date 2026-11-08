@@ -8,7 +8,7 @@ The public contact is `mdasthanmay@gmail.com`, with deletion completed within 30
 
 The source audit covers account/Google sign-in, profile visibility/bio, workouts/plans, gym activity, reports, social messages, camera scanning and local caches. Actual production configuration and provider retention have not been audited. Before publication, confirm the operator identity matches the Play listing, actual hosting/database/email providers, any additional SDKs or health integrations in the submitted build, backup retention, and that your team can perform all promised deletions. Add specific backup/exception periods when confirmed; the current text discloses that periods are explained in the response rather than inventing them.
 
-The page creates a manual request channel; it does not implement backend account erasure. The current app profile has no deletion entry. Add a clearly labeled **Delete account** link in the app to the final `/delete-account/` URL before Play submission. Do not claim automatic deletion is implemented.
+The page creates a manual request channel; it does not implement backend account erasure. In the app, **Profile → Account → Delete account** opens `https://urec-live-privacy.onrender.com/delete-account/` in the browser. If opening fails, the profile shows the support email and request subject. Do not claim automatic deletion is implemented.
 
 ## Local preview
 
