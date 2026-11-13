@@ -148,11 +148,12 @@ describe("Machine page", () => {
     await clearCache();
     mockContext.activeRequest = null;
     mockContext.callStaff.mockResolvedValue(helpRequest());
-    // An older backend: no exercise names with the machine, so the page asks for them
+    mockGetExercises.mockResolvedValue([]);
+    // An older backend: exercise names come from the machine-exercises endpoint
     mockGetMachineById.mockResolvedValue({ id: 12, name: "Leg Press", status: "Available", exercise: "Leg Press" });
   });
 
-  it("uses the exercises sent with the machine instead of asking for them", async () => {
+  it("uses machine summary names for staff help while resolving exercise links", async () => {
     mockGetMachineById.mockResolvedValue({
       id: 12,
       code: "LP01",
@@ -169,7 +170,7 @@ describe("Machine page", () => {
     await screen.findByRole("button", { name: "Call staff" });
     expect(mockContext.callStaff).toHaveBeenCalledWith({ equipmentId: 12, exerciseName: "Leg Press" });
     expect(screen.getByText("Quads")).toBeTruthy();
-    expect(mockGetExercises).not.toHaveBeenCalled();
+    expect(mockGetExercises).toHaveBeenCalledWith(12);
   });
 
   it("shows the machine from the Equipment tab's saved list while its own request runs", async () => {
