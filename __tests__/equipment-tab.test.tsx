@@ -1,165 +1,202 @@
-import { act, render, screen, waitFor } from "@testing-library/react-native";
 import React from "react";
-import { RefreshControl } from "react-native";
-
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react-native";
 import Equipment from "@/app/(tabs)/equipment";
-import type { MachineDto } from "@/services/machineAPI";
-import { clearCache, patchCachedMachine, setLiveSinceSource } from "@/services/resourceCache";
-
-jest.mock("expo-router", () => ({ useRouter: () => ({ push: jest.fn() }) }));
-
+import {
+  clearCache,
+  patchCachedMachine,
+  setLiveSinceSource,
+} from "@/services/resourceCache";
+import type { MachineDto, FloorPlanResponse } from "@/services/machineAPI";
+const mockPush = jest.fn();
+jest.mock("expo-router", () => ({
+  useRouter: () => ({ push: mockPush }),
+  useFocusEffect: (cb: () => void) => {
+    require("react").useEffect(cb, [cb]);
+  },
+}));
+jest.mock("@/contexts/GymContext", () => ({
+  useGym: () => ({ gym: { id: 1, name: "University gym" }, loading: false }),
+}));
 const mockApi = {
   listAll: jest.fn(),
-  getExercisesByEquipmentId: jest.fn(),
   getFloorPlans: jest.fn(),
   getFloorPlan: jest.fn(),
+  getExercisesByEquipmentId: jest.fn(),
 };
 jest.mock("@/services/machineAPI", () => ({
-  machineAPI: new Proxy({}, { get: (_target, name: string) => (...args: unknown[]) => mockApi[name as keyof typeof mockApi](...args) }),
+  machineAPI: new Proxy(
+    {},
+    {
+      get:
+        (_t, k: string) =>
+        (...args: unknown[]) =>
+          mockApi[k as keyof typeof mockApi](...args),
+    },
+  ),
+}));
+jest.mock("@/services/websocketService", () => ({
+  __esModule: true,
+  default: { onConnectionChange: () => () => {}, getConnectedSince: () => 1 },
 }));
 jest.mock("@/services/sessionAPI", () => ({ sessionAPI: {} }));
-jest.mock("@/components/MapModal", () => () => null);
+jest.mock("@/components/FloorMap", () => {
+  const { View, Text } = require("react-native");
+  return {
+    __esModule: true,
+    default: (p: any) => (
+      <View>
+        <Text testID="map-floor">{String(p.selectedFloorId)}</Text>
+        <Text testID="map-selected">{String(p.highlightedEquipmentId)}</Text>
+        <Text testID="map-matches">
+          {String(p.matchingEquipmentIds?.size ?? -1)}
+        </Text>
+      </View>
+    ),
+  };
+});
 jest.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: () => null }));
 jest.mock("@react-native-async-storage/async-storage", () =>
-  jest.requireActual("@react-native-async-storage/async-storage/jest/async-storage-mock"),
+  jest.requireActual(
+    "@react-native-async-storage/async-storage/jest/async-storage-mock",
+  ),
 );
-
-const never = () => new Promise<never>(() => {});
-
-// What the updated backend sends: each machine's exercises come with it
-const cable = (status = "Available"): MachineDto => ({
+const cable: MachineDto = {
   id: 1,
-  code: "CC001",
+  code: "C1",
   name: "Cable Station",
-  status,
+  status: "Available",
   exercise: "Cable Fly",
-  exerciseNames: ["Cable Crossover", "Cable Fly", "Face Pull", "Tricep Pushdown"],
-  muscleGroups: ["Back", "Chest", "Triceps"],
-});
+  exerciseNames: ["Cable Fly", "Face Pull"],
+  muscleGroups: ["Chest", "Back"],
+  floorX: 100,
+  floorY: 100,
+};
 const treadmill: MachineDto = {
+  ...cable,
   id: 2,
-  code: "TM001",
-  name: "Treadmill 1",
-  status: "In Use",
+  code: "T1",
+  name: "Treadmill",
   exercise: "Running",
   exerciseNames: ["Running"],
   muscleGroups: ["Cardio"],
+  status: "In Use",
 };
-
+const floors: FloorPlanResponse[] = [
+  {
+    id: 7,
+    name: "Ground",
+    width: 800,
+    height: 600,
+    floorNumber: 0,
+    imageUrl: null,
+    equipment: [cable],
+    layout: {
+      version: 1,
+      areas: [
+        {
+          id: "pool",
+          name: "Indoor pool",
+          kind: "pool",
+          shape: "rect",
+          x: 300,
+          y: 300,
+          width: 300,
+          height: 200,
+        },
+      ],
+    },
+  },
+  {
+    id: 8,
+    name: "Level 2",
+    width: 800,
+    height: 600,
+    floorNumber: 1,
+    imageUrl: null,
+    equipment: [treadmill],
+  },
+];
 beforeEach(async () => {
   jest.clearAllMocks();
   await clearCache();
   setLiveSinceSource(() => 0);
-  mockApi.listAll.mockResolvedValue([cable(), treadmill]);
-  mockApi.getFloorPlans.mockResolvedValue([]);
+  mockApi.listAll.mockResolvedValue([cable, treadmill]);
+  mockApi.getFloorPlans.mockResolvedValue(floors);
+  mockApi.getExercisesByEquipmentId.mockResolvedValue([]);
 });
-
-describe("Equipment tab", () => {
-  it("makes one request for everything on the cards", async () => {
-    render(<Equipment />);
-
-    expect(screen.getByText("Loading machines...")).toBeTruthy();
-    expect(await screen.findByText("Cable Station")).toBeTruthy();
-    expect(screen.getByText("Back, Chest, Triceps")).toBeTruthy();
-    expect(screen.getByText("Cable Crossover, Cable Fly, Face Pull...")).toBeTruthy();
-    expect(screen.getByText("Treadmill 1")).toBeTruthy();
-    expect(mockApi.listAll).toHaveBeenCalledTimes(1);
-    expect(mockApi.getExercisesByEquipmentId).not.toHaveBeenCalled();
+it("preserves Ground during search, then switches and opens a cross-floor result", async () => {
+  render(<Equipment />);
+  await screen.findByText("Treadmill");
+  expect(screen.getByTestId("map-floor").props.children).toBe("7");
+  fireEvent.changeText(
+    screen.getByLabelText("Search equipment, exercises, or places"),
+    "running",
+  );
+  expect(screen.queryByText("Cable Station")).toBeNull();
+  expect(screen.getByTestId("map-floor").props.children).toBe("7");
+  fireEvent.press(screen.getByLabelText(/Treadmill, In Use/));
+  expect(screen.getByTestId("map-floor").props.children).toBe("8");
+  expect(screen.getByTestId("map-selected").props.children).toBe("2");
+  fireEvent.press(screen.getByText("View equipment"));
+  expect(mockPush).toHaveBeenCalledWith({
+    pathname: "/machine/[id]",
+    params: { id: "2" },
   });
-
-  it("shows the list without waiting for the floor plans", async () => {
-    mockApi.getFloorPlans.mockImplementation(never);
-    render(<Equipment />);
-
-    expect(await screen.findByText("Cable Station")).toBeTruthy();
-    expect(screen.queryByText("Locate")).toBeNull(); // appears once the floors are in
-  });
-
-  it("offers Locate once the floor plans arrive", async () => {
-    mockApi.getFloorPlans.mockResolvedValue([
-      { id: 5, name: "Floor 1", imageUrl: null, width: 800, height: 600, floorNumber: 1, equipment: [cable()] },
-    ]);
-    render(<Equipment />);
-
-    expect(await screen.findByText("Locate")).toBeTruthy();
-  });
-
-  it("with an older backend, shows the list first and fills in each machine's exercises after", async () => {
-    const { exerciseNames: _names, muscleGroups: _groups, ...oldCable } = cable();
-    mockApi.listAll.mockResolvedValue([oldCable]);
-    let answer!: (exercises: unknown[]) => void;
-    mockApi.getExercisesByEquipmentId.mockReturnValue(new Promise((resolve) => (answer = resolve)));
-    render(<Equipment />);
-
-    expect(await screen.findByText("Cable Station")).toBeTruthy();
-    expect(mockApi.getExercisesByEquipmentId).toHaveBeenCalledWith(1);
-
-    await act(async () =>
-      answer([
-        { id: 7, name: "Cable Fly", muscleGroup: "Chest", gifUrl: "" },
-        { id: 8, name: "Tricep Pushdown", muscleGroup: "Triceps", gifUrl: "" },
-      ]),
-    );
-    expect(screen.getByText("Chest, Triceps")).toBeTruthy();
-    expect(screen.getByText("Cable Fly, Tricep Pushdown")).toBeTruthy();
-  });
-
-  it("shows the saved list at once on the next visit, without requests", async () => {
-    const first = render(<Equipment />);
-    await screen.findByText("Cable Station");
-    first.unmount();
-
-    render(<Equipment />);
-
-    expect(screen.queryByText("Loading machines...")).toBeNull();
-    expect(screen.getByText("Cable Station")).toBeTruthy();
-    await act(async () => {});
-    expect(mockApi.listAll).toHaveBeenCalledTimes(1);
-    expect(mockApi.getFloorPlans).toHaveBeenCalledTimes(1);
-  });
-
-  it("changes a card's status from a live update, without a request", async () => {
-    render(<Equipment />);
-    await screen.findByText("Cable Station");
-    expect(screen.getAllByText("In Use")).toHaveLength(1);
-
-    act(() => patchCachedMachine(cable("In Use")));
-
-    expect(screen.getAllByText("In Use")).toHaveLength(2);
-    expect(mockApi.listAll).toHaveBeenCalledTimes(1);
-  });
-
-  it("marks a machine Out of order when staff take it out of service, from the live update", async () => {
-    render(<Equipment />);
-    await screen.findByText("Cable Station");
-    expect(screen.queryByText("Out of order")).toBeNull();
-
-    act(() => patchCachedMachine(cable("Out of Order")));
-
-    expect(screen.getByText("Out of order")).toBeTruthy();
-    // The update carries the machine's exercises, so the card keeps them
-    expect(screen.getByText("Back, Chest, Triceps")).toBeTruthy();
-    expect(mockApi.listAll).toHaveBeenCalledTimes(1);
-  });
-
-  it("pull-to-refresh refetches the list and the floor plans once each", async () => {
-    render(<Equipment />);
-    await screen.findByText("Cable Station");
-
-    await act(async () => {
-      await screen.UNSAFE_getByType(RefreshControl).props.onRefresh();
-    });
-
-    expect(mockApi.listAll).toHaveBeenCalledTimes(2);
-    expect(mockApi.getFloorPlans).toHaveBeenCalledTimes(2);
-    expect(mockApi.getExercisesByEquipmentId).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.UNSAFE_getByType(RefreshControl).props.refreshing).toBe(false));
-  });
-
-  it("shows the empty state when the list can't load and nothing is saved", async () => {
-    mockApi.listAll.mockRejectedValue(new Error("offline"));
-    render(<Equipment />);
-
-    expect(await screen.findByText("No machines available")).toBeTruthy();
-  });
+});
+it("combines filters and updates live counts without moving floors", async () => {
+  render(<Equipment />);
+  await screen.findByText("Cable Station");
+  fireEvent.changeText(
+    screen.getByLabelText("Search equipment, exercises, or places"),
+    "fly",
+  );
+  fireEvent.press(screen.getByLabelText("Availability: Any availability"));
+  fireEvent.press(screen.getByLabelText("Availability: choose Available"));
+  expect(screen.getByTestId("map-matches").props.children).toBe("1");
+  await act(async () => patchCachedMachine({ ...cable, status: "In Use" }));
+  expect(screen.getByText("No matches")).toBeTruthy();
+  expect(screen.getByTestId("map-floor").props.children).toBe("7");
+  expect(screen.getByTestId("map-matches").props.children).toBe("0");
+});
+it("searches places and clears an empty search", async () => {
+  render(<Equipment />);
+  await screen.findByText("Indoor pool");
+  fireEvent.changeText(
+    screen.getByLabelText("Search equipment, exercises, or places"),
+    "pool",
+  );
+  expect(screen.getByText("Indoor pool")).toBeTruthy();
+  expect(screen.queryByText("Cable Station")).toBeNull();
+  fireEvent.changeText(
+    screen.getByLabelText("Search equipment, exercises, or places"),
+    "not-a-machine",
+  );
+  expect(screen.getByText("No matches")).toBeTruthy();
+  fireEvent.press(screen.getAllByText("Clear filters")[0]);
+  expect(screen.getByText("Cable Station")).toBeTruthy();
+});
+it("loads equipment before maps and searches legacy exercise metadata", async () => {
+  const { exerciseNames: _e, muscleGroups: _m, ...old } = cable;
+  mockApi.listAll.mockResolvedValue([old]);
+  mockApi.getFloorPlans.mockReturnValue(new Promise(() => {}));
+  mockApi.getExercisesByEquipmentId.mockResolvedValue([
+    { id: 3, name: "Legacy face pull", muscleGroup: "Back" },
+  ]);
+  render(<Equipment />);
+  await screen.findByText("Cable Station");
+  await waitFor(() =>
+    expect(mockApi.getExercisesByEquipmentId).toHaveBeenCalledWith(1),
+  );
+  fireEvent.changeText(
+    screen.getByLabelText("Search equipment, exercises, or places"),
+    "legacy",
+  );
+  await waitFor(() => expect(screen.getByText("Cable Station")).toBeTruthy());
+  expect(screen.getByText("Location not mapped")).toBeTruthy();
 });

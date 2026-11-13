@@ -1,446 +1,742 @@
-import { useRouter } from "expo-router";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
+  ActivityIndicator,
   FlatList,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
+  TextInput,
+  useWindowDimensions,
   View,
-  RefreshControl,
-  ActivityIndicator,
 } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { useMemo, useState } from "react";
-import { isOutOfOrder, OUT_OF_ORDER_COLOR, OUT_OF_ORDER_ICON } from "@/constants/machineStatus";
-import { useCachedResource, useCachedResources } from "@/hooks/useCachedResource";
-import { cacheKeys, fetchFloorPlans, STALE_MS } from "@/services/cachedResources";
-import { MachineDto, machineAPI, Exercise } from "@/services/machineAPI";
-import MapModal from "../../components/MapModal";
+import { useGym } from "@/contexts/GymContext";
+import {
+  useCachedResource,
+  useCachedResources,
+} from "@/hooks/useCachedResource";
+import {
+  cacheKeys,
+  fetchFloorPlans,
+  STALE_MS,
+} from "@/services/cachedResources";
+import { peekCached, subscribeCached } from "@/services/resourceCache";
+import { machineAPI, MachineDto, Exercise } from "@/services/machineAPI";
+import websocketService from "@/services/websocketService";
+import FloorMap from "@/components/FloorMap";
+import FilterSelect from "@/components/equipment/FilterSelect";
+import { markerColor } from "@/components/EquipmentMarker";
+import { isPositioned, MapResult, searchEquipment } from "@/utils/equipmentMap";
 
 export default function Equipment() {
-  const router = useRouter();
-  const [refreshing, setRefreshing] = useState(false);
-
-  // One request for everything the cards show; live updates keep the statuses (and the map) current
-  const {
-    data: machinesData,
-    loading,
-    refresh: refreshMachines,
-  } = useCachedResource<MachineDto[]>(cacheKeys.machines, machineAPI.listAll, {
-    live: true,
-    staleTime: STALE_MS.live,
-  });
-  const machines = useMemo(() => machinesData ?? [], [machinesData]);
-  // Only for Locate, so it loads on its own and never holds up the list
-  const { data: floorsData, refresh: refreshFloors } = useCachedResource(cacheKeys.floorPlans, fetchFloorPlans, {
-    live: true,
-    staleTime: STALE_MS.live,
-  });
-  const floors = floorsData ?? [];
-
-  // A backend that doesn't send each machine's exercises with it needs a request per machine.
-  // Those run in the background and are saved, so they never hold up the list.
-  const exerciseRequests = useMemo(
+  const { gym, loading } = useGym(),
+    router = useRouter();
+  if (loading)
+    return (
+      <View style={s.center}>
+        <ActivityIndicator color="#216C50" />
+      </View>
+    );
+  if (!gym)
+    return (
+      <View style={s.center}>
+        <Text style={s.heading}>Connect to your gym</Text>
+        <Text style={s.muted}>
+          Choose a gym to explore its equipment and floor map.
+        </Text>
+        <Pressable style={s.primary} onPress={() => router.push("/profile")}>
+          <Text style={s.primaryText}>Choose gym</Text>
+        </Pressable>
+      </View>
+    );
+  return <ConnectedEquipment key={gym.id} gymName={gym.name} />;
+}
+function ConnectedEquipment({ gymName }: { gymName: string }) {
+  const router = useRouter(),
+    wide = useWindowDimensions().width >= 900;
+  const [query, setQuery] = useState(""),
+    [muscle, setMuscle] = useState(""),
+    [status, setStatus] = useState(""),
+    [area, setArea] = useState("");
+  const [floorId, setFloorId] = useState<number | null>(null),
+    [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [listOnly, setListOnly] = useState(false),
+    [expanded, setExpanded] = useState(false);
+  const machineResource = useCachedResource<MachineDto[]>(
+    cacheKeys.machines,
+    machineAPI.listAll,
+    { live: true, staleTime: STALE_MS.live },
+  );
+  const floorResource = useCachedResource(
+    cacheKeys.floorPlans,
+    fetchFloorPlans,
+    { staleTime: 0, live: true },
+  );
+  const { revalidate: revalidateMachines, refresh: refreshMachines } =
+    machineResource;
+  const { refresh: refreshFloors } = floorResource;
+  useFocusEffect(
+    useCallback(() => {
+      revalidateMachines();
+      void refreshFloors();
+    }, [revalidateMachines, refreshFloors]),
+  );
+  const connected = useSyncExternalStore(
+    websocketService.onConnectionChange,
+    () => websocketService.getConnectedSince(),
+    () => null,
+  );
+  useEffect(() => {
+    if (connected) void refreshMachines();
+  }, [connected, refreshMachines]);
+  const key = cacheKeys.machines;
+  const timestamp = useSyncExternalStore(
+    useCallback((cb) => subscribeCached(key, cb), [key]),
+    () => peekCached(key)?.updatedAt ?? 0,
+    () => 0,
+  );
+  const live =
+    connected !== null && timestamp >= connected && !machineResource.error;
+  const raw = useMemo(() => machineResource.data ?? [], [machineResource.data]);
+  const requests = useMemo(
     () =>
-      machines
+      raw
         .filter((m) => m.exerciseNames === undefined)
         .map((m) => ({
           key: cacheKeys.machineExercises(m.id),
           fetcher: () => machineAPI.getExercisesByEquipmentId(m.id),
         })),
-    [machines],
+    [raw],
   );
-  const { data: exercisesByKey } = useCachedResources<Exercise[]>(exerciseRequests, {
+  const { data: legacy } = useCachedResources<Exercise[]>(requests, {
     staleTime: STALE_MS.catalog,
   });
-  const exercisesOf = (machine: MachineDto) => {
-    if (machine.exerciseNames) return { names: machine.exerciseNames, muscleGroups: machine.muscleGroups ?? [] };
-    const fetched = exercisesByKey[cacheKeys.machineExercises(machine.id)] ?? [];
-    return { names: fetched.map((e) => e.name), muscleGroups: [...new Set(fetched.map((e) => e.muscleGroup))] };
+  const machines = useMemo(
+    () =>
+      raw.map((m) => {
+        const exercises = legacy[cacheKeys.machineExercises(m.id)];
+        return m.exerciseNames !== undefined || !exercises
+          ? m
+          : {
+              ...m,
+              exerciseNames: exercises.map((e) => e.name),
+              muscleGroups: [...new Set(exercises.map((e) => e.muscleGroup))],
+            };
+      }),
+    [raw, legacy],
+  );
+  const floors = useMemo(
+    () =>
+      (floorResource.data ?? [])
+        .filter((f) => f.id !== 0)
+        .sort((a, b) => a.floorNumber - b.floorNumber),
+    [floorResource.data],
+  );
+  const floor = floors.find((f) => f.id === floorId) ?? floors[0];
+  const filters = useMemo(
+    () => ({ query, muscle, status, area }),
+    [query, muscle, status, area],
+  );
+  const allResults = useMemo(
+    () =>
+      searchEquipment(machines, floors, {
+        query: "",
+        muscle: "",
+        status: "",
+        area: "",
+      }),
+    [machines, floors],
+  );
+  const matches = useMemo(
+    () => searchEquipment(machines, floors, filters),
+    [machines, floors, filters],
+  );
+  const results = useMemo(
+    () =>
+      [...matches].sort(
+        (a, b) =>
+          Number(b.floor?.id === floor?.id) -
+            Number(a.floor?.id === floor?.id) || a.name.localeCompare(b.name),
+      ),
+    [matches, floor?.id],
+  );
+  const selected = allResults.find((r) => r.key === selectedKey);
+  const active = !!(query || muscle || status || area);
+  const matchingIds = useMemo(
+    () => new Set(matches.flatMap((r) => (r.machine ? [r.machine.id] : []))),
+    [matches],
+  );
+  const matchingAreas = useMemo(
+    () =>
+      new Set(
+        matches
+          .filter((r) => !r.machine && r.floor?.id === floor?.id)
+          .flatMap((r) => (r.area ? [r.area.id] : [])),
+      ),
+    [matches, floor?.id],
+  );
+  const choose = (r: MapResult) => {
+    if (r.floor) setFloorId(r.floor.id);
+    setSelectedKey(r.key);
+    setExpanded(false);
   };
-
-  // Map modal state
-  const [mapModalVisible, setMapModalVisible] = useState(false);
-  const [locateTarget, setLocateTarget] = useState<MachineDto | null>(null);
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await Promise.all([refreshMachines(), refreshFloors()]);
-    } finally {
-      setRefreshing(false);
-    }
+  const clear = () => {
+    setQuery("");
+    setMuscle("");
+    setStatus("");
+    setArea("");
+    setSelectedKey(null);
   };
-
-  const openLocateModal = (machine: MachineDto) => {
-    setLocateTarget(machine);
-    setMapModalVisible(true);
+  const refresh = () => {
+    void Promise.all([refreshMachines(), refreshFloors()]);
   };
-
-  if (loading) {
-    return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#4CAF50" />
-        <Text style={styles.loadingText}>Loading machines...</Text>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Equipment Availability</Text>
-
-      {/* Scan QR button row */}
-      <View style={styles.topRow}>
-        <View />
-        <TouchableOpacity
-          style={styles.scanButton}
-          onPress={() => router.push("/scan")}
-        >
-          <MaterialCommunityIcons name="qrcode-scan" size={16} color="#fff" />
-          <Text style={styles.scanButtonText}>Scan QR</Text>
-        </TouchableOpacity>
-      </View>
-
-      <FlatList
-        data={machines}
-        keyExtractor={(item) => item.code}
-        contentContainerStyle={{ margin: 0 }}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={() => (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No machines available</Text>
-            <Text style={styles.emptySubtext}>Pull to refresh</Text>
-          </View>
+  const muscleOptions = [
+    ...new Set(machines.flatMap((m) => m.muscleGroups ?? [])),
+  ].sort();
+  const statuses = [...new Set(machines.map((m) => m.status))].sort();
+  const meta = (r: MapResult) =>
+    r.machine
+      ? `${r.floor?.name ?? ""}${r.area ? ` · ${r.area.name}` : ""}${!isPositioned(r.machine, r.floor) ? " · Location not mapped" : ""}`.replace(
+          /^ · /,
+          "",
+        )
+      : `${r.floor?.name} · Place`;
+  const onFloorCount = matches.filter((r) => r.floor?.id === floor?.id).length;
+  const selectionPanel = selected ? (
+    <View style={s.detail}>
+      <View style={{ flex: 1 }}>
+        <Text style={s.detailTitle}>{selected.name}</Text>
+        <Text style={s.muted}>{meta(selected)}</Text>
+        {selected.machine && (
+          <>
+            <Text
+              style={{
+                color: markerColor(selected.machine.status),
+                fontWeight: "700",
+                marginTop: 5,
+              }}
+            >
+              {selected.machine.status}
+            </Text>
+            <Text numberOfLines={2} style={s.muted}>
+              {(
+                selected.machine.exerciseNames ?? [selected.machine.exercise]
+              ).join(", ")}
+            </Text>
+          </>
         )}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#4CAF50"
-            colors={["#4CAF50", "#66BB6A", "#81C784"]}
-            progressBackgroundColor="#ffffff"
-            title="Pull to refresh"
-            titleColor="#4CAF50"
+      </View>
+      <View style={{ gap: 8 }}>
+        <Pressable
+          accessibilityLabel="Close selection"
+          onPress={() => setSelectedKey(null)}
+          style={{ alignSelf: "flex-end", padding: 4 }}
+        >
+          <MaterialCommunityIcons name="close" size={20} color="#6B7D72" />
+        </Pressable>
+        {selected.machine && (
+          <Pressable
+            style={s.primary}
+            onPress={() =>
+              router.push({
+                pathname: "/machine/[id]",
+                params: { id: String(selected.machine!.id) },
+              })
+            }
+          >
+            <Text style={s.primaryText}>View equipment</Text>
+          </Pressable>
+        )}
+      </View>
+    </View>
+  ) : null;
+  return (
+    <View style={s.page}>
+      <View style={s.header}>
+        <View style={{ flex: 1 }}>
+          <Text style={s.gym}>{gymName}</Text>
+          <Text style={s.heading}>Explore your gym</Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push("/scan")}
+          style={s.scan}
+        >
+          <MaterialCommunityIcons
+            name="qrcode-scan"
+            size={18}
+            color="#216C50"
           />
-        }
-        renderItem={({ item }) => {
-          const statusUpper = item.status.toUpperCase();
-          const isAvailable = statusUpper === "AVAILABLE";
-          const outOfOrder = isOutOfOrder(item.status);
-          const { names: exerciseNames, muscleGroups } = exercisesOf(item);
-          const muscleGroupsStr = muscleGroups.join(", ");
-
-          // Check if this equipment is placed on any floor
-          const isOnFloor = floors.some((f) =>
-            f.equipment.some((eq) => eq.id === item.id)
-          );
-
-          return (
-            <TouchableOpacity
-              onPress={() =>
-                router.push({
-                  pathname: "/machine/[id]",
-                  params: { id: String(item.id) },
+          <Text style={s.link}>Scan QR</Text>
+        </Pressable>
+      </View>
+      <View style={s.search}>
+        <MaterialCommunityIcons name="magnify" size={23} color="#687E70" />
+        <TextInput
+          accessibilityLabel="Search equipment, exercises, or places"
+          placeholder="Search equipment, exercises, or places"
+          placeholderTextColor="#7E8C84"
+          value={query}
+          onChangeText={setQuery}
+          style={s.input}
+          returnKeyType="search"
+        />
+        {query ? (
+          <Pressable
+            accessibilityLabel="Clear search"
+            onPress={() => setQuery("")}
+            style={{ padding: 10 }}
+          >
+            <Text>✕</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      <View style={s.filters}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, alignItems: "center" }}
+        >
+          <FilterSelect
+            label="Muscle group"
+            value={muscle}
+            onChange={setMuscle}
+            options={[
+              { value: "", label: "All muscles" },
+              ...muscleOptions.map((v) => ({ value: v, label: v })),
+            ]}
+          />
+          <FilterSelect
+            label="Availability"
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: "", label: "Any availability" },
+              ...statuses.map((v) => ({ value: v, label: v })),
+            ]}
+          />
+          <FilterSelect
+            label="Area"
+            value={area}
+            onChange={setArea}
+            options={[
+              { value: "", label: "All areas" },
+              ...floors.flatMap((f) =>
+                (f.layout?.areas ?? [])
+                  .filter((a) => a.kind !== "void")
+                  .map((a) => ({
+                    value: `${f.id}:${a.id}`,
+                    label: `${f.name} · ${a.name}`,
+                  })),
+              ),
+            ]}
+          />
+          {active && (
+            <Pressable
+              accessibilityRole="button"
+              onPress={clear}
+              style={{ padding: 12 }}
+            >
+              <Text style={s.link}>Clear filters</Text>
+            </Pressable>
+          )}
+        </ScrollView>
+      </View>
+      <View style={s.floors}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 6 }}
+        >
+          {floors.map((f) => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: f.id === floor?.id }}
+              key={f.id}
+              onPress={() => {
+                setFloorId(f.id);
+                setSelectedKey(null);
+              }}
+              style={[s.floorTab, f.id === floor?.id && s.floorActive]}
+            >
+              <Text
+                style={[s.floorText, f.id === floor?.id && { color: "white" }]}
+              >
+                {f.name}{" "}
+                <Text style={{ opacity: 0.7 }}>
+                  {" "}
+                  {matches.filter((r) => r.floor?.id === f.id).length}
+                </Text>
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setListOnly((v) => !v)}
+          style={s.viewToggle}
+        >
+          <MaterialCommunityIcons
+            name={listOnly ? "map-outline" : "format-list-bulleted"}
+            size={18}
+            color="#216C50"
+          />
+          <Text style={s.link}>{listOnly ? "Map" : "List"}</Text>
+        </Pressable>
+      </View>
+      <View style={s.statusRow}>
+        <Text style={[s.sync, { color: live ? "#216C50" : "#6C7E72" }]}>
+          {live
+            ? "● Live availability"
+            : timestamp
+              ? `Saved copy · synced ${new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+              : "Connecting…"}
+        </Text>
+        <Pressable accessibilityRole="button" onPress={refresh}>
+          <Text style={s.link}>
+            {machineResource.refreshing ? "Refreshing…" : "Refresh"}
+          </Text>
+        </Pressable>
+      </View>
+      {machineResource.error || floorResource.error ? (
+        <Text accessibilityRole="alert" style={s.notice}>
+          Couldn’t refresh {machineResource.error ? "equipment" : "the map"}.
+          Check your connection and try Refresh.
+        </Text>
+      ) : null}
+      <View style={[s.body, wide && { flexDirection: "row" }]}>
+        {!listOnly && (wide || !expanded) && (
+          <View style={[s.mapPane, { flex: wide ? 1 : 2 }]}>
+            {floor?.illustrative && (
+              <Text style={s.illustrative}>
+                Illustrative university gym · room and equipment locations are
+                fictional
+              </Text>
+            )}
+            <FloorMap
+              floors={floors}
+              allMachines={machines}
+              selectedFloorId={floor?.id}
+              hideFloorPicker
+              matchingEquipmentIds={active ? matchingIds : undefined}
+              matchingAreaIds={active ? matchingAreas : undefined}
+              highlightedEquipmentId={selected?.machine?.id}
+              selectedAreaId={
+                selected && !selected.machine ? selected.area?.id : null
+              }
+              onSelectEquipment={(m) =>
+                choose(
+                  allResults.find((r) => r.machine?.id === m.id) ?? {
+                    key: `machine:${m.id}`,
+                    name: m.name,
+                    machine: m,
+                    floor: floors.find((f) =>
+                      f.equipment.some((eq) => eq.id === m.id),
+                    ),
+                  },
+                )
+              }
+              onSelectArea={(a, f) =>
+                choose({
+                  key: `area:${f.id}:${a.id}`,
+                  name: a.name,
+                  area: a,
+                  floor: f,
                 })
               }
-              activeOpacity={0.7}
-              style={[
-                styles.card,
-                outOfOrder ? styles.outOfOrderCard : isAvailable ? styles.availableCard : styles.inUseCard,
-              ]}
-            >
-              <View
-                style={[
-                  styles.iconContainer,
-                  outOfOrder ? styles.outOfOrderIconBg : isAvailable ? styles.availableIconBg : styles.inUseIconBg,
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name={outOfOrder ? OUT_OF_ORDER_ICON : "dumbbell"}
-                  size={28}
-                  color={outOfOrder ? OUT_OF_ORDER_COLOR : isAvailable ? "#4CAF50" : "#FF5722"}
-                />
-              </View>
-              <View style={styles.cardContent}>
-                <Text style={styles.name} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <View
+            />
+            <View style={s.legend}>
+              {["Available", "In Use", "Reserved", "Out of Order"].map((v) => (
+                <View key={v} style={s.legendItem}>
+                  <View style={[s.dot, { backgroundColor: markerColor(v) }]} />
+                  <Text style={s.legendText}>{v}</Text>
+                </View>
+              ))}
+            </View>
+            {wide && selectionPanel}
+          </View>
+        )}
+        <View
+          style={[
+            s.results,
+            wide && !listOnly
+              ? { width: 340 }
+              : { flex: 1, minHeight: selected && !listOnly ? 190 : 144 },
+          ]}
+        >
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setExpanded((v) => !v)}
+            disabled={wide || listOnly}
+            style={s.resultHeader}
+          >
+            <View>
+              <Text style={s.resultTitle}>
+                {active ? "Search results" : "Equipment & places"}{" "}
+                <Text style={s.muted}>({matches.length})</Text>
+              </Text>
+              <Text style={s.muted}>
+                {floor
+                  ? `${onFloorCount} on ${floor.name} · ${matches.length - onFloorCount} elsewhere`
+                  : "Equipment in your gym"}
+              </Text>
+            </View>
+            {!wide && !listOnly && (
+              <MaterialCommunityIcons
+                name={expanded ? "chevron-down" : "chevron-up"}
+                size={22}
+                color="#216C50"
+              />
+            )}
+          </Pressable>
+          {(!wide || listOnly) && selectionPanel}
+          {selected &&
+          !wide &&
+          !expanded &&
+          !listOnly ? null : machineResource.loading ? (
+            <View style={s.center}>
+              <ActivityIndicator color="#216C50" />
+              <Text style={s.muted}>Loading machines...</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={results}
+              keyExtractor={(r) => r.key}
+              keyboardShouldPersistTaps="handled"
+              refreshing={machineResource.refreshing}
+              onRefresh={refresh}
+              ListEmptyComponent={
+                <View style={{ padding: 24 }}>
+                  <Text style={s.detailTitle}>
+                    {active ? "No matches" : "No equipment yet"}
+                  </Text>
+                  <Text style={s.muted}>
+                    {active
+                      ? "Try another exercise or clear your filters."
+                      : "Equipment will appear when your gym adds it."}
+                  </Text>
+                  {active && (
+                    <Pressable onPress={clear} style={{ paddingTop: 14 }}>
+                      <Text style={s.link}>Clear filters</Text>
+                    </Pressable>
+                  )}
+                </View>
+              }
+              renderItem={({ item: r }) => (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${r.name}, ${r.machine?.status ?? "Place"}, ${meta(r)}`}
+                  onPress={() => {
+                    if (listOnly && r.machine)
+                      router.push({
+                        pathname: "/machine/[id]",
+                        params: { id: String(r.machine.id) },
+                      });
+                    else choose(r);
+                  }}
                   style={[
-                    styles.statusBadge,
-                    outOfOrder ? styles.outOfOrderBadge : isAvailable ? styles.availableBadge : styles.inUseBadge,
+                    s.resultRow,
+                    r.key === selectedKey && { backgroundColor: "#EAF3ED" },
                   ]}
                 >
                   <View
                     style={[
-                      styles.statusDot,
-                      outOfOrder ? styles.outOfOrderDot : isAvailable ? styles.availableDot : styles.inUseDot,
+                      s.resultIcon,
+                      { backgroundColor: r.machine ? "#EEF4F0" : "#EDF1F6" },
                     ]}
-                  />
-                  <Text
-                    style={[
-                      styles.statusText,
-                      outOfOrder ? styles.outOfOrderText : isAvailable ? styles.availableText : styles.inUseText,
-                    ]}
-                  >
-                    {outOfOrder ? "Out of order" : isAvailable ? "Available" : "In Use"}
-                  </Text>
-                </View>
-                {exerciseNames.length > 0 && (
-                  <View style={styles.exercisesContainer}>
-                    {muscleGroupsStr ? (
-                      <Text style={styles.muscleGroupText}>
-                        {muscleGroupsStr}
-                      </Text>
-                    ) : null}
-                    <Text style={styles.exercisesText} numberOfLines={2}>
-                      {exerciseNames.slice(0, 3).join(", ")}
-                      {exerciseNames.length > 3 ? "..." : ""}
-                    </Text>
-                  </View>
-                )}
-              </View>
-              <View style={styles.cardActions}>
-                {isOnFloor && (
-                  <TouchableOpacity
-                    style={styles.locateBtn}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      openLocateModal(item);
-                    }}
-                    hitSlop={6}
-                    activeOpacity={0.7}
                   >
                     <MaterialCommunityIcons
-                      name="map-marker-radius-outline"
-                      size={18}
-                      color="#4CAF50"
+                      name={
+                        r.machine
+                          ? "dumbbell"
+                          : r.area?.kind === "pool"
+                            ? "pool"
+                            : r.area?.kind === "court"
+                              ? "basketball"
+                              : "map-marker-outline"
+                      }
+                      size={20}
+                      color={
+                        r.machine ? markerColor(r.machine.status) : "#57718B"
+                      }
                     />
-                    <Text style={styles.locateBtnText}>Locate</Text>
-                  </TouchableOpacity>
-                )}
-                <MaterialCommunityIcons
-                  name="chevron-right"
-                  size={24}
-                  color="#bdbdbd"
-                />
-              </View>
-            </TouchableOpacity>
-          );
-        }}
-      />
-
-      {/* Map Modal */}
-      <MapModal
-        visible={mapModalVisible}
-        onClose={() => {
-          setMapModalVisible(false);
-          setLocateTarget(null);
-        }}
-        floors={floors}
-        allMachines={machines}
-        targetEquipment={locateTarget}
-      />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.resultName}>{r.name}</Text>
+                    {r.machine && (
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          color: markerColor(r.machine.status),
+                          fontWeight: "600",
+                        }}
+                      >
+                        {r.machine.status}
+                      </Text>
+                    )}
+                    <Text style={s.resultMeta}>{meta(r)}</Text>
+                  </View>
+                  <MaterialCommunityIcons
+                    name="chevron-right"
+                    size={18}
+                    color="#8A9B90"
+                  />
+                </Pressable>
+              )}
+            />
+          )}
+        </View>
+      </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
+const s = StyleSheet.create({
+  page: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
-    padding: 20,
-    paddingTop: 50,
+    backgroundColor: "#FAFCFA",
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 8,
   },
-  title: {
-    fontSize: 26,
-    fontWeight: "900",
-    color: "#1a1a1a",
-    textAlign: "center",
-    marginBottom: 16,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-  topRow: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
+  center: {
+    flex: 1,
     alignItems: "center",
-    marginBottom: 12,
+    justifyContent: "center",
+    padding: 24,
+    gap: 14,
   },
-  scanButton: {
-    backgroundColor: "#4CAF50",
-    borderRadius: 20,
-    paddingVertical: 9,
-    paddingHorizontal: 16,
+  header: { flexDirection: "row", alignItems: "center", marginBottom: 14 },
+  gym: { fontSize: 13, fontWeight: "600", color: "#62796B", marginBottom: 3 },
+  heading: { fontSize: 26, fontWeight: "800", color: "#1D3828" },
+  scan: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-  },
-  scanButtonText: {
-    color: "#ffffff",
-    fontWeight: "800",
-    fontSize: 13,
-  },
-  card: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    padding: 16,
-    marginBottom: 12,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    gap: 7,
+    padding: 12,
     borderWidth: 1,
-    borderColor: "#e0e0e0",
+    borderColor: "#D4E2D8",
+    borderRadius: 10,
+    backgroundColor: "white",
   },
-  availableCard: {
-    backgroundColor: "#f1f8f4",
-    borderLeftWidth: 4,
-    borderLeftColor: "#4CAF50",
-  },
-  inUseCard: {
-    backgroundColor: "#fff5f2",
-    borderLeftWidth: 4,
-    borderLeftColor: "#FF5722",
-  },
-  outOfOrderCard: {
-    backgroundColor: "#f5f5f5",
-    borderLeftWidth: 4,
-    borderLeftColor: OUT_OF_ORDER_COLOR,
-  },
-  iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    justifyContent: "center",
+  link: { fontSize: 13, color: "#216C50", fontWeight: "600" },
+  search: {
+    flexDirection: "row",
     alignItems: "center",
-    marginRight: 16,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "#CEDCD2",
+    backgroundColor: "white",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    minHeight: 50,
   },
-  availableIconBg: {
-    backgroundColor: "#e8f5e9",
-  },
-  inUseIconBg: {
-    backgroundColor: "#ffebee",
-  },
-  outOfOrderIconBg: {
-    backgroundColor: "#eeeeee",
-  },
-  cardContent: {
+  input: {
     flex: 1,
+    fontSize: 15,
+    color: "#203C2B",
+    paddingVertical: 12,
+    minWidth: 0,
+  },
+  filters: { marginVertical: 10 },
+  floors: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+    marginBottom: 7,
+  },
+  floorTab: {
+    minHeight: 42,
     justifyContent: "center",
+    paddingHorizontal: 15,
+    borderRadius: 9,
+    backgroundColor: "#EBF0EC",
   },
-  name: {
-    color: "#1a1a1a",
-    fontSize: 17,
-    fontWeight: "700",
-    marginBottom: 6,
-  },
-  statusBadge: {
+  floorActive: { backgroundColor: "#216C50" },
+  floorText: { fontSize: 13, fontWeight: "600", color: "#516A5B" },
+  viewToggle: {
     flexDirection: "row",
     alignItems: "center",
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 4,
-    gap: 6,
+    gap: 5,
+    padding: 10,
   },
-  availableBadge: {
-    backgroundColor: "#e8f5e9",
+  statusRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingBottom: 10,
   },
-  inUseBadge: {
-    backgroundColor: "#ffebee",
+  sync: { fontSize: 12 },
+  body: { flex: 1, gap: 12, minHeight: 0 },
+  mapPane: { minHeight: 0, gap: 6 },
+  illustrative: { fontSize: 11, color: "#77877C", paddingLeft: 4 },
+  legend: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
   },
-  outOfOrderBadge: {
-    backgroundColor: "#eeeeee",
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
+  dot: { width: 8, height: 8, borderRadius: 3 },
+  legendText: { fontSize: 10, color: "#65796C" },
+  results: {
+    backgroundColor: "white",
+    borderColor: "#E0E7E2",
+    borderWidth: 1,
+    borderRadius: 14,
+    overflow: "hidden",
   },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  resultHeader: {
+    padding: 14,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderColor: "#EDF1EE",
   },
-  availableDot: {
-    backgroundColor: "#4CAF50",
-  },
-  inUseDot: {
-    backgroundColor: "#FF5722",
-  },
-  outOfOrderDot: {
-    backgroundColor: OUT_OF_ORDER_COLOR,
-  },
-  statusText: {
-    fontSize: 13,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  availableText: {
-    color: "#2e7d32",
-  },
-  inUseText: {
-    color: "#d32f2f",
-  },
-  outOfOrderText: {
-    color: "#616161",
-  },
-  exercisesContainer: {
-    marginTop: 8,
-  },
-  muscleGroupText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#666",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  exercisesText: {
-    fontSize: 13,
-    color: "#888",
-    lineHeight: 16,
-  },
-  cardActions: {
-    alignItems: "flex-end",
-    justifyContent: "center",
-    gap: 8,
-  },
-  locateBtn: {
+  resultTitle: { fontSize: 15, fontWeight: "700", color: "#254B34" },
+  muted: { fontSize: 12, color: "#708175", marginTop: 3 },
+  resultRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "#e8f5e9",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    padding: 12,
+    gap: 10,
+    borderBottomWidth: 1,
+    borderColor: "#F0F3F1",
+    minHeight: 78,
+  },
+  resultIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  resultName: { fontSize: 14, fontWeight: "600", color: "#263D2E" },
+  resultMeta: { fontSize: 11, color: "#7A897F", marginTop: 4 },
+  detail: {
+    flexDirection: "row",
+    gap: 12,
+    padding: 14,
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#CEDCD2",
     borderRadius: 12,
   },
-  locateBtnText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#4CAF50",
+  detailTitle: { fontSize: 16, fontWeight: "700", color: "#23432E" },
+  primary: {
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    backgroundColor: "#216C50",
+    borderRadius: 8,
   },
-  centered: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    color: "#4CAF50",
-    fontSize: 16,
-    marginTop: 10,
-  },
-  emptyContainer: {
-    padding: 40,
-    alignItems: "center",
-  },
-  emptyText: {
-    color: "#666",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  emptySubtext: {
-    color: "#999",
-    fontSize: 14,
-    marginTop: 8,
-  },
+  primaryText: { fontSize: 12, color: "white", fontWeight: "700" },
+  notice: { fontSize: 12, color: "#925A22", paddingBottom: 8 },
 });

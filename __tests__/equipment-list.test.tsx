@@ -1,55 +1,22 @@
-import { render, screen } from "@testing-library/react-native";
 import React from "react";
-
-import EquipmentScreen from "@/app/(tabs)/equipment";
-import { clearCache } from "@/services/resourceCache";
-
-jest.mock("expo-router", () => ({ useRouter: () => ({ push: jest.fn() }) }));
-
-const mockListAll = jest.fn();
-jest.mock("@/services/machineAPI", () => ({
-  machineAPI: {
-    listAll: (...args: unknown[]) => mockListAll(...args),
-    getExercisesByEquipmentId: () => Promise.resolve([]),
-    getFloorPlans: () => Promise.resolve([]),
-    getFloorPlan: () => Promise.reject(new Error("no floor plan")),
-  },
+import { fireEvent, render, screen } from "@testing-library/react-native";
+import Equipment from "@/app/(tabs)/equipment";
+const mockPush = jest.fn();
+jest.mock("expo-router", () => ({ useRouter: () => ({ push: mockPush }) }));
+jest.mock("@/contexts/GymContext", () => ({
+  useGym: () => ({ gym: null, loading: false }),
 }));
-
-jest.mock("@/services/websocketService", () => ({
-  __esModule: true,
-  default: { connect: jest.fn(), subscribe: () => () => {} },
-}));
-jest.mock("@/components/MapModal", () => () => null);
+jest.mock("@/components/FloorMap", () => () => null);
+jest.mock("@/services/websocketService", () => ({ default: {} }));
 jest.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: () => null }));
 jest.mock("@react-native-async-storage/async-storage", () =>
-  jest.requireActual("@react-native-async-storage/async-storage/jest/async-storage-mock"),
+  jest.requireActual(
+    "@react-native-async-storage/async-storage/jest/async-storage-mock",
+  ),
 );
-
-const machine = (id: number, name: string, status: string) => ({
-  id,
-  code: `M${id}`,
-  name,
-  status,
-  exercise: "Leg Press",
-});
-
-describe("Equipment tab", () => {
-  beforeEach(async () => {
-    await clearCache();
-  });
-
-  it("labels each machine Available, In Use or Out of order", async () => {
-    mockListAll.mockResolvedValue([
-      machine(1, "Leg Press A", "Available"),
-      machine(2, "Leg Press B", "In Use"),
-      machine(3, "Leg Press C", "Out of Order"),
-    ]);
-    render(<EquipmentScreen />);
-
-    expect(await screen.findByText("Leg Press C")).toBeTruthy();
-    expect(screen.getByText("Out of order")).toBeTruthy();
-    expect(screen.getByText("Available")).toBeTruthy();
-    expect(screen.getByText("In Use")).toBeTruthy();
-  });
+it("gates disconnected users with gym selection", () => {
+  render(<Equipment />);
+  expect(screen.getByText("Connect to your gym")).toBeTruthy();
+  fireEvent.press(screen.getByText("Choose gym"));
+  expect(mockPush).toHaveBeenCalledWith("/profile");
 });
