@@ -8,6 +8,7 @@ export interface Exercise {
   id: number;
   name: string;
   muscleGroup: string;
+  secondaryMuscles?: string[];
   equipmentType: string;
   trainingType: string;
   loggingMode: LoggingMode;
@@ -30,6 +31,10 @@ export interface ExercisePage {
   totalElements: number;
 }
 export const exerciseAPI = {
+  getNote: async (id: number): Promise<{ note: string }> =>
+    (await api.get(`/exercises/${id}/notes`)).data,
+  saveNote: async (id: number, note: string): Promise<{ note: string }> =>
+    (await api.put(`/exercises/${id}/notes`, { note })).data,
   list: async (
     params: Record<string, string | number | boolean>,
   ): Promise<ExercisePage> => (await api.get("/exercises", { params })).data,
