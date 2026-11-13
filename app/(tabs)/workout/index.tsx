@@ -590,7 +590,7 @@ export default function WorkoutCatalog() {
                     <View style={styles.goals}>
                       <Text style={styles.filterLabel}>Today’s targets</Text>
                       {todayPlan!.items.map((item) => (
-                        <TodayGoalCard key={item.muscleGroup} item={item} />
+                        <TodayGoalCard key={item.exerciseId || item.muscleGroup} item={item} />
                       ))}
                     </View>
                   )}

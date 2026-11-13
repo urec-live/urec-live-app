@@ -1,6 +1,9 @@
 import api from './authAPI';
 
 export interface DayPlanItemDto {
+  exerciseId?: number | null;
+  exerciseName?: string | null;
+  equipmentType?: string | null;
   muscleGroup: string;
   targetCount: number;
   sortOrder?: number;
@@ -18,6 +21,9 @@ export interface WorkoutPlanRequest {
 }
 
 export interface DayPlanItemResponse {
+  exerciseId?: number | null;
+  exerciseName?: string | null;
+  equipmentType?: string | null;
   id: number;
   muscleGroup: string;
   targetCount: number;
@@ -42,6 +48,9 @@ export interface WorkoutPlanResponse {
 }
 
 export interface TodayGoalItem {
+  exerciseId?: number | null;
+  exerciseName?: string | null;
+  equipmentType?: string | null;
   muscleGroup: string;
   targetCount: number;
   completedCount: number;
