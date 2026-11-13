@@ -1,3 +1,4 @@
+import WeightProgressCard from "@/components/WeightProgressCard";
 import BodyMeasurementsCard from "@/components/BodyMeasurementsCard";
 import { useGym } from "@/contexts/GymContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -139,7 +140,7 @@ export default function Profile() {
           <Text style={styles.email}>{user?.email || ""}</Text>
         </View>
 
-        {user && <><BodyMeasurementsCard key={user.username} username={user.username} /></>}
+        {user && <><BodyMeasurementsCard key={user.username} username={user.username} /><WeightProgressCard key={`weight-${user.username}`} username={user.username} /></>}
 
         {loading ? (
           <View style={styles.loadingContainer}>
