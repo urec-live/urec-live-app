@@ -1,3 +1,4 @@
+import BodyMeasurementsCard from "@/components/BodyMeasurementsCard";
 import { useGym } from "@/contexts/GymContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -127,7 +128,7 @@ export default function Profile() {
 
   return (
     <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         {/* User Info */}
         <View style={styles.userSection}>
           <Pressable style={styles.inboxBtn} onPress={() => router.push("/chat/dm" as any)}>
@@ -137,6 +138,8 @@ export default function Profile() {
           <Text style={styles.username}>{user?.username || "User"}</Text>
           <Text style={styles.email}>{user?.email || ""}</Text>
         </View>
+
+        {user && <><BodyMeasurementsCard key={user.username} username={user.username} /></>}
 
         {loading ? (
           <View style={styles.loadingContainer}>
