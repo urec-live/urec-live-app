@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import Svg, {
@@ -19,8 +19,12 @@ import { areaBounds, areaColors, isPositioned } from "@/utils/equipmentMap";
 import AreaPressTarget from "./equipment/AreaPressTarget";
 import MapViewport, { MapPin } from "./equipment/MapViewport";
 import { markerColor } from "./EquipmentMarker";
+import { demoGeography } from "@/constants/googleFloorMaps";
+import { googleMapsAvailable } from "@/utils/googleMapsAvailable";
+import type { GoogleFloorMapProps } from "./equipment/GoogleFloorMap";
 
-interface FloorMapProps {
+export interface FloorMapProps {
+  enableGoogleMaps?: boolean;
   floors: FloorPlanResponse[];
   allMachines: MachineDto[];
   selectedMuscleGroup?: string | null;
@@ -153,6 +157,8 @@ export default function FloorMap(p: FloorMapProps) {
   const [internalId, setInternalId] = useState(
     floors[p.initialFloorIdx ?? 0]?.id,
   );
+  const [useFloorMap, setUseFloorMap] = useState(false);
+  const fallbackToFloorMap = useCallback(() => setUseFloorMap(true), []);
   const floor =
     floors.find((f) => f.id === (p.selectedFloorId ?? internalId)) ?? floors[0];
   const machines = useMemo(
@@ -183,6 +189,14 @@ export default function FloorMap(p: FloorMapProps) {
           key: `a:${area!.id}`,
         }
       : null;
+  const geography = demoGeography(floor);
+  const useGoogle =
+    p.enableGoogleMaps && !useFloorMap && geography && googleMapsAvailable();
+  // Load the provider only after checking the current native binary supports it.
+  const GoogleMap: React.ComponentType<GoogleFloorMapProps> | null = useGoogle
+    ? // eslint-disable-next-line @typescript-eslint/no-require-imports -- older development clients must not load this native module.
+      require("./equipment/GoogleFloorMap").default
+    : null;
   return (
     <GestureHandlerRootView style={styles.wrapper}>
       {!p.hideFloorPicker && (
@@ -207,67 +221,88 @@ export default function FloorMap(p: FloorMapProps) {
           ))}
         </ScrollView>
       )}
-      <MapViewport
-        key={floor.id}
-        width={floor.width}
-        height={floor.height}
-        focus={focus}
-      >
-        <Svg
+      {GoogleMap && geography ? (
+        <GoogleMap
+          key={floor.id}
+          floor={floor}
+          equipment={equipment}
+          geography={geography}
+          focus={focus}
+          options={p}
+          onFallback={fallbackToFloorMap}
+          onSelectEquipment={(machine) =>
+            p.onSelectEquipment
+              ? p.onSelectEquipment(machine)
+              : router.push({
+                  pathname: "/machine/[id]",
+                  params: { id: String(machine.id) },
+                })
+          }
+        />
+      ) : (
+        <MapViewport
+          key={floor.id}
           width={floor.width}
           height={floor.height}
-          viewBox={`0 0 ${floor.width} ${floor.height}`}
-          style={StyleSheet.absoluteFill}
+          focus={focus}
         >
-          <Rect
+          <Svg
             width={floor.width}
             height={floor.height}
-            rx={18}
-            fill="white"
-            stroke="#CDD6D1"
-            strokeWidth={3}
-          />
-          {(floor.layout?.areas ?? []).map((a) => (
-            <AreaDrawing
-              key={a.id}
-              area={a}
-              selected={a.id === p.selectedAreaId}
-              matching={p.matchingAreaIds?.has(a.id)}
-              onPress={() => p.onSelectArea?.(a, floor)}
+            viewBox={`0 0 ${floor.width} ${floor.height}`}
+            style={StyleSheet.absoluteFill}
+          >
+            <Rect
+              width={floor.width}
+              height={floor.height}
+              rx={18}
+              fill="white"
+              stroke="#CDD6D1"
+              strokeWidth={3}
             />
-          ))}
-        </Svg>
-        {equipment.map((eq) => {
-          const groups =
-            p.muscleGroupsByEquipment?.[eq.id] ?? eq.muscleGroups ?? [];
-          const dimmed = p.matchingEquipmentIds
-            ? !p.matchingEquipmentIds.has(eq.id)
-            : !!p.selectedMuscleGroup &&
-              !groups.some(
-                (g) => g.toLowerCase() === p.selectedMuscleGroup?.toLowerCase(),
-              );
-          return (
-            <MapPin
-              key={eq.id}
-              x={eq.floorX!}
-              y={eq.floorY!}
-              label={`${eq.floorLabel || eq.name} · ${eq.status}`}
-              color={markerColor(eq.status)}
-              selected={eq.id === p.highlightedEquipmentId}
-              matched={p.matchingEquipmentIds?.has(eq.id)}
-            dimmed={dimmed}
-              onPress={() =>
-                p.onSelectEquipment
-                  ? p.onSelectEquipment(eq)
-                  : router.push({
-                      pathname: "/machine/[id]",
-                      params: { id: String(eq.id) },
-                    })
-              }
-            />
-          );
-        })}
-      </MapViewport>
+            {(floor.layout?.areas ?? []).map((a) => (
+              <AreaDrawing
+                key={a.id}
+                area={a}
+                selected={a.id === p.selectedAreaId}
+                matching={p.matchingAreaIds?.has(a.id)}
+                onPress={() => p.onSelectArea?.(a, floor)}
+              />
+            ))}
+          </Svg>
+          {equipment.map((eq) => {
+            const groups =
+              p.muscleGroupsByEquipment?.[eq.id] ?? eq.muscleGroups ?? [];
+            const dimmed = p.matchingEquipmentIds
+              ? !p.matchingEquipmentIds.has(eq.id)
+              : !!p.selectedMuscleGroup &&
+                !groups.some(
+                  (g) =>
+                    g.toLowerCase() === p.selectedMuscleGroup?.toLowerCase(),
+                );
+            return (
+              <MapPin
+                key={eq.id}
+                x={eq.floorX!}
+                y={eq.floorY!}
+                label={`${eq.floorLabel || eq.name} · ${eq.status}`}
+                color={markerColor(eq.status)}
+                selected={eq.id === p.highlightedEquipmentId}
+                matched={p.matchingEquipmentIds?.has(eq.id)}
+                dimmed={dimmed}
+                onPress={() =>
+                  p.onSelectEquipment
+                    ? p.onSelectEquipment(eq)
+                    : router.push({
+                        pathname: "/machine/[id]",
+                        params: { id: String(eq.id) },
+                      })
+                }
+              />
+            );
+          })}
+        </MapViewport>
+      )}
     </GestureHandlerRootView>
   );
 }

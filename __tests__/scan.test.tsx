@@ -19,14 +19,18 @@ jest.mock("expo-linear-gradient", () => ({
   LinearGradient: ({ children }: { children?: unknown }) => children,
 }));
 
-const mockRouter = { push: jest.fn(), replace: jest.fn() };
+const mockRouter = { push: jest.fn(), replace: jest.fn(), dismissTo: jest.fn() };
 jest.mock("expo-router", () => ({ useRouter: () => mockRouter }));
 
 jest.mock("@/contexts/WorkoutContext", () => ({ useWorkout: () => ({ checkIn: jest.fn() }) }));
 
 const mockCheckIn = jest.fn();
+const mockGetByCode = jest.fn();
 jest.mock("@/services/machineAPI", () => ({
-  machineAPI: { checkIn: (...args: unknown[]) => mockCheckIn(...args) },
+  machineAPI: {
+    checkIn: (...args: unknown[]) => mockCheckIn(...args),
+    getMachineByCode: (...args: unknown[]) => mockGetByCode(...args),
+  },
 }));
 
 function scan(data: string) {
@@ -57,6 +61,43 @@ describe("Scan screen", () => {
     fireEvent.press(screen.getByText("Report a Problem"));
 
     expect(mockRouter.push).toHaveBeenCalledWith({ pathname: "/report-issue", params: { code: "LP01" } });
+  });
+
+  it("resolves the QR code to a stable equipment id and opens its map without checking in", async () => {
+    mockGetByCode.mockResolvedValue({ id: 42, code: "LP01" });
+    render(<ScanScreen />);
+    scan(JSON.stringify({ machineId: "LP01" }));
+    fireEvent.press(screen.getByText("Show on gym map"));
+    await act(async () => {});
+    expect(mockGetByCode).toHaveBeenCalledWith("LP01");
+    expect(mockRouter.dismissTo).toHaveBeenCalledWith({
+      pathname: "/equipment", params: { equipmentId: "42", scanKey: expect.any(String) },
+    });
+    expect(mockCheckIn).not.toHaveBeenCalled();
+  });
+
+  it("preserves the scan after a failed lookup and lets the member retry", async () => {
+    mockGetByCode.mockRejectedValueOnce(httpError(404)).mockResolvedValueOnce({ id: 42 });
+    render(<ScanScreen />);
+    scan(JSON.stringify({ machineId: "LP01" }));
+    fireEvent.press(screen.getByText("Show on gym map"));
+    expect(await screen.findByText("Machine not found in your gym. Try another QR code.")).toBeTruthy();
+    expect(mockRouter.dismissTo).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByText("Show on gym map"));
+    await act(async () => {});
+    expect(mockGetByCode).toHaveBeenCalledTimes(2);
+    expect(mockRouter.dismissTo).toHaveBeenCalled();
+  });
+
+  it("ignores an old lookup after the member starts another scan", async () => {
+    let finishLookup!: (value: { id: number }) => void;
+    mockGetByCode.mockReturnValue(new Promise((resolve) => { finishLookup = resolve; }));
+    render(<ScanScreen />);
+    scan(JSON.stringify({ machineId: "LP01" }));
+    fireEvent.press(screen.getByText("Show on gym map"));
+    fireEvent.press(screen.getByText("Scan Again"));
+    await act(async () => { finishLookup({ id: 42 }); });
+    expect(mockRouter.dismissTo).not.toHaveBeenCalled();
   });
 
   it("doesn't offer reporting when the QR code isn't a machine", () => {

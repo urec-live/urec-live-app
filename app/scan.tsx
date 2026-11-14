@@ -2,8 +2,8 @@ import { isAxiosError } from "axios";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useWorkout } from "@/contexts/WorkoutContext";
 import { parseMachineQr, ParsedMachineScan } from "@/utils/qr";
@@ -24,15 +24,38 @@ export default function ScanScreen() {
 
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
-  const [lastResult, setLastResult] = useState<BarCodeScannedData | null>(null);
   const [parsed, setParsed] = useState<ParsedMachineScan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
+  const lookupVersion = useRef(0);
+  useEffect(() => () => { lookupVersion.current += 1; }, []);
+
+  const handleShowOnMap = async () => {
+    if (!parsed?.machineId || locating) return;
+    setLocating(true);
+    setError(null);
+    const version = ++lookupVersion.current;
+    try {
+      const machine = await machineAPI.getMachineByCode(parsed.machineId);
+      if (version !== lookupVersion.current) return;
+      router.dismissTo({
+        pathname: "/equipment",
+        params: { equipmentId: String(machine.id), scanKey: String(Date.now()) },
+      });
+    } catch (e) {
+      if (version !== lookupVersion.current) return;
+      setError(isAxiosError(e) && e.response?.status === 404
+        ? "Machine not found in your gym. Try another QR code."
+        : "Couldn’t locate this machine. Check your connection and try again.");
+    } finally {
+      if (version === lookupVersion.current) setLocating(false);
+    }
+  };
 
   const handleScan = (result: BarCodeScannedData) => {
     if (scanned) return; // throttle double-fires
     setScanned(true);
-    setLastResult(result);
     setMessage(null);
     setError(null);
 
@@ -46,6 +69,8 @@ export default function ScanScreen() {
   };
 
   const resetScan = () => {
+    lookupVersion.current += 1;
+    setLocating(false);
     setScanned(false);
     setParsed(null);
     setError(null);
@@ -115,10 +140,10 @@ export default function ScanScreen() {
 
   return (
     <LinearGradient colors={["#ffffff", "#f5f5f5", "#ffffff"]} style={{ flex: 1 }}>
-      <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>Scan Machine QR</Text>
         <Text style={styles.subtitle}>
-          Point your camera at the QR code on the machine. We’ll show the payload for now.
+          Scan a machine to find it on your gym map, check in, or report a problem.
         </Text>
 
         <View style={styles.scannerFrame}>
@@ -133,17 +158,16 @@ export default function ScanScreen() {
             />
           ) : (
             <View style={styles.resultBox}>
-              <Text style={styles.resultLabel}>Last scan</Text>
-              <Text style={styles.resultText}>{lastResult?.data || "No data"}</Text>
+              <Text style={styles.resultLabel}>Scanned machine</Text>
               {parsed?.machineId && (
                 <>
                   <Text style={styles.metaText}>Machine: {parsed.machineId}</Text>
                   {parsed.exercise && <Text style={styles.metaText}>Exercise: {parsed.exercise}</Text>}
                   {parsed.muscle && <Text style={styles.metaText}>Muscle: {parsed.muscle}</Text>}
-                  <Pressable style={styles.button} onPress={handleConfirmCheckIn}>
+                  <Pressable disabled={locating} style={styles.button} onPress={handleConfirmCheckIn}>
                     <Text style={styles.buttonText}>Confirm Check-In</Text>
                   </Pressable>
-                  <Pressable style={[styles.button, styles.reportButton]} onPress={handleReportProblem}>
+                  <Pressable disabled={locating} style={[styles.button, styles.reportButton]} onPress={handleReportProblem}>
                     <Text style={styles.reportButtonText}>Report a Problem</Text>
                   </Pressable>
                 </>
@@ -167,13 +191,16 @@ export default function ScanScreen() {
           </View>
         )}
 
-        {lastResult && (
+        {parsed?.machineId && (
           <View style={styles.metaBox}>
-            <Text style={styles.metaText}>Type: {lastResult.type}</Text>
-            <Text style={styles.metaText}>Raw: {lastResult.data}</Text>
+            <Text style={styles.metaText}>Highlight this machine on your floor map. Your location isn’t tracked.</Text>
+            <Pressable accessibilityRole="button" accessibilityState={{ disabled: locating }}
+              disabled={locating} style={styles.button} onPress={handleShowOnMap}>
+              <Text style={styles.buttonText}>{locating ? "Finding machine…" : "Show on gym map"}</Text>
+            </Pressable>
           </View>
         )}
-      </View>
+      </ScrollView>
     </LinearGradient>
   );
 }
@@ -185,7 +212,7 @@ const CenteredScreen: React.FC<{ children: React.ReactNode }> = ({ children }) =
 );
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, paddingTop: 60 },
+  container: { flexGrow: 1, padding: 20, paddingTop: 60, paddingBottom: 32 },
   title: {
     fontSize: 26,
     color: "#00ff88",

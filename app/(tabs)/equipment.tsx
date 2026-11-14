@@ -2,12 +2,16 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,7 +20,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useGym } from "@/contexts/GymContext";
 import {
@@ -31,8 +35,10 @@ import {
 import { peekCached, subscribeCached } from "@/services/resourceCache";
 import { machineAPI, MachineDto, Exercise } from "@/services/machineAPI";
 import websocketService from "@/services/websocketService";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import ResultsSheet from "@/components/equipment/ResultsSheet";
 import FloorMap from "@/components/FloorMap";
-import FilterSelect from "@/components/equipment/FilterSelect";
+import EquipmentFilters from "@/components/equipment/EquipmentFilters";
 import { markerColor } from "@/components/EquipmentMarker";
 import { isPositioned, MapResult, searchEquipment } from "@/utils/equipmentMap";
 
@@ -60,6 +66,11 @@ export default function Equipment() {
   return <ConnectedEquipment key={gym.id} gymName={gym.name} />;
 }
 function ConnectedEquipment({ gymName }: { gymName: string }) {
+  const { equipmentId, scanKey } = useLocalSearchParams<{
+    equipmentId?: string;
+    scanKey?: string;
+  }>();
+  const appliedScan = useRef<string | null>(null);
   const router = useRouter(),
     wide = useWindowDimensions().width >= 900;
   const [query, setQuery] = useState(""),
@@ -68,8 +79,11 @@ function ConnectedEquipment({ gymName }: { gymName: string }) {
     [area, setArea] = useState("");
   const [floorId, setFloorId] = useState<number | null>(null),
     [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [listOnly, setListOnly] = useState(false),
-    [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [pageHeight, setPageHeight] = useState(640);
+  const [controlsHeight, setControlsHeight] = useState(168);
+  const [detailHeight, setDetailHeight] = useState(160);
+  const listRef = useRef<FlatList<MapResult>>(null);
   const machineResource = useCachedResource<MachineDto[]>(
     cacheKeys.machines,
     machineAPI.listAll,
@@ -141,6 +155,11 @@ function ConnectedEquipment({ gymName }: { gymName: string }) {
     [floorResource.data],
   );
   const floor = floors.find((f) => f.id === floorId) ?? floors[0];
+  useEffect(() => {
+    // Selection details and new searches must begin at the top, even after
+    // browsing a long list or changing the sheet's visible height.
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [selectedKey, floor?.id, query, muscle, status, area, expanded]);
   const filters = useMemo(
     () => ({ query, muscle, status, area }),
     [query, muscle, status, area],
@@ -155,6 +174,23 @@ function ConnectedEquipment({ gymName }: { gymName: string }) {
       }),
     [machines, floors],
   );
+  useEffect(() => {
+    const key = `${equipmentId}:${scanKey}`;
+    if (!equipmentId || appliedScan.current === key) return;
+    const result = allResults.find(
+      (r) => String(r.machine?.id) === equipmentId,
+    );
+    if (!result || (!result.floor && floorResource.loading)) return;
+    appliedScan.current = key;
+    setQuery("");
+    setMuscle("");
+    setStatus("");
+    setArea("");
+    if (result.floor) setFloorId(result.floor.id);
+    setSelectedKey(result.key);
+    setExpanded(false);
+    Keyboard.dismiss();
+  }, [equipmentId, scanKey, allResults, floorResource.loading]);
   const matches = useMemo(
     () => searchEquipment(machines, floors, filters),
     [machines, floors, filters],
@@ -187,6 +223,7 @@ function ConnectedEquipment({ gymName }: { gymName: string }) {
     if (r.floor) setFloorId(r.floor.id);
     setSelectedKey(r.key);
     setExpanded(false);
+    Keyboard.dismiss();
   };
   const clear = () => {
     setQuery("");
@@ -208,42 +245,46 @@ function ConnectedEquipment({ gymName }: { gymName: string }) {
           /^ · /,
           "",
         )
-      : `${r.floor?.name} · Place`;
+      : `${r.floor?.name ?? ""} · Place`;
   const onFloorCount = matches.filter((r) => r.floor?.id === floor?.id).length;
+  const sheetHeight = Math.max(100, pageHeight - controlsHeight - 52);
+  const peekHeight = Math.min(sheetHeight, selected ? detailHeight + 78 : 164);
   const selectionPanel = selected ? (
-    <View style={s.detail}>
-      <View style={{ flex: 1 }}>
-        <Text style={s.detailTitle}>{selected.name}</Text>
-        <Text style={s.muted}>{meta(selected)}</Text>
-        {selected.machine && (
-          <>
-            <Text
-              style={{
-                color: markerColor(selected.machine.status),
-                fontWeight: "700",
-                marginTop: 5,
-              }}
-            >
-              {selected.machine.status}
-            </Text>
-            <Text numberOfLines={2} style={s.muted}>
-              {(
-                selected.machine.exerciseNames ?? [selected.machine.exercise]
-              ).join(", ")}
-            </Text>
-          </>
-        )}
-      </View>
-      <View style={{ gap: 8 }}>
+    <View
+      style={s.detail}
+      onLayout={(e) => setDetailHeight(e.nativeEvent.layout.height)}
+    >
+      <View style={s.detailTop}>
+        <View style={{ flex: 1 }}>
+          <Text style={s.detailTitle}>{selected.name}</Text>
+          <Text style={s.muted}>{meta(selected)}</Text>
+        </View>
         <Pressable
+          accessibilityRole="button"
           accessibilityLabel="Close selection"
           onPress={() => setSelectedKey(null)}
-          style={{ alignSelf: "flex-end", padding: 4 }}
+          style={s.iconButton}
         >
-          <MaterialCommunityIcons name="close" size={20} color="#6B7D72" />
+          <MaterialCommunityIcons name="close" size={20} color="#526B5E" />
         </Pressable>
-        {selected.machine && (
+      </View>
+      {selected.machine && (
+        <>
+          <Text
+            style={[
+              s.availability,
+              { color: markerColor(selected.machine.status) },
+            ]}
+          >
+            {selected.machine.status}
+          </Text>
+          <Text numberOfLines={2} style={s.muted}>
+            {(
+              selected.machine.exerciseNames ?? [selected.machine.exercise]
+            ).join(", ")}
+          </Text>
           <Pressable
+            accessibilityRole="button"
             style={s.primary}
             onPress={() =>
               router.push({
@@ -253,206 +294,367 @@ function ConnectedEquipment({ gymName }: { gymName: string }) {
             }
           >
             <Text style={s.primaryText}>View equipment</Text>
+            <MaterialCommunityIcons
+              name="arrow-right"
+              size={18}
+              color="white"
+            />
           </Pressable>
-        )}
-      </View>
+        </>
+      )}
+      {!selected.machine && (
+        <Text style={s.muted}>Highlighted on {selected.floor?.name}.</Text>
+      )}
     </View>
   ) : null;
-  return (
-    <View style={s.page}>
-      <View style={s.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={s.gym}>{gymName}</Text>
-          <Text style={s.heading}>Explore your gym</Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push("/scan")}
-          style={s.scan}
-        >
-          <MaterialCommunityIcons
-            name="qrcode-scan"
-            size={18}
-            color="#216C50"
-          />
-          <Text style={s.link}>Scan QR</Text>
-        </Pressable>
-      </View>
-      <View style={s.search}>
-        <MaterialCommunityIcons name="magnify" size={23} color="#687E70" />
-        <TextInput
-          accessibilityLabel="Search equipment, exercises, or places"
-          placeholder="Search equipment, exercises, or places"
-          placeholderTextColor="#7E8C84"
-          value={query}
-          onChangeText={setQuery}
-          style={s.input}
-          returnKeyType="search"
-        />
-        {query ? (
-          <Pressable
-            accessibilityLabel="Clear search"
-            onPress={() => setQuery("")}
-            style={{ padding: 10 }}
-          >
-            <Text>✕</Text>
-          </Pressable>
-        ) : null}
-      </View>
-      <View style={s.filters}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 8, alignItems: "center" }}
-        >
-          <FilterSelect
-            label="Muscle group"
-            value={muscle}
-            onChange={setMuscle}
-            options={[
-              { value: "", label: "All muscles" },
-              ...muscleOptions.map((v) => ({ value: v, label: v })),
-            ]}
-          />
-          <FilterSelect
-            label="Availability"
-            value={status}
-            onChange={setStatus}
-            options={[
-              { value: "", label: "Any availability" },
-              ...statuses.map((v) => ({ value: v, label: v })),
-            ]}
-          />
-          <FilterSelect
-            label="Area"
-            value={area}
-            onChange={setArea}
-            options={[
-              { value: "", label: "All areas" },
-              ...floors.flatMap((f) =>
-                (f.layout?.areas ?? [])
-                  .filter((a) => a.kind !== "void")
-                  .map((a) => ({
-                    value: `${f.id}:${a.id}`,
-                    label: `${f.name} · ${a.name}`,
-                  })),
-              ),
-            ]}
-          />
-          {active && (
-            <Pressable
-              accessibilityRole="button"
-              onPress={clear}
-              style={{ padding: 12 }}
-            >
-              <Text style={s.link}>Clear filters</Text>
-            </Pressable>
-          )}
-        </ScrollView>
-      </View>
-      <View style={s.floors}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 6 }}
-        >
-          {floors.map((f) => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ selected: f.id === floor?.id }}
-              key={f.id}
-              onPress={() => {
-                setFloorId(f.id);
-                setSelectedKey(null);
-              }}
-              style={[s.floorTab, f.id === floor?.id && s.floorActive]}
-            >
-              <Text
-                style={[s.floorText, f.id === floor?.id && { color: "white" }]}
-              >
-                {f.name}{" "}
-                <Text style={{ opacity: 0.7 }}>
-                  {" "}
-                  {matches.filter((r) => r.floor?.id === f.id).length}
+  const resultsList = (
+    <FlatList
+      ref={listRef}
+      data={selected && !expanded && !wide ? [] : results}
+      keyExtractor={(r) => r.key}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      style={{ flex: 1 }}
+      ListHeaderComponent={selectionPanel}
+      refreshing={machineResource.refreshing}
+      onRefresh={refresh}
+      ListEmptyComponent={
+        selected ? null : (
+          <View style={s.emptyResults}>
+            {machineResource.loading ? (
+              <>
+                <ActivityIndicator color="#216C50" />
+                <Text style={s.muted}>Loading equipment…</Text>
+              </>
+            ) : (
+              <>
+                <Text style={s.detailTitle}>
+                  {active
+                    ? "No matches"
+                    : machineResource.error
+                      ? "Equipment unavailable"
+                      : "No equipment yet"}
                 </Text>
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
+                <Text style={s.muted}>
+                  {active
+                    ? "Try another exercise or clear your filters."
+                    : machineResource.error
+                      ? "Check your connection, then try Refresh."
+                      : "Equipment will appear when your gym adds it."}
+                </Text>
+                {active && (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={clear}
+                    style={s.textButton}
+                  >
+                    <Text style={s.link}>Clear filters</Text>
+                  </Pressable>
+                )}
+              </>
+            )}
+          </View>
+        )
+      }
+      renderItem={({ item: r }) => (
         <Pressable
           accessibilityRole="button"
-          onPress={() => setListOnly((v) => !v)}
-          style={s.viewToggle}
+          accessibilityLabel={`${r.name}, ${r.machine?.status ?? "Place"}, ${meta(r)}`}
+          accessibilityState={{ selected: r.key === selectedKey }}
+          onPress={() => choose(r)}
+          style={[
+            s.resultRow,
+            r.key === selectedKey && { backgroundColor: "#EAF3ED" },
+          ]}
         >
-          <MaterialCommunityIcons
-            name={listOnly ? "map-outline" : "format-list-bulleted"}
-            size={18}
-            color="#216C50"
-          />
-          <Text style={s.link}>{listOnly ? "Map" : "List"}</Text>
-        </Pressable>
-      </View>
-      <View style={s.statusRow}>
-        <Text style={[s.sync, { color: live ? "#216C50" : "#6C7E72" }]}>
-          {live
-            ? "● Live availability"
-            : timestamp
-              ? `Saved copy · synced ${new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-              : "Connecting…"}
-        </Text>
-        <Pressable accessibilityRole="button" onPress={refresh}>
-          <Text style={s.link}>
-            {machineResource.refreshing ? "Refreshing…" : "Refresh"}
-          </Text>
-        </Pressable>
-      </View>
-      {machineResource.error || floorResource.error ? (
-        <Text accessibilityRole="alert" style={s.notice}>
-          Couldn’t refresh {machineResource.error ? "equipment" : "the map"}.
-          Check your connection and try Refresh.
-        </Text>
-      ) : null}
-      <View style={[s.body, wide && { flexDirection: "row" }]}>
-        {!listOnly && (wide || !expanded) && (
-          <View style={[s.mapPane, { flex: wide ? 1 : 2 }]}>
-            {floor?.illustrative && (
-              <Text style={s.illustrative}>
-                Illustrative university gym · room and equipment locations are
-                fictional
+          <View
+            style={[
+              s.resultIcon,
+              { backgroundColor: r.machine ? "#EEF4F0" : "#EDF1F6" },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name={
+                r.machine
+                  ? "dumbbell"
+                  : r.area?.kind === "pool"
+                    ? "pool"
+                    : r.area?.kind === "court"
+                      ? "basketball"
+                      : "map-marker-outline"
+              }
+              size={20}
+              color={r.machine ? markerColor(r.machine.status) : "#57718B"}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.resultName}>{r.name}</Text>
+            {r.machine && (
+              <Text
+                style={[
+                  s.availability,
+                  { color: markerColor(r.machine.status) },
+                ]}
+              >
+                {r.machine.status}
               </Text>
             )}
-            <FloorMap
-              floors={floors}
-              allMachines={machines}
-              selectedFloorId={floor?.id}
-              hideFloorPicker
-              matchingEquipmentIds={active ? matchingIds : undefined}
-              matchingAreaIds={active ? matchingAreas : undefined}
-              highlightedEquipmentId={selected?.machine?.id}
-              selectedAreaId={
-                selected && !selected.machine ? selected.area?.id : null
-              }
-              onSelectEquipment={(m) =>
-                choose(
-                  allResults.find((r) => r.machine?.id === m.id) ?? {
-                    key: `machine:${m.id}`,
-                    name: m.name,
-                    machine: m,
-                    floor: floors.find((f) =>
-                      f.equipment.some((eq) => eq.id === m.id),
-                    ),
-                  },
-                )
-              }
-              onSelectArea={(a, f) =>
-                choose({
-                  key: `area:${f.id}:${a.id}`,
-                  name: a.name,
-                  area: a,
-                  floor: f,
-                })
-              }
-            />
+            <Text style={s.resultMeta}>{meta(r)}</Text>
+          </View>
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={20}
+            color="#819589"
+          />
+        </Pressable>
+      )}
+    />
+  );
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View
+          style={s.page}
+          onLayout={(e) => setPageHeight(e.nativeEvent.layout.height)}
+        >
+          <View
+            style={[
+              s.mapPane,
+              {
+                top: wide ? 12 : controlsHeight + 4,
+                bottom: wide ? 72 : peekHeight + 94,
+                left: wide ? 388 : 8,
+              },
+            ]}
+          >
+            {floorResource.loading && !floor ? (
+              <View style={s.center}>
+                <ActivityIndicator color="#216C50" />
+                <Text style={s.muted}>Loading floor map…</Text>
+              </View>
+            ) : (
+              <FloorMap
+                enableGoogleMaps
+                floors={floors}
+                allMachines={machines}
+                selectedFloorId={floor?.id}
+                hideFloorPicker
+                matchingEquipmentIds={active ? matchingIds : undefined}
+                matchingAreaIds={active ? matchingAreas : undefined}
+                highlightedEquipmentId={selected?.machine?.id}
+                selectedAreaId={
+                  selected && !selected.machine ? selected.area?.id : null
+                }
+                onSelectEquipment={(m) =>
+                  choose(
+                    allResults.find((r) => r.machine?.id === m.id) ?? {
+                      key: `machine:${m.id}`,
+                      name: m.name,
+                      machine: m,
+                      floor: floors.find((f) =>
+                        f.equipment.some((eq) => eq.id === m.id),
+                      ),
+                    },
+                  )
+                }
+                onSelectArea={(a, f) =>
+                  choose({
+                    key: `area:${f.id}:${a.id}`,
+                    name: a.name,
+                    area: a,
+                    floor: f,
+                  })
+                }
+              />
+            )}
+          </View>
+
+          <View
+            style={[s.controls, wide && { width: 360, right: undefined }]}
+            onLayout={(e) =>
+              setControlsHeight(e.nativeEvent.layout.height + 12)
+            }
+          >
+            <View style={s.header}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.gym} numberOfLines={1}>
+                  {gymName}
+                </Text>
+                <Text style={s.heading}>Explore your gym</Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Scan equipment QR code"
+                onPress={() => router.push("/scan")}
+                style={s.scan}
+              >
+                <MaterialCommunityIcons
+                  name="qrcode-scan"
+                  size={20}
+                  color="#216C50"
+                />
+                <Text style={s.link}>Scan QR</Text>
+              </Pressable>
+            </View>
+            <View style={s.search}>
+              <MaterialCommunityIcons
+                name="magnify"
+                size={23}
+                color="#627D6D"
+              />
+              <TextInput
+                accessibilityLabel="Search equipment, exercises, or places"
+                placeholder="Equipment, exercises, or places"
+                placeholderTextColor="#718578"
+                value={query}
+                onChangeText={(text) => {
+                  setQuery(text);
+                  setSelectedKey(null);
+                }}
+                style={s.input}
+                returnKeyType="search"
+                onSubmitEditing={() => {
+                  setExpanded(true);
+                  Keyboard.dismiss();
+                }}
+              />
+              {!!query && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear search"
+                  onPress={() => {
+                    setQuery("");
+                    setSelectedKey(null);
+                  }}
+                  style={s.iconButton}
+                >
+                  <MaterialCommunityIcons
+                    name="close"
+                    size={20}
+                    color="#526B5E"
+                  />
+                </Pressable>
+              )}
+              <EquipmentFilters count={[muscle, status, area].filter(Boolean).length} onClear={() => {
+                setMuscle(""); setStatus(""); setArea(""); setSelectedKey(null);
+              }}>
+              <EquipmentFilters.Group
+                label="Muscle group"
+                value={muscle}
+                onChange={(v) => {
+                  setMuscle(v);
+                  setSelectedKey(null);
+                }}
+                options={[
+                  { value: "", label: "All muscles" },
+                  ...muscleOptions.map((v) => ({ value: v, label: v })),
+                ]}
+              />
+              <EquipmentFilters.Group
+                label="Availability"
+                value={status}
+                onChange={(v) => {
+                  setStatus(v);
+                  setSelectedKey(null);
+                }}
+                options={[
+                  { value: "", label: "Any availability" },
+                  ...statuses.map((v) => ({ value: v, label: v })),
+                ]}
+              />
+              <EquipmentFilters.Group
+                label="Area"
+                value={area}
+                onChange={(v) => {
+                  setArea(v);
+                  setSelectedKey(null);
+                }}
+                options={[
+                  { value: "", label: "All areas" },
+                  ...floors.flatMap((f) =>
+                    (f.layout?.areas ?? [])
+                      .filter((a) => a.kind !== "void")
+                      .map((a) => ({
+                        value: `${f.id}:${a.id}`,
+                        label: `${f.name} · ${a.name}`,
+                      })),
+                  ),
+                ]}
+              />
+              </EquipmentFilters>
+            </View>
+            {!!(machineResource.error || floorResource.error) && (
+              <View style={s.notice}>
+                <Text accessibilityRole="alert" style={s.noticeText}>
+                  Couldn’t refresh{" "}
+                  {machineResource.error ? "equipment" : "the map"}. Check your
+                  connection and try Refresh.
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {!!floors.length && (
+            <View
+              style={[
+                s.floorPicker,
+                {
+                  top: wide ? 20 : controlsHeight + 12,
+                  maxHeight: Math.max(
+                    60,
+                    pageHeight - controlsHeight - peekHeight - 90,
+                  ),
+                },
+              ]}
+            >
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                {floors.map((f) => (
+                  <Pressable
+                    key={f.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Show ${f.name}, ${matches.filter((r) => r.floor?.id === f.id).length} results`}
+                    accessibilityState={{ selected: f.id === floor?.id }}
+                    onPress={() => {
+                      setFloorId(f.id);
+                      setSelectedKey(null);
+                      setExpanded(false);
+                      Keyboard.dismiss();
+                    }}
+                    style={[s.floorTab, f.id === floor?.id && s.floorActive]}
+                  >
+                    <Text
+                      style={[
+                        s.floorText,
+                        f.id === floor?.id && { color: "white" },
+                      ]}
+                    >
+                      {/^ground$/i.test(f.name)
+                        ? "G"
+                        : (f.name.match(/^level\s+(\d+)$/i)?.[1] ?? f.name)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          <View
+            style={[
+              s.mapFooter,
+              { bottom: wide ? 16 : peekHeight + 52, left: wide ? 400 : 16 },
+            ]}
+          >
+            {floor?.illustrative && (
+              <Text style={s.illustrative}>
+                Illustrative map · fictional locations
+              </Text>
+            )}
             <View style={s.legend}>
               {["Available", "In Use", "Reserved", "Out of Order"].map((v) => (
                 <View key={v} style={s.legendItem}>
@@ -461,151 +663,81 @@ function ConnectedEquipment({ gymName }: { gymName: string }) {
                 </View>
               ))}
             </View>
-            {wide && selectionPanel}
           </View>
-        )}
-        <View
-          style={[
-            s.results,
-            wide && !listOnly
-              ? { width: 340 }
-              : { flex: 1, minHeight: selected && !listOnly ? 190 : 144 },
-          ]}
-        >
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => setExpanded((v) => !v)}
-            disabled={wide || listOnly}
-            style={s.resultHeader}
+
+          <View
+            style={[
+              s.sheetSlot,
+              { height: sheetHeight },
+              wide && { right: undefined, width: 388 },
+            ]}
+            pointerEvents="box-none"
           >
-            <View>
-              <Text style={s.resultTitle}>
-                {active ? "Search results" : "Equipment & places"}{" "}
-                <Text style={s.muted}>({matches.length})</Text>
-              </Text>
-              <Text style={s.muted}>
-                {floor
-                  ? `${onFloorCount} on ${floor.name} · ${matches.length - onFloorCount} elsewhere`
-                  : "Equipment in your gym"}
-              </Text>
-            </View>
-            {!wide && !listOnly && (
-              <MaterialCommunityIcons
-                name={expanded ? "chevron-down" : "chevron-up"}
-                size={22}
-                color="#216C50"
-              />
-            )}
-          </Pressable>
-          {(!wide || listOnly) && selectionPanel}
-          {selected &&
-          !wide &&
-          !expanded &&
-          !listOnly ? null : machineResource.loading ? (
-            <View style={s.center}>
-              <ActivityIndicator color="#216C50" />
-              <Text style={s.muted}>Loading machines...</Text>
-            </View>
-          ) : (
-            <FlatList
-              data={results}
-              keyExtractor={(r) => r.key}
-              keyboardShouldPersistTaps="handled"
-              refreshing={machineResource.refreshing}
-              onRefresh={refresh}
-              ListEmptyComponent={
-                <View style={{ padding: 24 }}>
-                  <Text style={s.detailTitle}>
-                    {active ? "No matches" : "No equipment yet"}
-                  </Text>
-                  <Text style={s.muted}>
-                    {active
-                      ? "Try another exercise or clear your filters."
-                      : "Equipment will appear when your gym adds it."}
-                  </Text>
-                  {active && (
-                    <Pressable onPress={clear} style={{ paddingTop: 14 }}>
-                      <Text style={s.link}>Clear filters</Text>
-                    </Pressable>
+            <ResultsSheet
+              height={sheetHeight - (wide ? 14 : 0)}
+              peekHeight={peekHeight}
+              expanded={expanded}
+              onExpandedChange={setExpanded}
+              docked={wide}
+              header={
+                <View style={s.resultHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.resultTitle}>
+                      {active ? "Search results" : "Equipment & places"} (
+                      {matches.length})
+                    </Text>
+                    <Text style={s.muted}>
+                      {floor
+                        ? `${onFloorCount} on ${floor.name} · ${matches.length - onFloorCount} elsewhere`
+                        : "Equipment in your gym"}
+                    </Text>
+                  </View>
+                  {!wide && (
+                    <MaterialCommunityIcons
+                      name={expanded ? "chevron-down" : "chevron-up"}
+                      size={24}
+                      color="#216C50"
+                    />
                   )}
                 </View>
               }
-              renderItem={({ item: r }) => (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`${r.name}, ${r.machine?.status ?? "Place"}, ${meta(r)}`}
-                  onPress={() => {
-                    if (listOnly && r.machine)
-                      router.push({
-                        pathname: "/machine/[id]",
-                        params: { id: String(r.machine.id) },
-                      });
-                    else choose(r);
-                  }}
-                  style={[
-                    s.resultRow,
-                    r.key === selectedKey && { backgroundColor: "#EAF3ED" },
-                  ]}
-                >
-                  <View
-                    style={[
-                      s.resultIcon,
-                      { backgroundColor: r.machine ? "#EEF4F0" : "#EDF1F6" },
-                    ]}
-                  >
-                    <MaterialCommunityIcons
-                      name={
-                        r.machine
-                          ? "dumbbell"
-                          : r.area?.kind === "pool"
-                            ? "pool"
-                            : r.area?.kind === "court"
-                              ? "basketball"
-                              : "map-marker-outline"
-                      }
-                      size={20}
-                      color={
-                        r.machine ? markerColor(r.machine.status) : "#57718B"
-                      }
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.resultName}>{r.name}</Text>
-                    {r.machine && (
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          color: markerColor(r.machine.status),
-                          fontWeight: "600",
-                        }}
-                      >
-                        {r.machine.status}
-                      </Text>
-                    )}
-                    <Text style={s.resultMeta}>{meta(r)}</Text>
-                  </View>
-                  <MaterialCommunityIcons
-                    name="chevron-right"
-                    size={18}
-                    color="#8A9B90"
-                  />
-                </Pressable>
-              )}
+            >
+              {resultsList}
+            </ResultsSheet>
+          </View>
+          <View
+            style={[
+              s.liveBar,
+              wide && { left: 14, width: 360, right: undefined },
+            ]}
+          >
+            <View
+              style={[s.dot, { backgroundColor: live ? "#216C50" : "#8B9C91" }]}
             />
-          )}
+            <Text style={s.sync} numberOfLines={1}>
+              {live
+                ? "Live availability"
+                : timestamp
+                  ? `Saved · ${new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                  : "Connecting…"}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={refresh}
+              style={s.refresh}
+            >
+              <Text style={s.link}>
+                {machineResource.refreshing ? "Refreshing…" : "Refresh"}
+              </Text>
+            </Pressable>
+          </View>
         </View>
-      </View>
-    </View>
+      </KeyboardAvoidingView>
+    </GestureHandlerRootView>
   );
 }
 const s = StyleSheet.create({
-  page: {
-    flex: 1,
-    backgroundColor: "#FAFCFA",
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 8,
-  },
+  page: { flex: 1, backgroundColor: "#EDF2EE", overflow: "hidden" },
   center: {
     flex: 1,
     alignItems: "center",
@@ -613,17 +745,19 @@ const s = StyleSheet.create({
     padding: 24,
     gap: 14,
   },
-  header: { flexDirection: "row", alignItems: "center", marginBottom: 14 },
-  gym: { fontSize: 13, fontWeight: "600", color: "#62796B", marginBottom: 3 },
-  heading: { fontSize: 26, fontWeight: "800", color: "#1D3828" },
+  controls: { position: "absolute", top: 12, left: 14, right: 14, gap: 9 },
+  header: { flexDirection: "row", alignItems: "center", gap: 8 },
+  gym: { fontSize: 11, fontWeight: "600", color: "#526E5D", marginBottom: 2 },
+  heading: { fontSize: 21, fontWeight: "800", color: "#1D3828" },
   scan: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
-    padding: 12,
+    gap: 6,
+    minHeight: 46,
+    paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: "#D4E2D8",
-    borderRadius: 10,
+    borderRadius: 14,
     backgroundColor: "white",
   },
   link: { fontSize: 13, color: "#216C50", fontWeight: "600" },
@@ -631,112 +765,121 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    borderWidth: 1,
-    borderColor: "#CEDCD2",
     backgroundColor: "white",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    minHeight: 50,
+    borderRadius: 16,
+    paddingLeft: 14,
+    paddingRight: 4,
+    minHeight: 52,
+    borderWidth: 1,
+    borderColor: "#D4E2D8",
+    boxShadow: "0 3px 12px #203C2B0D",
   },
   input: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 14,
     color: "#203C2B",
-    paddingVertical: 12,
+    paddingVertical: 14,
     minWidth: 0,
   },
-  filters: { marginVertical: 10 },
-  floors: {
-    flexDirection: "row",
-    gap: 10,
+  iconButton: {
+    minWidth: 44,
+    minHeight: 44,
     alignItems: "center",
-    marginBottom: 7,
+    justifyContent: "center",
+  },
+  textButton: {
+    minHeight: 44,
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  floorPicker: {
+    position: "absolute",
+    right: 16,
+    width: 48,
+    borderRadius: 16,
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#D4E2D8",
+    overflow: "hidden",
+    boxShadow: "0 3px 12px #203C2B12",
   },
   floorTab: {
-    minHeight: 42,
+    minHeight: 44,
+    paddingHorizontal: 5,
+    paddingVertical: 7,
+    alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 15,
-    borderRadius: 9,
-    backgroundColor: "#EBF0EC",
   },
   floorActive: { backgroundColor: "#216C50" },
-  floorText: { fontSize: 13, fontWeight: "600", color: "#516A5B" },
-  viewToggle: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    padding: 10,
+  floorText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#516A5B",
+    textAlign: "center",
   },
-  statusRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingBottom: 10,
-  },
-  sync: { fontSize: 12 },
-  body: { flex: 1, gap: 12, minHeight: 0 },
-  mapPane: { minHeight: 0, gap: 6 },
-  illustrative: { fontSize: 11, color: "#77877C", paddingLeft: 4 },
-  legend: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-  },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-  dot: { width: 8, height: 8, borderRadius: 3 },
-  legendText: { fontSize: 10, color: "#65796C" },
-  results: {
-    backgroundColor: "white",
-    borderColor: "#E0E7E2",
-    borderWidth: 1,
-    borderRadius: 14,
-    overflow: "hidden",
-  },
-  resultHeader: {
-    padding: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    borderBottomWidth: 1,
-    borderColor: "#EDF1EE",
-  },
+  mapPane: { position: "absolute", right: 8, minHeight: 100 },
+  mapFooter: { position: "absolute", right: 12, gap: 5 },
+  illustrative: { fontSize: 10, color: "#526B5C" },
+  legend: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  legendText: { fontSize: 10, color: "#526B5C" },
+  sheetSlot: { position: "absolute", bottom: 44, left: 0, right: 0 },
+  resultHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
   resultTitle: { fontSize: 15, fontWeight: "700", color: "#254B34" },
-  muted: { fontSize: 12, color: "#708175", marginTop: 3 },
+  muted: { fontSize: 12, color: "#63796B", marginTop: 3, lineHeight: 17 },
   resultRow: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
-    gap: 10,
-    borderBottomWidth: 1,
-    borderColor: "#F0F3F1",
-    minHeight: 78,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    gap: 12,
+    borderTopWidth: 1,
+    borderColor: "#EDF1EE",
+    minHeight: 82,
   },
   resultIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   resultName: { fontSize: 14, fontWeight: "600", color: "#263D2E" },
-  resultMeta: { fontSize: 11, color: "#7A897F", marginTop: 4 },
-  detail: {
-    flexDirection: "row",
-    gap: 12,
-    padding: 14,
-    backgroundColor: "white",
-    borderWidth: 1,
-    borderColor: "#CEDCD2",
-    borderRadius: 12,
-  },
-  detailTitle: { fontSize: 16, fontWeight: "700", color: "#23432E" },
+  resultMeta: { fontSize: 11, color: "#63796B", marginTop: 4 },
+  availability: { fontSize: 12, fontWeight: "600", marginTop: 3 },
+  detail: { paddingHorizontal: 18, paddingTop: 4, paddingBottom: 16 },
+  detailTop: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
+  detailTitle: { fontSize: 18, fontWeight: "700", color: "#23432E" },
   primary: {
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    minHeight: 46,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: "#216C50",
-    borderRadius: 8,
+    borderRadius: 12,
+    marginTop: 12,
   },
-  primaryText: { fontSize: 12, color: "white", fontWeight: "700" },
-  notice: { fontSize: 12, color: "#925A22", paddingBottom: 8 },
+  primaryText: { fontSize: 14, color: "white", fontWeight: "700" },
+  emptyResults: { paddingHorizontal: 18, paddingVertical: 10 },
+  notice: { padding: 10, borderRadius: 12, backgroundColor: "#FFF4DF" },
+  noticeText: { fontSize: 12, color: "#825018" },
+  liveBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingLeft: 18,
+    paddingRight: 6,
+    backgroundColor: "white",
+  },
+  sync: { flex: 1, fontSize: 11, color: "#526B5C" },
+  refresh: { minHeight: 44, paddingHorizontal: 12, justifyContent: "center" },
 });

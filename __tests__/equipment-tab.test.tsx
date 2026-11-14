@@ -13,9 +13,22 @@ import {
   setLiveSinceSource,
 } from "@/services/resourceCache";
 import type { MachineDto, FloorPlanResponse } from "@/services/machineAPI";
+// Native gesture recognition needs device validation; keep the real sheet's state,
+// header and content here to test the map/list interaction contract.
+jest.mock("react-native-gesture-handler", () => ({
+  ...jest.requireActual("react-native-gesture-handler"),
+  GestureHandlerRootView: require("react-native").View,
+  GestureDetector: require("react-native").View,
+}));
+jest.mock("react-native-reanimated", () =>
+  require("react-native-reanimated/mock"),
+);
 const mockPush = jest.fn();
+const mockMapMount = jest.fn();
+let mockRouteParams: { equipmentId?: string; scanKey?: string } = {};
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush }),
+  useLocalSearchParams: () => mockRouteParams,
   useFocusEffect: (cb: () => void) => {
     require("react").useEffect(cb, [cb]);
   },
@@ -49,15 +62,20 @@ jest.mock("@/components/FloorMap", () => {
   const { View, Text } = require("react-native");
   return {
     __esModule: true,
-    default: (p: any) => (
-      <View>
-        <Text testID="map-floor">{String(p.selectedFloorId)}</Text>
-        <Text testID="map-selected">{String(p.highlightedEquipmentId)}</Text>
-        <Text testID="map-matches">
-          {String(p.matchingEquipmentIds?.size ?? -1)}
-        </Text>
-      </View>
-    ),
+    default: (p: any) => {
+      require("react").useEffect(() => {
+        mockMapMount();
+      }, []);
+      return (
+        <View>
+          <Text testID="map-floor">{String(p.selectedFloorId)}</Text>
+          <Text testID="map-selected">{String(p.highlightedEquipmentId)}</Text>
+          <Text testID="map-matches">
+            {String(p.matchingEquipmentIds?.size ?? -1)}
+          </Text>
+        </View>
+      );
+    },
   };
 });
 jest.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: () => null }));
@@ -124,11 +142,45 @@ const floors: FloorPlanResponse[] = [
 ];
 beforeEach(async () => {
   jest.clearAllMocks();
+  mockRouteParams = {};
   await clearCache();
   setLiveSinceSource(() => 0);
   mockApi.listAll.mockResolvedValue([cable, treadmill]);
   mockApi.getFloorPlans.mockResolvedValue(floors);
   mockApi.getExercisesByEquipmentId.mockResolvedValue([]);
+});
+it("keeps the map mounted while expanding and collapsing results", async () => {
+  render(<Equipment />);
+  await screen.findByText("Cable Station");
+  const mounts = mockMapMount.mock.calls.length;
+  fireEvent.press(screen.getByLabelText("Expand results"));
+  expect(screen.getByLabelText("Collapse results")).toBeTruthy();
+  expect(screen.getByTestId("map-floor").props.children).toBe("7");
+  fireEvent.press(screen.getByLabelText("Collapse results"));
+  expect(screen.getByLabelText("Expand results")).toBeTruthy();
+  expect(mockMapMount).toHaveBeenCalledTimes(mounts);
+});
+it("opens a scanned machine on its mapped floor after data loads", async () => {
+  mockRouteParams = { equipmentId: "2", scanKey: "scan-1" };
+  render(<Equipment />);
+  await screen.findByText("View equipment");
+  expect(screen.getByTestId("map-floor").props.children).toBe("8");
+  expect(screen.getByTestId("map-selected").props.children).toBe("2");
+  fireEvent.press(screen.getByLabelText("Close selection"));
+  fireEvent.press(screen.getByLabelText("Show Ground, 2 results"));
+  expect(screen.getByTestId("map-floor").props.children).toBe("7");
+});
+it("clears stale selection when a new search excludes it", async () => {
+  render(<Equipment />);
+  await screen.findByText("Cable Station");
+  fireEvent.press(screen.getByLabelText(/Cable Station, Available/));
+  expect(screen.getByText("View equipment")).toBeTruthy();
+  fireEvent.changeText(
+    screen.getByLabelText("Search equipment, exercises, or places"),
+    "running",
+  );
+  expect(screen.queryByText("View equipment")).toBeNull();
+  expect(screen.getByTestId("map-selected").props.children).toBe("undefined");
 });
 it("preserves Ground during search, then switches and opens a cross-floor result", async () => {
   render(<Equipment />);
@@ -156,8 +208,9 @@ it("combines filters and updates live counts without moving floors", async () =>
     screen.getByLabelText("Search equipment, exercises, or places"),
     "fly",
   );
-  fireEvent.press(screen.getByLabelText("Availability: Any availability"));
+  fireEvent.press(screen.getByLabelText("Filters, 0 active"));
   fireEvent.press(screen.getByLabelText("Availability: choose Available"));
+  fireEvent.press(screen.getByLabelText("Done filtering"));
   expect(screen.getByTestId("map-matches").props.children).toBe("1");
   await act(async () => patchCachedMachine({ ...cable, status: "In Use" }));
   expect(screen.getByText("No matches")).toBeTruthy();
@@ -199,4 +252,23 @@ it("loads equipment before maps and searches legacy exercise metadata", async ()
   );
   await waitFor(() => expect(screen.getByText("Cable Station")).toBeTruthy());
   expect(screen.getByText("Location not mapped")).toBeTruthy();
+});
+
+it("keeps saved equipment searchable when refresh fails offline", async () => {
+  render(<Equipment />);
+  await screen.findByText("Cable Station");
+  mockApi.listAll.mockRejectedValue(new Error("Network unavailable"));
+  mockApi.getFloorPlans.mockRejectedValue(new Error("Network unavailable"));
+  mockApi.getFloorPlan.mockRejectedValueOnce(new Error("Network unavailable"));
+  const calls = mockApi.listAll.mock.calls.length;
+  fireEvent.press(screen.getByText("Refresh"));
+  await waitFor(() => expect(mockApi.listAll.mock.calls.length).toBeGreaterThan(calls));
+  await waitFor(() => expect(screen.queryByText("Refreshing…")).toBeNull());
+  expect(screen.getByText("Cable Station")).toBeTruthy();
+  fireEvent.changeText(screen.getByLabelText("Search equipment, exercises, or places"), "running");
+  expect(screen.getByText("Treadmill")).toBeTruthy();
+  expect(screen.queryByText("Cable Station")).toBeNull();
+  fireEvent.press(screen.getByLabelText(/Treadmill, In Use/));
+  expect(screen.getByTestId("map-floor").props.children).toBe("8");
+  expect(screen.getByTestId("map-selected").props.children).toBe("2");
 });

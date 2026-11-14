@@ -2,6 +2,10 @@
 
 Read `TEAM_WORKFLOW.md` for the shared team workflow and `CLAUDE.md` for repository coding conventions. Verify architecture notes against current source and stay within the requested task.
 
+## Platform scope — important
+
+This member app targets native iOS and Android only. Do not spend effort or tokens designing, coding, or validating desktop/web-browser UI, responsive desktop layouts, or web compatibility unless the user explicitly changes this scope. Validate UI on native simulators, emulators, or devices; browser previews do not establish native UI validation.
+
 ## Commit evidence
 
 Every commit message must include a `Manual test:` section in its body. State the shortest reproducible steps, expected result, and any required local account, environment, or provider prerequisite. If no manual test is appropriate, say why and record the automated validation instead. Keep the subject line concise; do not substitute a PR description for commit-level test instructions.
