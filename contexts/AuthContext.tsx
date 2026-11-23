@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { authAPI, setAuthFailureHandler } from '../services/authAPI';
 import { clearUserCache, preloadCache } from '../services/resourceCache';
+import { disableNudgeNotifications } from '../services/workoutNudgeNotifications';
 
 interface User {
   username: string;
@@ -137,6 +138,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const signOut = async () => {
     try {
       setLoading(true);
+      if (user) await disableNudgeNotifications(user.username).catch(() => {});
       // Clear stored tokens and user data
       await AsyncStorage.removeItem('accessToken');
       await AsyncStorage.removeItem('refreshToken');

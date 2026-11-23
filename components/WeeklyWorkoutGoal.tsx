@@ -7,6 +7,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useWorkout } from "@/contexts/WorkoutContext";
 import { useCachedResource } from "@/hooks/useCachedResource";
 import { cacheKeys, fetchCompletedWorkoutTimes, STALE_MS } from "@/services/cachedResources";
+import { workoutFriendsAPI } from "@/services/workoutFriendsAPI";
+import WorkoutFriends from "./WorkoutFriends";
 import { getWeeklyWorkoutGoal, MILESTONE_WEEKS, WEEKLY_TARGETS, weekKey } from "@/utils/weeklyWorkoutGoal";
 import type { WeeklyTargets } from "@/utils/weeklyWorkoutGoal";
 
@@ -75,6 +77,11 @@ function GoalCard({ username, editable }: { username: string; editable: boolean 
       await AsyncStorage.setItem(storageKey, JSON.stringify(updated));
       setTargets(updated);
       setEditing(false);
+      try {
+        await workoutFriendsAPI.syncTarget(value);
+      } catch {
+        setSettingsError("Target saved here. To retry syncing with friends, save it again.");
+      }
     } catch {
       setSettingsError("Could not save your workout target. Try again.");
     } finally {
@@ -82,7 +89,7 @@ function GoalCard({ username, editable }: { username: string; editable: boolean 
     }
   }
 
-  return (
+  const card = (
     <View style={styles.card}>
       <View style={styles.heading}>
         <Text style={styles.title}>Weekly workout goal</Text>
@@ -139,6 +146,13 @@ function GoalCard({ username, editable }: { username: string; editable: boolean 
       )}
       {!!settingsError && <Text role="alert" style={styles.detail}>{settingsError}</Text>}
     </View>
+  );
+
+  return (
+    <>
+      {card}
+      {editable && targets && <WorkoutFriends username={username} target={target} />}
+    </>
   );
 }
 
