@@ -10,6 +10,7 @@ import {
     View,
 } from "react-native";
 import { useWorkout, SetDetail } from "../contexts/WorkoutContext";
+import WeeklyWorkoutGoal from "./WeeklyWorkoutGoal";
 
 export default function DailyWorkoutSummary() {
   const { todayWorkouts } = useWorkout();
@@ -84,6 +85,7 @@ export default function DailyWorkoutSummary() {
             </View>
 
             <ScrollView style={styles.workoutList}>
+              {modalVisible && <WeeklyWorkoutGoal editable={false} />}
               {todayWorkouts.map((workout, index) => (
                 <View key={index} style={styles.workoutCard}>
                   <View style={styles.workoutHeader}>
