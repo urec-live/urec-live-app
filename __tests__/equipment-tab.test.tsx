@@ -156,8 +156,10 @@ it("combines filters and updates live counts without moving floors", async () =>
     screen.getByLabelText("Search equipment, exercises, or places"),
     "fly",
   );
-  fireEvent.press(screen.getByLabelText("Availability: Any availability"));
+  fireEvent.press(screen.getByLabelText("Filters, 0 active"));
   fireEvent.press(screen.getByLabelText("Availability: choose Available"));
+  fireEvent.press(screen.getByLabelText("Done filtering"));
+  expect(screen.getByLabelText("Filters, 1 active")).toBeTruthy();
   expect(screen.getByTestId("map-matches").props.children).toBe("1");
   await act(async () => patchCachedMachine({ ...cable, status: "In Use" }));
   expect(screen.getByText("No matches")).toBeTruthy();

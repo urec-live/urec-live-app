@@ -32,7 +32,7 @@ import { peekCached, subscribeCached } from "@/services/resourceCache";
 import { machineAPI, MachineDto, Exercise } from "@/services/machineAPI";
 import websocketService from "@/services/websocketService";
 import FloorMap from "@/components/FloorMap";
-import FilterSelect from "@/components/equipment/FilterSelect";
+import EquipmentFilters from "@/components/equipment/EquipmentFilters";
 import { markerColor } from "@/components/EquipmentMarker";
 import { isPositioned, MapResult, searchEquipment } from "@/utils/equipmentMap";
 
@@ -298,14 +298,10 @@ function ConnectedEquipment({ gymName }: { gymName: string }) {
             <Text>✕</Text>
           </Pressable>
         ) : null}
-      </View>
-      <View style={s.filters}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 8, alignItems: "center" }}
-        >
-          <FilterSelect
+        <EquipmentFilters count={[muscle, status, area].filter(Boolean).length} onClear={() => {
+          setMuscle(""); setStatus(""); setArea(""); setSelectedKey(null);
+        }}>
+          <EquipmentFilters.Group
             label="Muscle group"
             value={muscle}
             onChange={setMuscle}
@@ -314,7 +310,7 @@ function ConnectedEquipment({ gymName }: { gymName: string }) {
               ...muscleOptions.map((v) => ({ value: v, label: v })),
             ]}
           />
-          <FilterSelect
+          <EquipmentFilters.Group
             label="Availability"
             value={status}
             onChange={setStatus}
@@ -323,7 +319,7 @@ function ConnectedEquipment({ gymName }: { gymName: string }) {
               ...statuses.map((v) => ({ value: v, label: v })),
             ]}
           />
-          <FilterSelect
+          <EquipmentFilters.Group
             label="Area"
             value={area}
             onChange={setArea}
@@ -339,16 +335,7 @@ function ConnectedEquipment({ gymName }: { gymName: string }) {
               ),
             ]}
           />
-          {active && (
-            <Pressable
-              accessibilityRole="button"
-              onPress={clear}
-              style={{ padding: 12 }}
-            >
-              <Text style={s.link}>Clear filters</Text>
-            </Pressable>
-          )}
-        </ScrollView>
+        </EquipmentFilters>
       </View>
       <View style={s.floors}>
         <ScrollView
@@ -635,7 +622,8 @@ const s = StyleSheet.create({
     borderColor: "#CEDCD2",
     backgroundColor: "white",
     borderRadius: 12,
-    paddingHorizontal: 14,
+    paddingLeft: 14,
+    paddingRight: 4,
     minHeight: 50,
   },
   input: {
@@ -645,11 +633,11 @@ const s = StyleSheet.create({
     paddingVertical: 12,
     minWidth: 0,
   },
-  filters: { marginVertical: 10 },
   floors: {
     flexDirection: "row",
     gap: 10,
     alignItems: "center",
+    marginTop: 10,
     marginBottom: 7,
   },
   floorTab: {
