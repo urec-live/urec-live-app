@@ -14,6 +14,7 @@ import ActiveExerciseTracker from '../components/ActiveExerciseTracker';
 import BackendUnreachableNotice from '../components/BackendUnreachableNotice';
 import DailyWorkoutSummary from '../components/DailyWorkoutSummary';
 import HelpRequestBanner from '../components/HelpRequestBanner';
+import WorkoutNudgeListener from '../components/WorkoutNudgeListener';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { HelpRequestProvider } from '../contexts/HelpRequestContext';
 import { PlanProvider } from '../contexts/PlanContext';
@@ -51,6 +52,7 @@ function RootLayoutNav() {
       <BackendUnreachableNotice />
       {user ? <HelpRequestBanner /> : null}
       {user ? <DailyWorkoutSummary /> : null}
+      {user ? <WorkoutNudgeListener username={user.username} /> : null}
       <Stack key={gym?.id ?? "independent"} screenOptions={{ headerShown: false }}>
         <Stack.Protected guard={!user}>
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />

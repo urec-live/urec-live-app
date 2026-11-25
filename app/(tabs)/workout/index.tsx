@@ -20,6 +20,7 @@ import { useGym } from "@/contexts/GymContext";
 import { usePlan } from "@/contexts/PlanContext";
 import { useWorkout } from "@/contexts/WorkoutContext";
 import TodayGoalCard from "@/components/TodayGoalCard";
+import WeeklyWorkoutGoal from "@/components/WeeklyWorkoutGoal";
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 const colors = {
@@ -585,6 +586,7 @@ export default function WorkoutCatalog() {
               ListHeaderComponent={
                 <>
                   {!desktop && pageHeader}
+                  <WeeklyWorkoutGoal />
                   {listHeader}
                   {(todayPlan?.items || []).length > 0 && (
                     <View style={styles.goals}>

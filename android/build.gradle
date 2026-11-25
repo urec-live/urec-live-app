@@ -8,6 +8,9 @@ buildscript {
   dependencies {
     classpath('com.android.tools.build:gradle')
     classpath('com.facebook.react:react-native-gradle-plugin')
+    if (file('app/google-services.json').exists()) {
+      classpath('com.google.gms:google-services:4.4.4')
+    }
     // Version pinned to match Expo's kotlin version so that org.jetbrains.kotlin.plugin.compose
     // (bundled in kotlin-gradle-plugin 2.0+) is available to the :wear module.
     classpath('org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.20')

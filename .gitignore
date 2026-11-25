@@ -57,6 +57,7 @@ app-example
 
 # EAS Build
 eas-build-*
+/android/app/google-services.json
 
 # IDE
 .vscode/
