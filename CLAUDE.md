@@ -1,6 +1,6 @@
 ## Shared team workflow
 
-Read `TEAM_WORKFLOW.md` before making changes. It defines shared setup, platform ownership, verification, and handoff rules. Verify architecture claims against source and keep work within the current task.
+Read `docs/TEAM_WORKFLOW.md` before making changes. It defines shared setup, platform ownership, verification, and handoff rules. Verify architecture claims against source and keep work within the current task.
 
 # CLAUDE.md — UREC Live Mobile App
 
@@ -155,7 +155,7 @@ npx expo prebuild --platform android --no-install
 npm run android
 ```
 
-Follow `TEAM_WORKFLOW.md` before prebuild or native validation. After adding a route, regenerate typed routes if necessary by starting Expo, then rerun TypeScript.
+Follow `docs/TEAM_WORKFLOW.md` before prebuild or native validation. After adding a route, regenerate typed routes if necessary by starting Expo, then rerun TypeScript.
 
 Help-request-specific manual and automated checks are documented in `HELP_REQUESTS_TESTING.md`; saved data, live updates and empty sessions in `MINOR_FIXES_TESTING.md`; the unreachable notice in `BACKEND_UNREACHABLE_TESTING.md`; chat GIFs, stickers, reactions and reporting in `CHAT_MEDIA_TESTING.md`; chat photos in `CHAT_PHOTOS_TESTING.md`.
 
