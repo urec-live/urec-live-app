@@ -14,14 +14,17 @@ export interface ChatMessageCallback {
 /** What the app sends for a chat message; the server echoes clientId back on the saved message. */
 export interface OutgoingChatMessage {
   clientId: string;
-  kind: 'TEXT' | 'GIF' | 'STICKER';
+  kind: 'TEXT' | 'GIF' | 'STICKER' | 'IMAGE';
+  /** The text, or a photo's caption. */
   content?: string;
+  /** A KLIPY item for GIF and STICKER; just the uploaded photo's mediaId for IMAGE. */
   media?: {
-    url: string;
+    url?: string;
     previewUrl?: string | null;
     width?: number | null;
     height?: number | null;
     providerId?: string;
+    mediaId?: number | null;
   };
 }
 

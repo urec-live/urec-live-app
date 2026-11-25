@@ -58,7 +58,8 @@ function resolveBackendOrigin(): string {
   return `http://${host}:${DEFAULT_BACKEND_PORT}`;
 }
 
-const BACKEND_ORIGIN = resolveBackendOrigin();
+/** Where the backend runs, e.g. http://10.0.2.2:8080. */
+export const BACKEND_ORIGIN = resolveBackendOrigin();
 
 export const API_BASE_URL = `${BACKEND_ORIGIN}/api`;
 export const WS_URL = `${BACKEND_ORIGIN}/ws`;
