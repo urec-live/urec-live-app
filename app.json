@@ -36,6 +36,7 @@
     "plugins": [
       "expo-router",
       "expo-dev-client",
+      "expo-notifications",
       [
         "expo-splash-screen",
         {
@@ -48,7 +49,14 @@
           }
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "UREC Live needs your photos so you can share them in chat.",
+          "cameraPermission": "UREC Live needs the camera so you can take photos to share in chat."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

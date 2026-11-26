@@ -35,6 +35,28 @@ export function toChatActionError(error: unknown, action: "react" | "delete" | "
   }
 }
 
+/**
+ * Maps a failed photo upload to the short label shown under the bubble (before "Tap to retry").
+ * The server answers 413 (over 5 MB), 415 (not a JPEG), 400 (unreadable) and 429 (too many unsent uploads).
+ */
+export function toPhotoUploadError(error: unknown): string {
+  switch (statusOf(error)) {
+    case 413:
+      return "Photo too large";
+    case 400:
+    case 415:
+      return "Couldn't read photo";
+    case 429:
+      return "Too many photos, wait a bit";
+    case 401:
+      return "Sign in again";
+    case 503:
+      return "Photos unavailable";
+    default:
+      return isOffline(error) ? "No connection" : "Upload failed";
+  }
+}
+
 /** Maps a failed GIF or sticker load to a message for the picker. */
 export function toMediaSearchError(error: unknown): string {
   switch (statusOf(error)) {

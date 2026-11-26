@@ -16,7 +16,7 @@ The checked-out app includes:
 
 **No dev-build rebuild is needed.** The demo player only uses `expo-image` and `expo-web-browser`, which are already in the dev build. `npx expo start --dev-client --android` picks everything up.
 
-The full walkthrough across backend, admin, and app is in [`../backend/HELP_REQUESTS_TESTING.md`](../backend/HELP_REQUESTS_TESTING.md).
+The full walkthrough across backend, admin, and app is in [`../../urec-live-backend/docs/HELP_REQUESTS_TESTING.md`](../../urec-live-backend/docs/HELP_REQUESTS_TESTING.md).
 
 ## Automated tests
 

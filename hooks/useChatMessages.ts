@@ -3,13 +3,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HISTORY_PAGE_SIZE } from "@/constants/chat";
 import { ChatChannel, ChatMedia, ChatMessageResponse, messagingAPI } from "@/services/messagingAPI";
 import websocketService, { ChatSendError, OutgoingChatMessage } from "@/services/websocketService";
+import { toPhotoUploadError } from "@/utils/chatErrors";
 
 /** How long a send may wait for the server's echo before it's shown as failed. */
 export const SEND_TIMEOUT_MS = 10000;
 
 export type ChatDraft =
   | { kind: "TEXT"; content: string }
-  | { kind: "GIF" | "STICKER"; media: ChatMedia & { providerId?: string } };
+  | { kind: "GIF" | "STICKER"; media: ChatMedia & { providerId?: string } }
+  /** A photo on this device (already resized), uploaded before the message is sent. */
+  | { kind: "IMAGE"; photo: { uri: string; width: number; height: number }; caption?: string };
 
 export type SendStatus = "sent" | "sending" | "failed";
 
@@ -20,6 +23,10 @@ export interface ChatRow {
   status: SendStatus;
   /** Why a failed send failed. */
   error?: string;
+  /** A photo of mine still uploading: the fraction sent so far, 0 to 1. */
+  progress?: number;
+  /** A photo I sent from this device: its local file, shown while the server's copy loads. */
+  localUri?: string;
 }
 
 interface PendingSend {
@@ -28,6 +35,10 @@ interface PendingSend {
   status: "sending" | "failed";
   error?: string;
   createdAt: string;
+  /** IMAGE: set once the upload finished, so a failed send retries without uploading again. */
+  mediaId?: number;
+  /** IMAGE: the fraction uploaded, while the upload runs. */
+  progress?: number;
 }
 
 export interface ChatOptions {
@@ -74,7 +85,9 @@ function mergeMessages(list: ChatMessageResponse[], page: ChatMessageResponse[])
  * State for one chat room: paged history, live updates, and my sends. Every live update carries the
  * whole message, so it simply replaces what's here by id. A send shows at once as "sending", turns
  * into the saved message when the server echoes its clientId, and is marked failed if the server
- * rejects it, the socket is down, or no echo comes within SEND_TIMEOUT_MS.
+ * rejects it, the socket is down, or no echo comes within SEND_TIMEOUT_MS. A photo uploads first,
+ * with progress: if the upload fails, retrying uploads it again; if only the send failed, retrying
+ * sends the same clientId and mediaId.
  */
 export function useChatMessages({ channel, partner, me, onIncoming }: ChatOptions) {
   const [messages, setMessages] = useState<ChatMessageResponse[]>([]);
@@ -91,6 +104,9 @@ export function useChatMessages({ channel, partner, me, onIncoming }: ChatOption
   const onIncomingRef = useRef(onIncoming);
   onIncomingRef.current = onIncoming;
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const uploads = useRef(new Map<string, AbortController>());
+  /** clientId to the local file of each photo sent from here, shown while the server's copy loads. */
+  const localPhotos = useRef(new Map<string, string>());
   const loadingOlderRef = useRef(false);
   const initialLoadDone = useRef(false);
 
@@ -108,10 +124,20 @@ export function useChatMessages({ channel, partner, me, onIncoming }: ChatOption
     timers.current.delete(clientId);
   };
 
-  const markFailed = useCallback((clientId: string, error: string) => {
+  const abortUpload = (clientId: string) => {
+    uploads.current.get(clientId)?.abort();
+    uploads.current.delete(clientId);
+  };
+
+  /** Marks a send failed. forgetUpload: the server no longer knows the photo, so a retry uploads it again. */
+  const markFailed = useCallback((clientId: string, error: string, forgetUpload = false) => {
     clearTimer(clientId);
     setPending((list) =>
-      list.map((p) => (p.clientId === clientId && p.status === "sending" ? { ...p, status: "failed", error } : p)),
+      list.map((p) =>
+        p.clientId === clientId && p.status === "sending"
+          ? { ...p, status: "failed", error, progress: undefined, ...(forgetUpload ? { mediaId: undefined } : {}) }
+          : p,
+      ),
     );
   }, []);
 
@@ -176,7 +202,7 @@ export function useChatMessages({ channel, partner, me, onIncoming }: ChatOption
 
     const unsubscribeErrors = websocketService.subscribeToChatErrors((error: ChatSendError) => {
       if (error.clientId && pendingRef.current.some((p) => p.clientId === error.clientId)) {
-        markFailed(error.clientId, error.message || "Not sent");
+        markFailed(error.clientId, error.message || "Not sent", error.code === "INVALID_MEDIA");
       }
     });
 
@@ -186,12 +212,15 @@ export function useChatMessages({ channel, partner, me, onIncoming }: ChatOption
     });
 
     const pendingTimers = timers.current;
+    const pendingUploads = uploads.current;
     return () => {
       unsubscribeLive();
       unsubscribeErrors();
       unsubscribeConnect();
       pendingTimers.forEach((timer) => clearTimeout(timer));
       pendingTimers.clear();
+      pendingUploads.forEach((upload) => upload.abort());
+      pendingUploads.clear();
     };
   }, [channel, partner, me, loadLatest, upsert, markFailed]);
 
@@ -214,10 +243,13 @@ export function useChatMessages({ channel, partner, me, onIncoming }: ChatOption
 
   const publish = useCallback(
     (send: PendingSend) => {
+      const draft = send.draft;
       const payload: OutgoingChatMessage =
-        send.draft.kind === "TEXT"
-          ? { clientId: send.clientId, kind: "TEXT", content: send.draft.content }
-          : { clientId: send.clientId, kind: send.draft.kind, media: send.draft.media };
+        draft.kind === "TEXT"
+          ? { clientId: send.clientId, kind: "TEXT", content: draft.content }
+          : draft.kind === "IMAGE"
+            ? { clientId: send.clientId, kind: "IMAGE", content: draft.caption ?? "", media: { mediaId: send.mediaId } }
+            : { clientId: send.clientId, kind: draft.kind, media: draft.media };
       const published =
         channel === "dm"
           ? websocketService.sendDM(partner ?? "", payload)
@@ -235,35 +267,84 @@ export function useChatMessages({ channel, partner, me, onIncoming }: ChatOption
     [channel, partner, markFailed],
   );
 
+  /** Uploads a pending photo, then sends it. The echo timeout only starts once it's sent. */
+  const uploadThenPublish = useCallback(
+    async (send: PendingSend) => {
+      if (send.draft.kind !== "IMAGE") return;
+      const { clientId } = send;
+      abortUpload(clientId);
+      const controller = new AbortController();
+      uploads.current.set(clientId, controller);
+      const update = (patch: Partial<PendingSend>) =>
+        setPending((list) => list.map((p) => (p.clientId === clientId ? { ...p, ...patch } : p)));
+      update({ progress: 0 });
+      try {
+        const uploaded = await messagingAPI.uploadPhoto(
+          send.draft.photo.uri,
+          (fraction) => {
+            if (!controller.signal.aborted) update({ progress: fraction });
+          },
+          controller.signal,
+        );
+        // Discarded, or the room closed, while it uploaded
+        if (controller.signal.aborted) return;
+        uploads.current.delete(clientId);
+        update({ mediaId: uploaded.mediaId, progress: undefined });
+        publish({ ...send, mediaId: uploaded.mediaId });
+      } catch (e) {
+        if (controller.signal.aborted) return;
+        uploads.current.delete(clientId);
+        markFailed(clientId, toPhotoUploadError(e));
+      }
+    },
+    [publish, markFailed],
+  );
+
   const send = useCallback(
     (draft: ChatDraft) => {
       if (draft.kind === "TEXT" && !draft.content.trim()) return;
       const next: PendingSend = {
         clientId: newClientId(),
-        draft: draft.kind === "TEXT" ? { kind: "TEXT", content: draft.content.trim() } : draft,
+        draft:
+          draft.kind === "TEXT"
+            ? { kind: "TEXT", content: draft.content.trim() }
+            : draft.kind === "IMAGE"
+              ? { ...draft, caption: draft.caption?.trim() || undefined }
+              : draft,
         status: "sending",
         createdAt: new Date().toISOString(),
       };
       setPending((list) => [...list, next]);
-      publish(next);
+      if (next.draft.kind === "IMAGE") {
+        localPhotos.current.set(next.clientId, next.draft.photo.uri);
+        uploadThenPublish(next);
+      } else {
+        publish(next);
+      }
     },
-    [publish],
+    [publish, uploadThenPublish],
   );
 
-  /** Sends a failed message again with the same clientId, so the server can't save it twice. */
+  /**
+   * Sends a failed message again with the same clientId, so the server can't save it twice. A photo
+   * whose upload didn't finish is uploaded again first.
+   */
   const retry = useCallback(
     (clientId: string) => {
       const send = pendingRef.current.find((p) => p.clientId === clientId);
-      if (!send) return;
+      if (!send || send.status !== "failed") return;
       const again: PendingSend = { ...send, status: "sending", error: undefined };
       setPending((list) => list.map((p) => (p.clientId === clientId ? again : p)));
-      publish(again);
+      if (again.draft.kind === "IMAGE" && again.mediaId === undefined) uploadThenPublish(again);
+      else publish(again);
     },
-    [publish],
+    [publish, uploadThenPublish],
   );
 
   const discard = useCallback((clientId: string) => {
     clearTimer(clientId);
+    abortUpload(clientId);
+    localPhotos.current.delete(clientId);
     setPending((list) => list.filter((p) => p.clientId !== clientId));
   }, []);
 
@@ -277,24 +358,39 @@ export function useChatMessages({ channel, partner, me, onIncoming }: ChatOption
 
   /** Newest first, for an inverted list: my unsent messages, then saved ones. */
   const rows = useMemo<ChatRow[]>(() => {
-    const pendingRows: ChatRow[] = pending.map((p) => ({
-      key: `pending-${p.clientId}`,
-      status: p.status,
-      error: p.error,
-      message: {
-        id: -1,
-        senderUsername: me ?? "",
-        recipientUsername: channel === "dm" ? partner : undefined,
-        content: p.draft.kind === "TEXT" ? p.draft.content : "",
-        sentAt: p.createdAt,
-        type: channel === "dm" ? "DM" : "COMMUNITY",
-        kind: p.draft.kind,
-        media: p.draft.kind === "TEXT" ? null : p.draft.media,
-        clientId: p.clientId,
-        reactions: {},
-      },
+    const pendingRows: ChatRow[] = pending.map((p) => {
+      const draft = p.draft;
+      return {
+        key: `pending-${p.clientId}`,
+        status: p.status,
+        error: p.error,
+        progress: p.progress,
+        localUri: draft.kind === "IMAGE" ? draft.photo.uri : undefined,
+        message: {
+          id: -1,
+          senderUsername: me ?? "",
+          recipientUsername: channel === "dm" ? partner : undefined,
+          content: draft.kind === "TEXT" ? draft.content : draft.kind === "IMAGE" ? (draft.caption ?? "") : "",
+          sentAt: p.createdAt,
+          type: channel === "dm" ? "DM" : "COMMUNITY",
+          kind: draft.kind,
+          media:
+            draft.kind === "TEXT"
+              ? null
+              : draft.kind === "IMAGE"
+                ? { url: draft.photo.uri, width: draft.photo.width, height: draft.photo.height }
+                : draft.media,
+          clientId: p.clientId,
+          reactions: {},
+        },
+      };
+    });
+    const savedRows: ChatRow[] = messages.map((m) => ({
+      key: `message-${m.id}`,
+      message: m,
+      status: "sent",
+      localUri: m.clientId && m.senderUsername === me ? localPhotos.current.get(m.clientId) : undefined,
     }));
-    const savedRows: ChatRow[] = messages.map((m) => ({ key: `message-${m.id}`, message: m, status: "sent" }));
     return [...pendingRows.reverse(), ...savedRows.reverse()];
   }, [messages, pending, me, channel, partner]);
 

@@ -58,7 +58,7 @@ export const cacheKeys = {
   },
   /** Everything for one member starts with this */
   userPrefix: (username: string) => `${USER_PREFIX}${username}:`,
-  user: (username: string, name: "history" | "profile" | "league" | "dm-conversations") =>
+  user: (username: string, name: "history" | "profile" | "league" | "dm-conversations" | "weekly-goal") =>
     `${USER_PREFIX}${username}:${name}`,
 };
 
@@ -75,7 +75,6 @@ export async function fetchFloorPlans(): Promise<FloorPlanResponse[]> {
 export async function fetchHistory(): Promise<SessionResponse[]> {
   return (await sessionAPI.getMyHistory(0, 100)).content;
 }
-
 
 // The catalog includes shared exercises and the signed-in member's custom exercises.
 // Read every page so filtering never silently omits exercises beyond the first page.
@@ -105,4 +104,19 @@ export async function fetchExerciseHistory(): Promise<SessionResponse[]> {
     page++;
   }
   return [...new Map(items.map(item => [item.id, item])).values()];
+}
+
+export async function fetchCompletedWorkoutTimes(): Promise<string[]> {
+  const times = new Set<string>();
+  let page = 0;
+  let totalPages: number;
+  do {
+    const result = await sessionAPI.getMyHistory(page, 100);
+    for (const session of result.content) {
+      if (session.endedAt) times.add(session.endedAt);
+    }
+    totalPages = result.totalPages;
+    page++;
+  } while (page < totalPages);
+  return [...times];
 }

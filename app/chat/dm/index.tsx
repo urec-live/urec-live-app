@@ -44,11 +44,12 @@ export default function DMInboxScreen() {
       <View style={styles.rowContent}>
         <Text style={styles.partnerName}>{item.partnerUsername}</Text>
         <View style={styles.previewRow}>
-          {(item.lastKind === "GIF" || item.lastKind === "STICKER") && (
+          {(item.lastKind === "GIF" || item.lastKind === "STICKER" || item.lastKind === "IMAGE") && (
             <MaterialCommunityIcons
-              name={item.lastKind === "GIF" ? "file-gif-box" : "sticker-emoji"}
+              name={item.lastKind === "GIF" ? "file-gif-box" : item.lastKind === "IMAGE" ? "camera" : "sticker-emoji"}
               size={15}
               color="#999"
+              testID={`preview-icon-${item.lastKind}`}
             />
           )}
           <Text style={styles.preview} numberOfLines={1}>{item.lastMessage}</Text>
