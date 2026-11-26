@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,110 +16,72 @@ import {
 } from "react-native";
 import { usePlan } from "@/contexts/PlanContext";
 import { planAPI, DayPlanDto, DayPlanItemDto } from "@/services/planAPI";
-import { machineAPI } from "@/services/machineAPI";
+import PlanExercisePicker from "@/components/PlanExercisePicker";
+import { Exercise } from "@/services/exerciseAPI";
 
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 interface DayConfig {
   label: string;
-  items: { muscleGroup: string; targetCount: number }[];
+  items: DayPlanItemDto[];
 }
 
 type WeekPlan = Record<number, DayConfig>; // 1-7
 
 export default function PlanEditor() {
   const router = useRouter();
-  const { activePlan, refreshActivePlan, refreshTodayPlan } = usePlan();
+  const { activePlan, loading: planLoading, refreshActivePlan, refreshTodayPlan } = usePlan();
   const [planName, setPlanName] = useState("My Plan");
   const [weekPlan, setWeekPlan] = useState<WeekPlan>({});
-  const [muscleGroups, setMuscleGroups] = useState<string[]>([]);
+  const [pickerDay, setPickerDay] = useState<number | null>(null);
+  const [error, setError] = useState("");
+  const initialized = useRef(false);
   const [expandedDay, setExpandedDay] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [planPublic, setPlanPublic] = useState(false);
 
-  // Load muscle groups and existing plan
   useEffect(() => {
-    const load = async () => {
-      try {
-        const groups = await machineAPI.getMuscleGroups();
-        setMuscleGroups(groups);
-      } catch {
-        // Fallback muscle groups
-        setMuscleGroups([
-          "Chest", "Back", "Shoulders", "Biceps", "Triceps",
-          "Quads", "Hamstrings", "Glutes", "Calves", "Abs", "Cardio",
-        ]);
-      }
+    if (planLoading || initialized.current) return;
+    initialized.current = true;
+    if (activePlan) {
+      setPlanName(activePlan.name);
+      setPlanPublic(activePlan.visibility === "PUBLIC");
+      setWeekPlan(Object.fromEntries(activePlan.days.map(day => [
+        day.dayOfWeek, { label: day.label || "", items: day.items.map(item => ({ ...item })) },
+      ])));
+    }
+    setLoading(false);
+  }, [activePlan, planLoading]);
 
-      if (activePlan) {
-        setPlanName(activePlan.name);
-        setPlanPublic(activePlan.visibility === 'PUBLIC');
-        const existing: WeekPlan = {};
-        for (const day of activePlan.days) {
-          existing[day.dayOfWeek] = {
-            label: day.label || "",
-            items: day.items.map((i) => ({
-              muscleGroup: i.muscleGroup,
-              targetCount: i.targetCount,
-            })),
-          };
-        }
-        setWeekPlan(existing);
-      }
-      setLoading(false);
-    };
-    load();
-  }, [activePlan]);
+  const addExercises = (exercises: Exercise[]) => {
+    if (pickerDay === null) return;
+    setWeekPlan(prev => {
+      const day = prev[pickerDay] || { label: "", items: [] };
+      const additions = exercises.filter(e => !day.items.some(i => i.exerciseId === e.id));
+      return { ...prev, [pickerDay]: { ...day, items: [...day.items, ...additions.map(e => ({
+        exerciseId: e.id, exerciseName: e.name, equipmentType: e.equipmentType,
+        muscleGroup: e.muscleGroup, targetCount: 1,
+      }))] } };
+    });
+    setPickerDay(null);
+  };
 
   const toggleDay = (dow: number) => {
     setExpandedDay(expandedDay === dow ? null : dow);
   };
 
-  const addMuscleToDay = (dow: number, muscleGroup: string) => {
-    setWeekPlan((prev) => {
-      const day = prev[dow] || { label: "", items: [] };
-      // Don't add duplicate
-      if (day.items.some((i) => i.muscleGroup === muscleGroup)) return prev;
-      return {
-        ...prev,
-        [dow]: {
-          ...day,
-          items: [...day.items, { muscleGroup, targetCount: 1 }],
-        },
-      };
-    });
+  const removeItem = (dow: number, index: number) => {
+    setWeekPlan(prev => ({ ...prev, [dow]: { ...prev[dow], items: prev[dow].items.filter((_, i) => i !== index) } }));
   };
 
-  const removeMuscleFromDay = (dow: number, muscleGroup: string) => {
-    setWeekPlan((prev) => {
-      const day = prev[dow];
-      if (!day) return prev;
-      const items = day.items.filter((i) => i.muscleGroup !== muscleGroup);
-      if (items.length === 0) {
-        const next = { ...prev };
-        delete next[dow];
-        return next;
-      }
-      return { ...prev, [dow]: { ...day, items } };
-    });
-  };
-
-  const updateTargetCount = (dow: number, muscleGroup: string, count: number) => {
-    if (count < 1) count = 1;
-    if (count > 10) count = 10;
-    setWeekPlan((prev) => {
-      const day = prev[dow];
-      if (!day) return prev;
-      return {
-        ...prev,
-        [dow]: {
-          ...day,
-          items: day.items.map((i) =>
-            i.muscleGroup === muscleGroup ? { ...i, targetCount: count } : i
-          ),
-        },
-      };
+  const moveItem = (dow: number, index: number, offset: number) => {
+    setWeekPlan(prev => {
+      const items = [...prev[dow].items];
+      const destination = index + offset;
+      if (destination < 0 || destination >= items.length) return prev;
+      [items[index], items[destination]] = [items[destination], items[index]];
+      return { ...prev, [dow]: { ...prev[dow], items } };
     });
   };
 
@@ -131,33 +93,32 @@ export default function PlanEditor() {
   };
 
   const handleSave = async () => {
-    const days: DayPlanDto[] = Object.entries(weekPlan).map(([dow, config]) => ({
+    setError("");
+    if (!planName.trim()) { setError("Enter a plan name."); return; }
+    const days: DayPlanDto[] = Object.entries(weekPlan).filter(([, config]) => config.items.length > 0).map(([dow, config]) => ({
       dayOfWeek: parseInt(dow),
       label: config.label || undefined,
       items: config.items.map((item, idx) => ({
+        exerciseId: item.exerciseId,
         muscleGroup: item.muscleGroup,
         targetCount: item.targetCount,
         sortOrder: idx,
       })),
     }));
 
+    if (!days.length) { setError("Add at least one exercise to your week."); return; }
     setSaving(true);
     try {
       if (activePlan) {
-        await planAPI.updatePlan(activePlan.id, { name: planName, days });
+        await planAPI.updatePlan(activePlan.id, { name: planName.trim(), days });
       } else {
-        await planAPI.createPlan({ name: planName, days });
+        await planAPI.createPlan({ name: planName.trim(), days });
       }
       await refreshActivePlan();
       await refreshTodayPlan();
       router.back();
-    } catch (err) {
-      const msg = "Failed to save plan. Please try again.";
-      if (Platform.OS === "web") {
-        alert(msg);
-      } else {
-        Alert.alert("Error", msg);
-      }
+    } catch {
+      setError("Failed to save plan. Your changes are still here. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -219,6 +180,7 @@ export default function PlanEditor() {
           <Text style={styles.label}>Plan Name</Text>
           <TextInput
             style={styles.nameInput}
+            maxLength={100}
             value={planName}
             onChangeText={setPlanName}
             placeholder="e.g., PPL Split, Bro Split"
@@ -273,7 +235,7 @@ export default function PlanEditor() {
                 </View>
                 {hasItems && (
                   <Text style={styles.dayBadge}>
-                    {dayConfig.items.length} group{dayConfig.items.length !== 1 ? "s" : ""}
+                    {dayConfig.items.length} item{dayConfig.items.length !== 1 ? "s" : ""}
                   </Text>
                 )}
                 <MaterialCommunityIcons
@@ -287,6 +249,7 @@ export default function PlanEditor() {
                 <View style={styles.dayExpanded}>
                   {/* Day label */}
                   <TextInput
+                    maxLength={100}
                     style={styles.dayLabelInput}
                     value={dayConfig?.label || ""}
                     onChangeText={(text) => updateDayLabel(dow, text)}
@@ -294,58 +257,30 @@ export default function PlanEditor() {
                     placeholderTextColor="#bbb"
                   />
 
-                  {/* Current items */}
-                  {dayConfig?.items.map((item) => (
-                    <View key={item.muscleGroup} style={styles.itemRow}>
-                      <Text style={styles.itemMuscle}>{item.muscleGroup}</Text>
-                      <View style={styles.countControl}>
-                        <Pressable
-                          style={styles.countBtn}
-                          onPress={() =>
-                            updateTargetCount(dow, item.muscleGroup, item.targetCount - 1)
-                          }
-                        >
-                          <Text style={styles.countBtnText}>-</Text>
-                        </Pressable>
-                        <Text style={styles.countValue}>{item.targetCount}</Text>
-                        <Pressable
-                          style={styles.countBtn}
-                          onPress={() =>
-                            updateTargetCount(dow, item.muscleGroup, item.targetCount + 1)
-                          }
-                        >
-                          <Text style={styles.countBtnText}>+</Text>
-                        </Pressable>
+                  {dayConfig?.items.map((item, index) => (
+                    <View key={item.exerciseId ? `exercise-${item.exerciseId}` : `legacy-${index}`} style={styles.itemRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.itemMuscle}>{item.exerciseName || item.muscleGroup}</Text>
+                        <Text style={styles.addLabel}>{item.exerciseId ? `${item.muscleGroup} · ${item.equipmentType?.toLowerCase().replace(/_/g, " ")}` : `Muscle goal · ${item.targetCount} exercises`}</Text>
                       </View>
-                      <Pressable onPress={() => removeMuscleFromDay(dow, item.muscleGroup)}>
-                        <MaterialCommunityIcons name="close-circle" size={22} color="#ff4444" />
+                      <Pressable accessibilityLabel={`Move ${item.exerciseName || item.muscleGroup} up`} disabled={index === 0} style={{ padding: 8, opacity: index === 0 ? 0.3 : 1 }} onPress={() => moveItem(dow, index, -1)}><MaterialCommunityIcons name="arrow-up" size={20} color="#216C50" /></Pressable>
+                      <Pressable accessibilityLabel={`Move ${item.exerciseName || item.muscleGroup} down`} disabled={index === dayConfig.items.length - 1} style={{ padding: 8, opacity: index === dayConfig.items.length - 1 ? 0.3 : 1 }} onPress={() => moveItem(dow, index, 1)}><MaterialCommunityIcons name="arrow-down" size={20} color="#216C50" /></Pressable>
+                      <Pressable accessibilityLabel={`Remove ${item.exerciseName || item.muscleGroup}`} style={{ padding: 8 }} onPress={() => removeItem(dow, index)}>
+                        <MaterialCommunityIcons name="close-circle-outline" size={22} color="#c44040" />
                       </Pressable>
                     </View>
                   ))}
-
-                  {/* Add muscle group */}
-                  <Text style={styles.addLabel}>Add Muscle Group</Text>
-                  <View style={styles.muscleChips}>
-                    {muscleGroups
-                      .filter(
-                        (mg) => !dayConfig?.items.some((i) => i.muscleGroup === mg)
-                      )
-                      .map((mg) => (
-                        <Pressable
-                          key={mg}
-                          style={styles.chip}
-                          onPress={() => addMuscleToDay(dow, mg)}
-                        >
-                          <Text style={styles.chipText}>+ {mg}</Text>
-                        </Pressable>
-                      ))}
-                  </View>
+                  {!dayConfig?.items.length && <Text style={styles.addLabel}>Build this day with exercises from the full catalog.</Text>}
+                  <Pressable accessibilityRole="button" style={[styles.chip, { alignItems: "center", marginTop: 12, padding: 14 }]} onPress={() => setPickerDay(dow)}>
+                    <Text style={styles.chipText}>+ Add Exercises</Text>
+                  </Pressable>
                 </View>
               )}
             </View>
           );
         })}
 
+        {!!error && <Text accessibilityRole="alert" style={{ color: "#b3261e", marginTop: 16 }}>{error}</Text>}
         {/* Save / Delete */}
         <Pressable
           style={[styles.saveButton, saving && styles.saveButtonDisabled]}
@@ -371,6 +306,11 @@ export default function PlanEditor() {
           </Pressable>
         )}
       </ScrollView>
+      {pickerDay !== null && <PlanExercisePicker
+        dayName={DAY_NAMES[pickerDay - 1]}
+        existingIds={(weekPlan[pickerDay]?.items || []).flatMap(i => i.exerciseId ? [i.exerciseId] : [])}
+        onClose={() => setPickerDay(null)} onAdd={addExercises}
+      />}
     </LinearGradient>
   );
 }
@@ -520,43 +460,12 @@ const styles = StyleSheet.create({
     color: "#1a1a1a",
     flex: 1,
   },
-  countControl: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginRight: 12,
-  },
-  countBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "#f0f0f0",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  countBtnText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#4CAF50",
-  },
-  countValue: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1a1a1a",
-    width: 20,
-    textAlign: "center",
-  },
   addLabel: {
     fontSize: 12,
     fontWeight: "600",
     color: "#999",
     marginTop: 10,
     marginBottom: 6,
-  },
-  muscleChips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
   },
   chip: {
     backgroundColor: "#E8F5E9",

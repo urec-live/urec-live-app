@@ -14,6 +14,10 @@ export default function TodayGoalCard({ item }: TodayGoalCardProps) {
   const progressPercent = Math.round(progress * 100);
 
   const handlePress = () => {
+    if (item.exerciseId) {
+      router.push({ pathname: "/exercise/[id]", params: { id: item.exerciseId } });
+      return;
+    }
     router.push(`/workout/exercises/${encodeURIComponent(item.muscleGroup)}` as any);
   };
 
@@ -29,10 +33,10 @@ export default function TodayGoalCard({ item }: TodayGoalCardProps) {
         </View>
         <View style={styles.info}>
           <Text style={[styles.muscleGroup, item.completed && styles.textCompleted]}>
-            {item.muscleGroup}
+            {item.exerciseName || item.muscleGroup}
           </Text>
           <Text style={styles.progress}>
-            {item.completedCount}/{item.targetCount} exercises
+            {item.completedCount}/{item.targetCount} {item.exerciseId ? "completed workouts" : "exercises"}
           </Text>
         </View>
         <View style={styles.progressBar}>

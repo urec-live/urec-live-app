@@ -1,7 +1,10 @@
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-import { OUT_OF_ORDER_COLOR, OUT_OF_ORDER_STATUS } from "@/constants/machineStatus";
+import {
+  OUT_OF_ORDER_COLOR,
+  OUT_OF_ORDER_STATUS,
+} from "@/constants/machineStatus";
 
 interface EquipmentMarkerProps {
   x: number;
@@ -41,7 +44,7 @@ export default function EquipmentMarker({
   return (
     <TouchableOpacity
       activeOpacity={1}
-      // onPress={onPress}
+      onPress={onPress}
       style={[
         styles.container,
         {
@@ -53,19 +56,9 @@ export default function EquipmentMarker({
       ]}
     >
       {/* Outer glow ring */}
-      <View
-        style={[
-          styles.outerRing,
-          { backgroundColor: color },
-        ]}
-      />
+      <View style={[styles.outerRing, { backgroundColor: color }]} />
       {/* Inner solid dot */}
-      <View
-        style={[
-          styles.innerDot,
-          { backgroundColor: color },
-        ]}
-      />
+      <View style={[styles.innerDot, { backgroundColor: color }]} />
       {/* Label */}
       <Text
         style={[

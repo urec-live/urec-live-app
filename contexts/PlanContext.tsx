@@ -17,7 +17,7 @@ export const PlanProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { isSignedIn } = useAuth();
   const [activePlan, setActivePlan] = useState<WorkoutPlanResponse | null>(null);
   const [todayPlan, setTodayPlan] = useState<TodayPlanResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const refreshActivePlan = useCallback(async () => {
     try {

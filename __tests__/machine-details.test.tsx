@@ -138,6 +138,23 @@ describe("Machine details screen", () => {
     expect(screen.queryByText("Staff have taken this machine out of service, so check-in is unavailable.")).toBeNull();
   });
 
+  it("opens each exercise by ID even when the machine summary already includes exercise names", async () => {
+    mockGetMachineIssueStatus.mockResolvedValue(NOTHING_OPEN);
+    mockGetMachineById.mockResolvedValue({
+      id: 12, name: "Flat Bench Press 1", status: "Available",
+      exerciseNames: ["Bench Press", "Incline Press"], muscleGroups: ["Chest"],
+    });
+    mockGetExercises.mockResolvedValue([
+      { id: 7, name: "Bench Press", muscleGroup: "Chest" },
+      { id: 18, name: "Incline Press", muscleGroup: "Chest" },
+    ]);
+    render(<MachineDetails />);
+    fireEvent.press(await screen.findByRole("link", { name: "View Bench Press" }));
+    expect(mockRouter.push).toHaveBeenCalledWith({ pathname: "/exercise/[id]", params: { id: 7 } });
+    fireEvent.press(screen.getByRole("link", { name: "View Incline Press" }));
+    expect(mockRouter.push).toHaveBeenLastCalledWith({ pathname: "/exercise/[id]", params: { id: 18 } });
+  });
+
   it("opens the report form for this machine", async () => {
     mockGetMachineIssueStatus.mockResolvedValue(NOTHING_OPEN);
     render(<MachineDetails />);

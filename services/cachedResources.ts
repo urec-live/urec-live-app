@@ -1,3 +1,4 @@
+import { exerciseAPI, Exercise } from "./exerciseAPI";
 import { FloorPlanResponse, machineAPI } from "./machineAPI";
 import { invalidateCached, USER_PREFIX } from "./resourceCache";
 import { SessionResponse, sessionAPI } from "./sessionAPI";
@@ -40,6 +41,10 @@ export function setCacheGymScope(gymId: number | null): void {
 
 export const cacheKeys = {
   muscleGroups: "muscle-groups",
+  exerciseDetail: (username: string, id: number) => `${USER_PREFIX}${username}:exercise:${id}`,
+  exerciseNote: (username: string, id: number) => `${USER_PREFIX}${username}:exercise-note:${id}`,
+  exerciseHistory: (username: string) => `${USER_PREFIX}${username}:exercise-history`,
+  planCatalog: (username: string) => `${USER_PREFIX}${username}:plan-catalog`,
   exercisesFor: (muscleGroup: string) => `exercises:${muscleGroup.toLowerCase()}`,
   get machines() {
     return inGym("machines");
@@ -69,6 +74,36 @@ export async function fetchFloorPlans(): Promise<FloorPlanResponse[]> {
 /** The member's latest 100 sessions, newest first */
 export async function fetchHistory(): Promise<SessionResponse[]> {
   return (await sessionAPI.getMyHistory(0, 100)).content;
+}
+
+// The catalog includes shared exercises and the signed-in member's custom exercises.
+// Read every page so filtering never silently omits exercises beyond the first page.
+export async function fetchPlanCatalog(): Promise<Exercise[]> {
+  const items: Exercise[] = [];
+  let page = 0;
+  let totalPages = 1;
+  while (page < totalPages) {
+    const result = await exerciseAPI.list({ page, size: 200 });
+    items.push(...result.content);
+    totalPages = result.totalPages;
+    page++;
+  }
+  return items;
+}
+
+
+// Full history for exercise records: the latest 100 alone can hide older PRs.
+export async function fetchExerciseHistory(): Promise<SessionResponse[]> {
+  const items: SessionResponse[] = [];
+  let page = 0;
+  let totalPages = 1;
+  while (page < totalPages) {
+    const result = await sessionAPI.getMyHistory(page, 100);
+    items.push(...result.content);
+    totalPages = result.totalPages;
+    page++;
+  }
+  return [...new Map(items.map(item => [item.id, item])).values()];
 }
 
 export async function fetchCompletedWorkoutTimes(): Promise<string[]> {

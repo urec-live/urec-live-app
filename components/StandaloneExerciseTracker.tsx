@@ -1,4 +1,5 @@
 import { machineAPI } from "@/services/machineAPI";
+import PinnedExerciseNote from "./exercise/PinnedExerciseNote";
 import MachineWorkoutActions from "./MachineWorkoutActions";
 import React, { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
@@ -152,6 +153,7 @@ export default function StandaloneExerciseTracker() {
           exerciseName={currentSession.exerciseName}
         />
       )}
+      {currentSession.exerciseId && <PinnedExerciseNote key={currentSession.exerciseId} exerciseId={currentSession.exerciseId} compact />}
       <ScrollView style={{ maxHeight: 200 }}>
         {rows.map((row, i) => (
           <View key={i} style={s.row}>

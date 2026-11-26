@@ -1,0 +1,12 @@
+# Weight progress widget
+
+Delivery branch: `feature/member-experience-2026-11-13`. Current integrated preview: http://localhost:8091/profile. Earlier validation below used port 8082.
+
+
+- Profile now includes a Weight progress card below Body measurements: time-spaced weight chart, latest value/date, starting weight, net gain/loss/no change, kg/lb toggle, Month (30 days), 3 months (90 days) and All time filters, and expandable dated weigh-ins.
+- Saving measurements with a weight records a local-calendar dated weigh-in. Multiple saves on the same day correct that day's entry. Clearing the current weight preserves dated history. Old undated measurements are retained but not assigned an invented historical date; the next save starts their timeline.
+- Current measurements and dated history share one atomic per-account AsyncStorage record; saves are serialized per account. A versioned cache key avoids treating the prior cached measurements shape as a complete history record. Failed writes leave both shared display data and stored history unchanged.
+- Empty history, a single entry, an empty selected period, and a flat trend have explicit states. No target weight, goal assumptions, or judgments about gain versus loss are imposed.
+- Checks: TypeScript passed; 26 focused tests passed across weight-progress, body-measurements, member-screens and history-calendar. Regression coverage includes old storage/cache formats, daily replacement, multiple dates, concurrent saves, write failure/retry, persistence, account isolation, gain/loss/flat changes, unit conversion and filters. The existing member-screen test intermittently emits a React act warning from VirtualizedList's delayed update.
+- Manual: open http://localhost:8082/profile, save weight in Body measurements, and inspect the dated point in Weight progress. Change and save again today: expect one corrected entry. Add a weigh-in on another day to see a line/change; use period filters, unit toggle and View weigh-ins. This feature remains device-local; native iOS/Android checks are pending.
+- Final browser check: after restarting Expo, Profile returned HTTP 200; Chrome at 373 × 728 displayed Weight progress, period controls, unit toggle and the empty-state instructions without the older-cache crash. No sample weight history was added to the live local account; populated gain/loss charts and interactions were exercised in component tests.

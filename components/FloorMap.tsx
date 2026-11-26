@@ -1,27 +1,24 @@
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
-import {
-  Dimensions,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  Pressable,
-  Platform,
-} from "react-native";
-import {
-  GestureDetector,
-  Gesture,
-  GestureHandlerRootView,
-} from "react-native-gesture-handler";
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-} from "react-native-reanimated";
-import { FloorPlanResponse, MachineDto } from "@/services/machineAPI";
-import EquipmentMarker from "./EquipmentMarker";
-import MapLegend from "./MapLegend";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import Svg, {
+  Circle,
+  G,
+  Line,
+  Polygon,
+  Rect,
+  Text as SvgText,
+} from "react-native-svg";
+import type {
+  FloorArea,
+  FloorPlanResponse,
+  MachineDto,
+} from "@/services/machineAPI";
+import { areaBounds, areaColors, isPositioned } from "@/utils/equipmentMap";
+import AreaPressTarget from "./equipment/AreaPressTarget";
+import MapViewport, { MapPin } from "./equipment/MapViewport";
+import { markerColor } from "./EquipmentMarker";
 
 interface FloorMapProps {
   floors: FloorPlanResponse[];
@@ -30,435 +27,263 @@ interface FloorMapProps {
   muscleGroupsByEquipment?: Record<number, string[]>;
   highlightedEquipmentId?: number | null;
   initialFloorIdx?: number;
+  selectedFloorId?: number | null;
+  onFloorChange?: (id: number) => void;
+  matchingEquipmentIds?: Set<number>;
+  matchingAreaIds?: Set<string>;
+  selectedAreaId?: string | null;
+  onSelectEquipment?: (machine: MachineDto) => void;
+  onSelectArea?: (area: FloorArea, floor: FloorPlanResponse) => void;
+  hideFloorPicker?: boolean;
 }
-
-function assignPlaceholderPositions(
-  equipment: MachineDto[],
-  floorWidth: number,
-  floorHeight: number
-): (MachineDto & { displayX: number; displayY: number })[] {
-  const withPos = equipment.filter(
-    (e) => e.floorX != null && e.floorY != null
-  );
-  const withoutPos = equipment.filter(
-    (e) => e.floorX == null || e.floorY == null
-  );
-
-  const result: (MachineDto & { displayX: number; displayY: number })[] = [];
-
-  for (const e of withPos) {
-    result.push({ ...e, displayX: e.floorX!, displayY: e.floorY! });
-  }
-
-  if (withoutPos.length > 0) {
-    const cols = Math.ceil(Math.sqrt(withoutPos.length));
-    const rows = Math.ceil(withoutPos.length / cols);
-    const cellW = (floorWidth - 80) / cols;
-    const cellH = (floorHeight - 80) / rows;
-
-    withoutPos.forEach((e, idx) => {
-      const col = idx % cols;
-      const row = Math.floor(idx / cols);
-      result.push({
-        ...e,
-        displayX: 40 + col * cellW + cellW / 2,
-        displayY: 40 + row * cellH + cellH / 2,
-      });
-    });
-  }
-
-  return result;
-}
-
-function FloorCanvas({
-  floor,
-  selectedMuscleGroup,
-  muscleGroupsByEquipment,
-  highlightedEquipmentId,
+export function AreaDrawing({
+  area,
+  selected,
+  matching,
+  onPress,
 }: {
-  floor: FloorPlanResponse;
-  selectedMuscleGroup: string | null;
-  muscleGroupsByEquipment: Record<number, string[]>;
-  highlightedEquipmentId?: number | null;
+  area: FloorArea;
+  selected?: boolean;
+  matching?: boolean;
+  onPress?: () => void;
 }) {
-  const router = useRouter();
-  const rawWidth = Dimensions.get("window").width - 40;
-  // On web, cap the canvas so the map doesn't become absurdly wide
-  const screenWidth = Platform.OS === "web" ? Math.min(rawWidth, 500) : rawWidth;
-  const baseScale = screenWidth / floor.width;
-  const baseH = floor.height * baseScale;
-
-  // Pinch-to-zoom state
-  const scale = useSharedValue(1);
-  const savedScale = useSharedValue(1);
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const savedTranslateX = useSharedValue(0);
-  const savedTranslateY = useSharedValue(0);
-
-  const pinchGesture = Gesture.Pinch()
-    .onUpdate((e) => {
-      scale.value = Math.min(Math.max(savedScale.value * e.scale, 0.5), 4);
-    })
-    .onEnd(() => {
-      savedScale.value = scale.value;
-    });
-
-  const panGesture = Gesture.Pan()
-    .minPointers(2)
-    .onUpdate((e) => {
-      translateX.value = savedTranslateX.value + e.translationX;
-      translateY.value = savedTranslateY.value + e.translationY;
-    })
-    .onEnd(() => {
-      savedTranslateX.value = translateX.value;
-      savedTranslateY.value = translateY.value;
-    });
-
-  const doubleTap = Gesture.Tap()
-    .numberOfTaps(2)
-    .onEnd(() => {
-      scale.value = withSpring(1);
-      savedScale.value = 1;
-      translateX.value = withSpring(0);
-      translateY.value = withSpring(0);
-      savedTranslateX.value = 0;
-      savedTranslateY.value = 0;
-    });
-
-  const composed = Gesture.Simultaneous(pinchGesture, panGesture);
-  const gesture = Gesture.Exclusive(doubleTap, composed);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { scale: scale.value },
-    ],
-  }));
-
-  const positioned = useMemo(
-    () => assignPlaceholderPositions(floor.equipment, floor.width, floor.height),
-    [floor]
-  );
-
-  // Determine which equipment IDs match the selected muscle group
-  const highlightedIds = useMemo(() => {
-    if (!selectedMuscleGroup) return null;
-    const ids = new Set<number>();
-    for (const eq of floor.equipment) {
-      const groups = muscleGroupsByEquipment[eq.id] || [];
-      if (
-        groups.some(
-          (g) => g.toLowerCase() === selectedMuscleGroup.toLowerCase()
-        )
-      ) {
-        ids.add(eq.id);
-      }
-    }
-    return ids;
-  }, [selectedMuscleGroup, floor.equipment, muscleGroupsByEquipment]);
-
-  const gridV = useMemo(() => {
-    const lines = [];
-    for (let i = 100; i < floor.width; i += 100) lines.push(i);
-    return lines;
-  }, [floor.width]);
-
-  const gridH = useMemo(() => {
-    const lines = [];
-    for (let i = 100; i < floor.height; i += 100) lines.push(i);
-    return lines;
-  }, [floor.height]);
-
-  const canvasContent = (
-    <View
-      style={[
-        styles.mapContainer,
-        {
-          width: screenWidth,
-          height: baseH,
-          backgroundColor: "#fafafa",
-        },
-      ]}
-    >
-      {/* Vertical grid lines */}
-      {gridV.map((i) => (
-        <View
-          key={`v${i}`}
-          style={{
-            position: "absolute" as const,
-            left: i * baseScale,
-            top: 0,
-            width: 0.5,
-            height: baseH,
-            backgroundColor: "#e0e0e0",
-          }}
-        />
-      ))}
-      {/* Horizontal grid lines */}
-      {gridH.map((i) => (
-        <View
-          key={`h${i}`}
-          style={{
-            position: "absolute" as const,
-            top: i * baseScale,
-            left: 0,
-            height: 0.5,
-            width: screenWidth,
-            backgroundColor: "#e0e0e0",
-          }}
-        />
-      ))}
-
-      {/* Equipment markers — rendered LAST so they're on top */}
-      {positioned.map((eq) => {
-        const isDimmedByFilter =
-          highlightedIds !== null && !highlightedIds.has(eq.id);
-        const isDimmedByHighlight =
-          highlightedEquipmentId != null && eq.id !== highlightedEquipmentId;
-        const isHighlighted =
-          highlightedEquipmentId != null && eq.id === highlightedEquipmentId;
-        return (
-          <EquipmentMarker
-            key={eq.id}
-            x={eq.displayX * baseScale}
-            y={eq.displayY * baseScale}
-            status={eq.status}
-            name={eq.name}
-            label={eq.floorLabel}
-            dimmed={isDimmedByFilter || isDimmedByHighlight}
-            highlighted={isHighlighted}
-            onPress={() =>
-              router.push({
-                pathname: "/machine/[id]",
-                params: { id: String(eq.id) },
-              })
-            }
-          />
-        );
-      })}
-    </View>
-  );
-
-  // On native, wrap with gesture detector for pinch-to-zoom
-  if (Platform.OS !== "web") {
-    return (
-      <GestureDetector gesture={gesture}>
-        <Animated.View
-          style={[{ width: screenWidth, height: baseH }, animatedStyle]}
-        >
-          {canvasContent}
-        </Animated.View>
-      </GestureDetector>
-    );
-  }
-
-  // On web, skip gesture detector (not well supported)
-  return canvasContent;
-}
-
-export default function FloorMap({
-  floors,
-  allMachines,
-  selectedMuscleGroup = null,
-  muscleGroupsByEquipment = {},
-  highlightedEquipmentId = null,
-  initialFloorIdx = 0,
-}: FloorMapProps) {
-  const [selectedFloorIdx, setSelectedFloorIdx] = useState(initialFloorIdx);
-
-  // Filter floors that have relevant equipment when muscle group is selected
-  const relevantFloorIndices = useMemo(() => {
-    if (!selectedMuscleGroup) return floors.map((_, i) => i);
-    return floors
-      .map((floor, i) => ({ floor, i }))
-      .filter(({ floor }) =>
-        floor.equipment.some((eq) => {
-          const groups = muscleGroupsByEquipment[eq.id] || [];
-          return groups.some(
-            (g) => g.toLowerCase() === selectedMuscleGroup.toLowerCase()
-          );
-        })
-      )
-      .map(({ i }) => i);
-  }, [selectedMuscleGroup, floors, muscleGroupsByEquipment]);
-
-  const currentFloor = floors[selectedFloorIdx];
-  if (!currentFloor) return null;
-
-  const availableCount = currentFloor.equipment.filter(
-    (e) => e.status.toUpperCase() === "AVAILABLE"
-  ).length;
-  const inUseCount = currentFloor.equipment.filter(
-    (e) => e.status.toUpperCase() === "IN USE"
-  ).length;
-
+  const b = areaBounds(area),
+    cx = b.x + b.width / 2,
+    cy = b.y + b.height / 2;
+  const fill = areaColors[area.kind] ?? "#EDF1EF",
+    stroke = selected ? "#193D75" : matching ? "#216C50" : "#C5D0CA";
   return (
-    <View style={styles.wrapper}>
-      {/* Floor tabs */}
-      {floors.length > 1 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.floorTabs}
-        >
-          {floors.map((floor, idx) => {
-            const isSelected = idx === selectedFloorIdx;
-            const isRelevant =
-              !selectedMuscleGroup || relevantFloorIndices.includes(idx);
-            return (
-              <Pressable
-                key={floor.id}
-                onPress={() => setSelectedFloorIdx(idx)}
-                style={[
-                  styles.floorTab,
-                  isSelected && styles.floorTabActive,
-                  !isRelevant && styles.floorTabDimmed,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.floorTabText,
-                    isSelected && styles.floorTabTextActive,
-                    !isRelevant && styles.floorTabTextDimmed,
-                  ]}
-                >
-                  {floor.name}
-                </Text>
-                <Text
-                  style={[
-                    styles.floorTabSub,
-                    isSelected && styles.floorTabSubActive,
-                  ]}
-                >
-                  {floor.equipment.length} equip
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+    <AreaPressTarget onPress={onPress} label={area.name}>
+      {area.shape === "polygon" ? (
+        <Polygon
+          points={area.points?.map((p) => `${p.x},${p.y}`).join(" ")}
+          fill={fill}
+          stroke={stroke}
+          strokeWidth={selected ? 8 : matching ? 5 : 2}
+        />
+      ) : (
+        <Rect
+          x={b.x}
+          y={b.y}
+          width={b.width}
+          height={b.height}
+          rx={area.kind === "track" ? 90 : 8}
+          fill={fill}
+          stroke={stroke}
+          strokeWidth={selected ? 8 : matching ? 5 : 2}
+          strokeDasharray={area.kind === "void" ? "10 8" : undefined}
+        />
       )}
-
-      {/* Summary bar */}
-      <View style={styles.summaryBar}>
-        <Text style={styles.summaryText}>
-          <Text style={styles.summaryGreen}>{availableCount}</Text> available
-          {"  "}
-          <Text style={styles.summaryRed}>{inUseCount}</Text> in use
-          {"  "}
-          <Text style={styles.summaryGray}>
-            {currentFloor.equipment.length}
-          </Text>{" "}
-          total
+      {area.kind === "pool" &&
+        [1, 2, 3, 4].map((i) => (
+          <Line
+            key={i}
+            x1={b.x + 40}
+            x2={b.x + b.width - 40}
+            y1={b.y + 80 + (i * (b.height - 120)) / 5}
+            y2={b.y + 80 + (i * (b.height - 120)) / 5}
+            stroke="#91C6DC"
+            strokeWidth={3}
+          />
+        ))}
+      {area.kind === "court" && (
+        <G>
+          <Rect
+            x={b.x + 25}
+            y={b.y + 50}
+            width={b.width - 50}
+            height={b.height - 70}
+            fill="none"
+            stroke="#C7AC7D"
+            strokeWidth={2}
+          />
+          <Line
+            x1={cx}
+            x2={cx}
+            y1={b.y + 50}
+            y2={b.y + b.height - 20}
+            stroke="#C7AC7D"
+            strokeWidth={2}
+          />
+          <Circle
+            cx={cx}
+            cy={cy + 15}
+            r={35}
+            fill="none"
+            stroke="#C7AC7D"
+            strokeWidth={2}
+          />
+        </G>
+      )}
+      {area.kind === "stairs" &&
+        Array.from({ length: 5 }, (_, i) => (
+          <Line
+            key={i}
+            x1={b.x + 15}
+            x2={b.x + b.width - 15}
+            y1={b.y + 40 + i * 11}
+            y2={b.y + 40 + i * 11}
+            stroke="#A3B0BA"
+            strokeWidth={3}
+          />
+        ))}
+      <SvgText
+        x={cx}
+        y={b.y + 26}
+        textAnchor="middle"
+        fontFamily="Arial"
+        fontSize={area.kind === "stairs" || area.kind === "elevator" ? 17 : 24}
+        fontWeight="600"
+        fill={selected ? "#193D75" : "#4A5D53"}
+      >
+        {area.name}
+      </SvgText>
+    </AreaPressTarget>
+  );
+}
+export default function FloorMap(p: FloorMapProps) {
+  const router = useRouter();
+  const floors = useMemo(
+    () =>
+      p.floors
+        .filter((f) => f.id !== 0)
+        .sort((a, b) => a.floorNumber - b.floorNumber),
+    [p.floors],
+  );
+  const [internalId, setInternalId] = useState(
+    floors[p.initialFloorIdx ?? 0]?.id,
+  );
+  const floor =
+    floors.find((f) => f.id === (p.selectedFloorId ?? internalId)) ?? floors[0];
+  const machines = useMemo(
+    () => new Map(p.allMachines.map((m) => [m.id, m])),
+    [p.allMachines],
+  );
+  if (!floor)
+    return (
+      <View style={styles.empty}>
+        <Text style={styles.emptyTitle}>Map not available yet</Text>
+        <Text style={styles.hint}>
+          Equipment is still searchable in the results list.
         </Text>
       </View>
-
-      {/* Zoomable floor canvas */}
-      <GestureHandlerRootView style={styles.canvasWrapper}>
-        <FloorCanvas
-          key={currentFloor.id}
-          floor={currentFloor}
-          selectedMuscleGroup={selectedMuscleGroup}
-          muscleGroupsByEquipment={muscleGroupsByEquipment}
-          highlightedEquipmentId={highlightedEquipmentId}
-        />
-      </GestureHandlerRootView>
-
-      {/* Zoom hint */}
-      <Text style={styles.zoomHint}>Pinch to zoom · Double-tap to reset</Text>
-
-      <View style={styles.legendContainer}>
-        <MapLegend />
-      </View>
-    </View>
+    );
+  const equipment = floor.equipment
+    .map((eq) => ({ ...eq, ...machines.get(eq.id) }))
+    .filter((eq) => isPositioned(eq, floor));
+  const selected = equipment.find((eq) => eq.id === p.highlightedEquipmentId);
+  const area = floor.layout?.areas.find((a) => a.id === p.selectedAreaId);
+  const bounds = area ? areaBounds(area) : null;
+  const focus = selected
+    ? { x: selected.floorX!, y: selected.floorY!, key: `m:${selected.id}` }
+    : bounds
+      ? {
+          x: bounds.x + bounds.width / 2,
+          y: bounds.y + bounds.height / 2,
+          key: `a:${area!.id}`,
+        }
+      : null;
+  return (
+    <GestureHandlerRootView style={styles.wrapper}>
+      {!p.hideFloorPicker && (
+        <ScrollView
+          horizontal
+          style={{ maxHeight: 48 }}
+          contentContainerStyle={{ gap: 8 }}
+        >
+          {floors.map((f) => (
+            <Pressable
+              key={f.id}
+              onPress={() => {
+                setInternalId(f.id);
+                p.onFloorChange?.(f.id);
+              }}
+              style={[styles.floor, f.id === floor.id && styles.active]}
+            >
+              <Text style={{ color: f.id === floor.id ? "white" : "#216C50" }}>
+                {f.name}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
+      <MapViewport
+        key={floor.id}
+        width={floor.width}
+        height={floor.height}
+        focus={focus}
+      >
+        <Svg
+          width={floor.width}
+          height={floor.height}
+          viewBox={`0 0 ${floor.width} ${floor.height}`}
+          style={StyleSheet.absoluteFill}
+        >
+          <Rect
+            width={floor.width}
+            height={floor.height}
+            rx={18}
+            fill="white"
+            stroke="#CDD6D1"
+            strokeWidth={3}
+          />
+          {(floor.layout?.areas ?? []).map((a) => (
+            <AreaDrawing
+              key={a.id}
+              area={a}
+              selected={a.id === p.selectedAreaId}
+              matching={p.matchingAreaIds?.has(a.id)}
+              onPress={() => p.onSelectArea?.(a, floor)}
+            />
+          ))}
+        </Svg>
+        {equipment.map((eq) => {
+          const groups =
+            p.muscleGroupsByEquipment?.[eq.id] ?? eq.muscleGroups ?? [];
+          const dimmed = p.matchingEquipmentIds
+            ? !p.matchingEquipmentIds.has(eq.id)
+            : !!p.selectedMuscleGroup &&
+              !groups.some(
+                (g) => g.toLowerCase() === p.selectedMuscleGroup?.toLowerCase(),
+              );
+          return (
+            <MapPin
+              key={eq.id}
+              x={eq.floorX!}
+              y={eq.floorY!}
+              label={`${eq.floorLabel || eq.name} · ${eq.status}`}
+              color={markerColor(eq.status)}
+              selected={eq.id === p.highlightedEquipmentId}
+              matched={p.matchingEquipmentIds?.has(eq.id)}
+            dimmed={dimmed}
+              onPress={() =>
+                p.onSelectEquipment
+                  ? p.onSelectEquipment(eq)
+                  : router.push({
+                      pathname: "/machine/[id]",
+                      params: { id: String(eq.id) },
+                    })
+              }
+            />
+          );
+        })}
+      </MapViewport>
+    </GestureHandlerRootView>
   );
 }
-
 const styles = StyleSheet.create({
-  wrapper: {
+  wrapper: { flex: 1, minHeight: 120, gap: 8 },
+  floor: { padding: 10, borderRadius: 10, backgroundColor: "#E9F1EC" },
+  active: { backgroundColor: "#216C50" },
+  empty: {
     flex: 1,
-  },
-  floorTabs: {
-    paddingHorizontal: 4,
-    paddingVertical: 6,
-    gap: 8,
-  },
-  floorTab: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#e8e8e8",
-    alignItems: "center",
-  },
-  floorTabActive: {
-    backgroundColor: "#4CAF50",
-  },
-  floorTabDimmed: {
-    opacity: 0.4,
-  },
-  floorTabText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#555",
-  },
-  floorTabTextActive: {
-    color: "#fff",
-  },
-  floorTabTextDimmed: {
-    color: "#999",
-  },
-  floorTabSub: {
-    fontSize: 10,
-    color: "#888",
-    marginTop: 1,
-  },
-  floorTabSubActive: {
-    color: "rgba(255,255,255,0.8)",
-  },
-  summaryBar: {
-    alignItems: "center",
-    paddingVertical: 6,
-  },
-  summaryText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#888",
-  },
-  summaryGreen: {
-    color: "#4CAF50",
-    fontWeight: "800",
-    fontSize: 16,
-  },
-  summaryRed: {
-    color: "#FF5722",
-    fontWeight: "800",
-    fontSize: 16,
-  },
-  summaryGray: {
-    color: "#666",
-    fontWeight: "800",
-    fontSize: 16,
-  },
-  canvasWrapper: {
-    flex: 1,
+    minHeight: 120,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#EFF3F0",
+    borderRadius: 14,
+    padding: 24,
   },
-  mapContainer: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    overflow: "visible",
-  },
-  zoomHint: {
-    textAlign: "center",
-    fontSize: 11,
-    color: "#bbb",
-    marginTop: 4,
-  },
-  legendContainer: {
-    alignItems: "center",
-    marginTop: 8,
-  },
+  emptyTitle: { fontSize: 18, fontWeight: "700", color: "#213C2D" },
+  hint: { fontSize: 13, color: "#66796D", marginTop: 8, textAlign: "center" },
 });

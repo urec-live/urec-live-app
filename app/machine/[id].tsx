@@ -27,9 +27,9 @@ export default function MachineDetails() {
     () => machineAPI.getMachineById(machineId),
     { live: true, staleTime: STALE_MS.live, initialData: machineFromList(machineId) },
   );
-  // Only a backend that doesn't send each machine's exercises with it needs a second request
-  const needsExercises = !!machine && machine.exerciseNames === undefined;
-  const { data: fetchedExercises, loading: exercisesLoading } = useCachedResource<Exercise[]>(
+  // The summary contains names only; fetch the linked exercises for their stable detail IDs.
+  const needsExercises = !!machine;
+  const { data: fetchedExercises, loading: exercisesLoading, error: exercisesError, refresh: refreshExercises } = useCachedResource<Exercise[]>(
     needsExercises ? cacheKeys.machineExercises(machineId) : null,
     () => machineAPI.getExercisesByEquipmentId(machineId),
     { staleTime: STALE_MS.catalog },
@@ -37,7 +37,7 @@ export default function MachineDetails() {
   const exerciseNames = machine?.exerciseNames ?? fetchedExercises?.map((e) => e.name) ?? [];
   const muscleGroups = machine?.muscleGroups ?? [...new Set((fetchedExercises ?? []).map((e) => e.muscleGroup))];
   // Wait for the exercises too, so Call staff knows the exercise when the machine has just one
-  const loading = machineLoading || (needsExercises && exercisesLoading);
+  const loading = machineLoading || (machine?.exerciseNames === undefined && exercisesLoading);
 
   // Refetch on focus so the banner shows up right after the member files a report
   useFocusEffect(
@@ -158,9 +158,27 @@ export default function MachineDetails() {
           </Text>
 
           <Text style={styles.relatedExercisesTitle}>EXERCISES</Text>
-          <Text style={styles.relatedExercisesText}>
-            {exerciseNames.join(", ")}
-          </Text>
+          {exerciseNames.map((name) => {
+            const exercise = fetchedExercises?.find((item) => item.name === name);
+            return exercise ? (
+              <TouchableOpacity
+                key={exercise.id}
+                accessibilityRole="link"
+                accessibilityLabel={`View ${name}`}
+                style={styles.exerciseLink}
+                onPress={() => router.push({ pathname: "/exercise/[id]", params: { id: exercise.id } })}
+              >
+                <Text style={styles.exerciseLinkText}>{name}</Text>
+                <MaterialCommunityIcons name="chevron-right" size={21} color="#216C50" />
+              </TouchableOpacity>
+            ) : <Text key={name} style={styles.relatedExercisesText}>{name}</Text>;
+          })}
+          {exercisesLoading && <ActivityIndicator color="#216C50" style={{ marginTop: 8 }} />}
+          {!!exercisesError && (
+            <TouchableOpacity accessibilityRole="button" onPress={() => void refreshExercises()}>
+              <Text style={styles.exerciseLinkText}>Couldn’t load exercise links. Tap to retry.</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -313,6 +331,21 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 4,
+  },
+  exerciseLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#E1E7E3",
+  },
+  exerciseLinkText: {
+    flex: 1,
+    color: "#216C50",
+    fontSize: 15,
+    fontWeight: "600",
   },
   relatedExercisesText: {
     fontSize: 14,

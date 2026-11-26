@@ -1,19 +1,22 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCachedResource } from "@/hooks/useCachedResource";
 import { cacheKeys, fetchHistory, STALE_MS } from "@/services/cachedResources";
 import type { SessionResponse } from "@/services/sessionAPI";
 import { DailyWorkout, useWorkout } from "../../contexts/WorkoutContext";
+import { useBodyMeasurements } from "@/hooks/useBodyMeasurements";
+import WorkoutHistoryCalendar from "@/components/WorkoutHistoryCalendar";
+import { briefDuration, calendarDate, dateKey, summarizeWeek, weekHistory, weekLabel, weekStart } from "@/utils/historyCalendar";
 
 function groupSessionsByDate(sessions: SessionResponse[]): DailyWorkout[] {
   const map = new Map<string, DailyWorkout>();
 
   for (const s of sessions) {
-    const date = s.startedAt.split("T")[0];
+    const date = dateKey(new Date(s.startedAt));
     const exerciseName = s.exerciseName ?? s.machineCode ?? "Unknown";
     const muscleGroup = s.muscleGroup ?? "General";
 
@@ -40,6 +43,8 @@ function groupSessionsByDate(sessions: SessionResponse[]): DailyWorkout[] {
 export default function HistoryScreen() {
   const { workoutHistory: localHistory, flushPendingSessions } = useWorkout();
   const { user } = useAuth();
+  const { data: measurements } = useBodyMeasurements(user?.username);
+  const calorieWeight = measurements?.weightKg ?? 70;
   const { data, loading, error, refreshing, refresh, revalidate } = useCachedResource(
     user ? cacheKeys.user(user.username, "history") : null,
     async () => {
@@ -63,12 +68,20 @@ export default function HistoryScreen() {
     [data, apiError, localHistory]
   );
 
+  const [selection, setSelection] = useState<{ month: string; week: string } | null>(null);
+  // Start at the latest logged workout; an empty account opens the current month.
+  const latestDate = history.reduce((latest, day) => day.date > latest ? day.date : latest, "") || dateKey(new Date());
+  const selectedWeek = selection?.week ?? weekStart(latestDate);
+  const visibleMonth = selection?.month ?? `${latestDate.slice(0, 7)}-01`;
+  const selectedDays = useMemo(() => weekHistory(history, selectedWeek), [history, selectedWeek]);
+  const weekly = useMemo(() => summarizeWeek(selectedDays, calorieWeight), [selectedDays, calorieWeight]);
+
   const onRefresh = () => {
     refresh();
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+    const date = calendarDate(dateString);
     return date.toLocaleDateString("en-US", {
       weekday: "short",
       month: "short",
@@ -78,7 +91,7 @@ export default function HistoryScreen() {
   };
 
   const formatDuration = (startTime: number, endTime?: number) => {
-    if (!endTime) return "In Progress";
+    if (endTime == null) return "In Progress";
     const seconds = Math.floor((endTime - startTime) / 1000);
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -108,19 +121,55 @@ export default function HistoryScreen() {
           </View>
         )}
 
-        {history.length === 0 ? (
-          <View style={styles.emptyState}>
-            <MaterialCommunityIcons name="history" size={64} color="#555" />
-            <Text style={styles.emptyText}>No workout history yet</Text>
-            <Text style={styles.emptySubtext}>
-              Complete your first workout to see it here!
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            data={history}
+        <FlatList
+            data={selectedDays}
+            ListHeaderComponent={
+              <>
+                <WorkoutHistoryCalendar
+                  history={history}
+                  month={visibleMonth}
+                  selectedWeek={selectedWeek}
+                  onSelectWeek={week => setSelection({ month: visibleMonth, week })}
+                  onChangeMonth={month => setSelection({ month, week: weekStart(month) })}
+                  onToday={() => {
+                    const today = dateKey(new Date());
+                    setSelection({ month: `${today.slice(0, 7)}-01`, week: weekStart(today) });
+                  }}
+                />
+                <Text style={styles.sectionTitle}>Weekly summary</Text>
+                <View style={styles.weekOverview}>
+                  <Text style={styles.weekRange}>{weekLabel(selectedWeek)}</Text>
+                  <View style={styles.weekStats}>
+                    <View style={styles.stat}><Text style={styles.statValue}>{weekly.days}</Text><Text style={styles.statLabel}>Workout days</Text></View>
+                    <View style={styles.stat}><Text style={styles.statValue}>{weekly.exercises}</Text><Text style={styles.statLabel}>Exercises logged</Text></View>
+                    <View style={styles.stat}><Text style={styles.statValue}>{weekly.sets}</Text><Text style={styles.statLabel}>Sets</Text></View>
+                  </View>
+                  <View style={styles.extraStats}>
+                    <View style={styles.stat}>
+                      <View style={styles.metricHeading}><MaterialCommunityIcons name="fire" size={21} color="#B57806" /><Text style={styles.statValue}>≈{weekly.estimatedKcal}</Text></View>
+                      <Text style={styles.statLabel}>kcal burned · estimated</Text>
+                    </View>
+                    <View style={styles.stat}>
+                      <Text style={styles.statValue}>{weekly.muscleGroups.length}</Text>
+                      <Text style={styles.statLabel}>Muscle groups worked</Text>
+                      {weekly.muscleGroups.length > 0 && <Text style={styles.muscleNames}>{weekly.muscleGroups.join(", ")}</Text>}
+                    </View>
+                  </View>
+                  <Text style={styles.estimateNote}>Calorie estimate: {calorieWeight.toLocaleString("en-US", { maximumFractionDigits: 1 })} kg {measurements?.weightKg != null ? "saved weight" : "reference weight (add yours in Profile)"}, moderate training.</Text>
+                  <View style={styles.weekDuration}><MaterialCommunityIcons name="timer-outline" size={16} color="#216C50" /><Text style={styles.weekDurationText}>{briefDuration(weekly.seconds)} logged duration</Text></View>
+                </View>
+              </>
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <MaterialCommunityIcons name="calendar-blank-outline" size={36} color="#839088" />
+                <Text style={styles.emptyText}>{history.length === 0 ? "No workout history yet" : "No workouts this week"}</Text>
+                <Text style={styles.emptySubtext}>{history.length === 0 ? "Complete your first workout to see it here!" : "Select another week to see your logged exercises."}</Text>
+              </View>
+            }
             keyExtractor={(item) => item.date}
-            contentContainerStyle={{ paddingRight: 8 }}
+            contentContainerStyle={styles.listContent}
+            contentInsetAdjustmentBehavior="automatic"
             showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl
@@ -133,7 +182,7 @@ export default function HistoryScreen() {
             renderItem={({ item }) => (
               <View style={styles.dayCard}>
                 <View style={styles.dayHeader}>
-                  <MaterialCommunityIcons name="calendar" size={20} color="#00ff88" />
+                  <MaterialCommunityIcons name="calendar" size={20} color="#216C50" />
                   <Text style={styles.dateText}>{formatDate(item.date)}</Text>
                 </View>
 
@@ -151,10 +200,10 @@ export default function HistoryScreen() {
                 {item.sessions.map((session, index) => (
                   <View key={index} style={styles.sessionCard}>
                     <View style={styles.sessionHeader}>
-                      <MaterialCommunityIcons name="dumbbell" size={16} color="#00FF7F" />
+                      <MaterialCommunityIcons name="dumbbell" size={16} color="#216C50" />
                       <Text style={styles.exerciseName}>{session.exerciseName}</Text>
                     </View>
-                    <Text style={styles.machineText}>{session.machineCode}</Text>
+                    {!!session.machineCode && <Text style={styles.machineText}>{session.machineCode}</Text>}
                     <Text style={styles.durationText}>
                       Duration: {formatDuration(session.startTime, session.endTime)}
                     </Text>
@@ -176,14 +225,27 @@ export default function HistoryScreen() {
               </View>
             )}
           />
-        )}
       </View>
     </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, paddingTop: 60 },
+  container: { flex: 1, paddingHorizontal: 16, paddingTop: 54 },
+  listContent: { paddingBottom: 24, width: "100%", maxWidth: 680, alignSelf: "center" },
+  sectionTitle: { fontSize: 23, fontWeight: "800", color: "#192D23", marginBottom: 12 },
+  weekOverview: { backgroundColor: "#FFF", borderRadius: 18, borderWidth: 1, borderColor: "#E1E7E3", padding: 16, marginBottom: 16 },
+  weekRange: { fontSize: 17, fontWeight: "700", color: "#192D23", marginBottom: 16 },
+  weekStats: { flexDirection: "row", gap: 8, marginBottom: 14 },
+  stat: { flex: 1 },
+  extraStats: { flexDirection: "row", gap: 16, borderTopWidth: 1, borderTopColor: "#E8EDE9", paddingTop: 14, marginBottom: 10 },
+  metricHeading: { flexDirection: "row", alignItems: "center", gap: 4 },
+  muscleNames: { fontSize: 12, color: "#216C50", marginTop: 5, lineHeight: 17 },
+  estimateNote: { fontSize: 10, color: "#65756C", lineHeight: 15, marginBottom: 12 },
+  statValue: { fontSize: 25, fontWeight: "800", color: "#216C50" },
+  statLabel: { fontSize: 11, color: "#65756C", marginTop: 3 },
+  weekDuration: { flexDirection: "row", alignItems: "center", gap: 6, borderTopWidth: 1, borderTopColor: "#E8EDE9", paddingTop: 12 },
+  weekDurationText: { fontSize: 12, color: "#65756C" },
   title: {
     fontSize: 26,
     color: "#1a1a1a",
@@ -192,7 +254,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   loadingText: {
-    color: "#4CAF50",
+    color: "#216C50",
     fontSize: 16,
     marginTop: 10,
   },
@@ -213,7 +275,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   emptyState: {
-    flex: 1,
+    paddingVertical: 24,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 40,
@@ -236,12 +298,8 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 15,
     marginBottom: 15,
-    borderWidth: 2,
-    borderColor: "#4CAF50",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: "#D9E5DD",
   },
   dayHeader: {
     flexDirection: "row",
@@ -252,26 +310,27 @@ const styles = StyleSheet.create({
   dateText: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#4CAF50",
+    color: "#216C50",
   },
   summaryRow: {
     flexDirection: "row",
-    gap: 10,
-    marginBottom: 15,
+    gap: 8,
+    flexWrap: "wrap",
+    marginBottom: 8,
     paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#e0e0e0",
   },
-  summaryText: { fontSize: 14, color: "#666" },
+  summaryText: { fontSize: 13, color: "#65756C", flexShrink: 1 },
   sessionCard: {
-    backgroundColor: "#E8F5E9",
+    backgroundColor: "#F3F8F4",
     borderRadius: 10,
     padding: 12,
     marginTop: 10,
     borderLeftWidth: 4,
     borderLeftColor: "#4CAF50",
     borderWidth: 1,
-    borderColor: "#4CAF50",
+    borderColor: "#D9E5DD",
   },
   sessionHeader: {
     flexDirection: "row",
@@ -280,11 +339,12 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   exerciseName: {
+    flexShrink: 1,
     fontSize: 16,
     fontWeight: "700",
-    color: "#4CAF50",
+    color: "#216C50",
   },
   machineText: { fontSize: 14, color: "#666", marginBottom: 4 },
-  durationText: { fontSize: 12, color: "#4CAF50", fontWeight: "600" },
+  durationText: { fontSize: 12, color: "#216C50", fontWeight: "600" },
   setsText: { fontSize: 12, color: "#666", marginTop: 3 },
 });

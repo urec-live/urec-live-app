@@ -1,4 +1,4 @@
-import api from './authAPI';
+import api from "./authAPI";
 
 export interface MachineDto {
   id: number;
@@ -16,7 +16,42 @@ export interface MachineDto {
   floorPlanId?: number | null;
 }
 
+export type AreaKind =
+  | "strength"
+  | "cardio"
+  | "pool"
+  | "court"
+  | "track"
+  | "studio"
+  | "turf"
+  | "room"
+  | "amenity"
+  | "stairs"
+  | "elevator"
+  | "entrance"
+  | "void";
+export interface MapPoint {
+  x: number;
+  y: number;
+}
+export interface FloorArea {
+  id: string;
+  name: string;
+  kind: AreaKind;
+  shape: "rect" | "polygon";
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  points?: MapPoint[];
+}
+export interface FloorLayout {
+  version: 1;
+  areas: FloorArea[];
+}
 export interface FloorPlanResponse {
+  layout?: FloorLayout | null;
+  illustrative?: boolean;
   id: number;
   name: string;
   imageUrl: string | null;
@@ -43,12 +78,12 @@ export interface Exercise {
 export const machineAPI = {
   // Get all machines
   listAll: async (): Promise<MachineDto[]> => {
-    const response = await api.get('/machines');
+    const response = await api.get("/machines");
     return response.data;
   },
 
   getAllMachines: async (): Promise<Machine[]> => {
-    const response = await api.get('/machines');
+    const response = await api.get("/machines");
     return response.data;
   },
 
@@ -76,14 +111,16 @@ export const machineAPI = {
 
   // Get a machine by its QR code
   getMachineByCode: async (code: string): Promise<MachineDto> => {
-    const response = await api.get(`/machines/code/${encodeURIComponent(code)}`);
+    const response = await api.get(
+      `/machines/code/${encodeURIComponent(code)}`,
+    );
     return response.data;
   },
 
   // Get current user's engagement (machine they're using)
   getMyEngagement: async (): Promise<MachineDto | null> => {
     try {
-      const response = await api.get('/machines/my-engagement');
+      const response = await api.get("/machines/my-engagement");
       return response.data;
     } catch (error) {
       // If endpoint doesn't exist, return null
@@ -93,18 +130,25 @@ export const machineAPI = {
 
   // Check in to a machine
   checkIn: async (code: string): Promise<MachineDto> => {
-    const response = await api.put(`/machines/code/${code}/status`, { status: 'In Use' });
+    const response = await api.put(`/machines/code/${code}/status`, {
+      status: "In Use",
+    });
     return response.data;
   },
 
   // Check out from a machine
   checkOut: async (code: string): Promise<MachineDto> => {
-    const response = await api.put(`/machines/code/${code}/status`, { status: 'Available' });
+    const response = await api.put(`/machines/code/${code}/status`, {
+      status: "Available",
+    });
     return response.data;
   },
 
   // Update machine status
-  updateMachineStatus: async (id: number, status: string): Promise<MachineDto> => {
+  updateMachineStatus: async (
+    id: number,
+    status: string,
+  ): Promise<MachineDto> => {
     const response = await api.put(`/machines/${id}/status`, { status });
     return response.data;
   },
@@ -117,12 +161,14 @@ export const machineAPI = {
 
   // Get all muscle groups
   getMuscleGroups: async (): Promise<string[]> => {
-    const response = await api.get('/machines/muscle-groups');
+    const response = await api.get("/machines/muscle-groups");
     return response.data;
   },
 
   // Get exercises by muscle group
-  getExercisesByMuscleGroup: async (muscleGroup: string): Promise<Exercise[]> => {
+  getExercisesByMuscleGroup: async (
+    muscleGroup: string,
+  ): Promise<Exercise[]> => {
     const response = await api.get(`/machines/exercises/muscle/${muscleGroup}`);
     return response.data;
   },
@@ -141,15 +187,13 @@ export const machineAPI = {
 
   // Get floor plan with all equipment positions and statuses (single floor, backward compat)
   getFloorPlan: async (): Promise<FloorPlanResponse> => {
-    const response = await api.get('/machines/floor-plan');
+    const response = await api.get("/machines/floor-plan");
     return response.data;
   },
 
   // Get all floor plans with equipment grouped by floor
   getFloorPlans: async (): Promise<FloorPlanResponse[]> => {
-    const response = await api.get('/machines/floor-plans');
+    const response = await api.get("/machines/floor-plans");
     return response.data;
   },
 };
-
-

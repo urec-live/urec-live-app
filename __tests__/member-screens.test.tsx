@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import React from "react";
 
 import HistoryScreen from "@/app/(tabs)/history";
@@ -235,6 +235,43 @@ describe("DM inbox", () => {
 });
 
 describe("History", () => {
+  it("selects a different week and shows only its detailed workouts", async () => {
+    mockApi.getMyHistory.mockResolvedValue({ content: [
+      { ...session(1, "Bench Press"), startedAt: "2026-11-09T14:00:00Z", endedAt: "2026-11-09T14:10:00Z" },
+      { ...session(2, "Row"), startedAt: "2026-11-02T14:00:00Z", endedAt: "2026-11-02T14:10:00Z" },
+    ], totalPages: 1, totalElements: 2, number: 0 });
+    render(<HistoryScreen />);
+    await screen.findByText("Bench Press");
+    expect(screen.queryByText("Row")).toBeNull();
+    expect(screen.getByLabelText("November 9, 2026, workout day")).toBeTruthy();
+    fireEvent.press(screen.getByLabelText("November 2, 2026, workout day"));
+    expect(screen.getByText("Row")).toBeTruthy();
+    expect(screen.queryByText("Bench Press")).toBeNull();
+    expect(screen.getByText("Nov 1 – Nov 7, 2026")).toBeTruthy();
+    fireEvent.press(screen.getByLabelText("November 22, 2026"));
+    expect(screen.getByText("No workouts this week")).toBeTruthy();
+    expect(screen.queryByText("Row")).toBeNull();
+  });
+
+  it("navigates months across years and returns to today", async () => {
+    render(<HistoryScreen />);
+    await screen.findByText("Bench Press");
+    fireEvent.press(screen.getByLabelText("Previous month"));
+    expect(screen.getByText("September 2026")).toBeTruthy();
+    for (let i = 0; i < 4; i++) fireEvent.press(screen.getByLabelText("Next month"));
+    expect(screen.getByText("January 2027")).toBeTruthy();
+    fireEvent.press(screen.getByText("Today"));
+    expect(screen.getByText(new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" }))).toBeTruthy();
+  });
+
+  it("keeps the calendar usable with no history", async () => {
+    mockApi.getMyHistory.mockResolvedValue({ content: [], totalPages: 1, totalElements: 0, number: 0 });
+    render(<HistoryScreen />);
+    expect(await screen.findByText("No workout history yet")).toBeTruthy();
+    fireEvent.press(screen.getByLabelText("Previous month"));
+    expect(screen.getByText("No workout history yet")).toBeTruthy();
+  });
+
   it("shows a session saved after the tab was first opened", async () => {
     render(<HistoryScreen />);
     expect(await screen.findByText("Bench Press")).toBeTruthy();

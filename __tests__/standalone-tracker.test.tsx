@@ -8,6 +8,7 @@ import {
 import StandaloneExerciseTracker, {
   fieldsForMode,
 } from "@/components/StandaloneExerciseTracker";
+jest.mock("@/components/exercise/PinnedExerciseNote", () => () => null);
 const mockFinish = jest.fn();
 const mockUpdate = jest.fn();
 const mockMachineCheckout = jest.fn();

@@ -1,6 +1,5 @@
 import React, { useMemo } from "react";
 import {
-  Dimensions,
   Modal,
   Platform,
   Pressable,
@@ -11,6 +10,7 @@ import {
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { FloorPlanResponse, MachineDto } from "@/services/machineAPI";
 import FloorMap from "./FloorMap";
+import { markerColor } from "./EquipmentMarker";
 
 interface MapModalProps {
   visible: boolean;
@@ -31,7 +31,7 @@ export default function MapModal({
   const initialFloorIdx = useMemo(() => {
     if (!targetEquipment) return 0;
     const idx = floors.findIndex((floor) =>
-      floor.equipment.some((eq) => eq.id === targetEquipment.id)
+      floor.equipment.some((eq) => eq.id === targetEquipment.id),
     );
     return idx >= 0 ? idx : 0;
   }, [targetEquipment, floors]);
@@ -43,7 +43,10 @@ export default function MapModal({
 
   if (!targetEquipment) return null;
 
-  const isAvailable = targetEquipment.status.toUpperCase() === "AVAILABLE";
+  const currentTarget =
+    allMachines.find((m) => m.id === targetEquipment.id) ?? targetEquipment;
+  const status = currentTarget.status;
+  const isAvailable = status.toUpperCase() === "AVAILABLE";
 
   const isWeb = Platform.OS === "web";
 
@@ -67,15 +70,12 @@ export default function MapModal({
       {/* Equipment info card */}
       <View style={styles.infoCard}>
         <View
-          style={[
-            styles.infoDot,
-            { backgroundColor: isAvailable ? "#4CAF50" : "#FF5722" },
-          ]}
+          style={[styles.infoDot, { backgroundColor: markerColor(status) }]}
         />
         <View style={styles.infoContent}>
           <Text style={styles.infoName}>{targetEquipment.name}</Text>
           <Text style={styles.infoMeta}>
-            {floorName} · {isAvailable ? "Available" : "In Use"}
+            {floorName} · {isAvailable ? "Available" : status}
           </Text>
         </View>
       </View>

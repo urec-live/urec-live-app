@@ -11,11 +11,29 @@ import { cacheKeys } from "@/services/cachedResources";
 import type { MachineDto } from "@/services/machineAPI";
 import { clearCache, writeCached } from "@/services/resourceCache";
 
-jest.mock("expo-router", () => ({ useRouter: () => ({ push: jest.fn() }) }));
+jest.mock("expo-router", () => ({
+  useRouter: () => ({ push: jest.fn() }),
+  useFocusEffect: (cb: () => void) => {
+    require("react").useEffect(cb, [cb]);
+  },
+}));
+jest.mock("@/contexts/GymContext", () => ({
+  useGym: () => ({ gym: { id: 1, name: "UREC" }, loading: false }),
+}));
+jest.mock("@/components/FloorMap", () => () => null);
+jest.mock("@/services/websocketService", () => ({
+  __esModule: true,
+  default: {
+    onConnectionChange: () => () => {},
+    getConnectedSince: () => null,
+  },
+}));
 jest.mock("@/components/MapModal", () => () => null);
 jest.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: () => null }));
 jest.mock("@react-native-async-storage/async-storage", () =>
-  jest.requireActual("@react-native-async-storage/async-storage/jest/async-storage-mock"),
+  jest.requireActual(
+    "@react-native-async-storage/async-storage/jest/async-storage-mock",
+  ),
 );
 
 const cable: MachineDto = {
@@ -38,7 +56,8 @@ describe("The unreachable notice with saved data", () => {
   beforeEach(async () => {
     await clearCache();
     resetBackendStatus();
-    api.defaults.adapter = (config) => Promise.reject(new AxiosError("Network Error", "ERR_NETWORK", config));
+    api.defaults.adapter = (config) =>
+      Promise.reject(new AxiosError("Network Error", "ERR_NETWORK", config));
   });
 
   afterEach(() => {
