@@ -77,6 +77,8 @@ export default function MapViewport({
   width,
   height,
   focus,
+  insets,
+  fullScreen,
   children,
 }: ViewportProps) {
   const ref = useRef<HTMLDivElement>(null),
@@ -199,7 +201,7 @@ export default function MapViewport({
         background: "#F4F6F5",
         touchAction: "none",
         cursor: "grab",
-        borderRadius: 14,
+        borderRadius: fullScreen ? 0 : 14,
       }}
     >
       <Zoom.Provider value={{ scale: camera.scale, fit: fitted.scale }}>
@@ -220,7 +222,7 @@ export default function MapViewport({
         style={{
           position: "absolute",
           right: 12,
-          bottom: 12,
+          bottom: 12 + (insets?.bottom ?? 0),
           display: "flex",
           gap: 4,
           background: "white",

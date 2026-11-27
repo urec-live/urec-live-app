@@ -15,7 +15,12 @@ import type {
   FloorPlanResponse,
   MachineDto,
 } from "@/services/machineAPI";
-import { areaBounds, areaColors, isPositioned } from "@/utils/equipmentMap";
+import {
+  areaBounds,
+  areaColors,
+  isPositioned,
+  ViewInsets,
+} from "@/utils/equipmentMap";
 import AreaPressTarget from "./equipment/AreaPressTarget";
 import MapViewport, { MapPin } from "./equipment/MapViewport";
 import { markerColor } from "./EquipmentMarker";
@@ -35,6 +40,10 @@ interface FloorMapProps {
   onSelectEquipment?: (machine: MachineDto) => void;
   onSelectArea?: (area: FloorArea, floor: FloorPlanResponse) => void;
   hideFloorPicker?: boolean;
+  /** Panels drawn over the map (the Equipment tab's search and results). */
+  insets?: ViewInsets;
+  /** Square corners, for a map that fills the screen. */
+  fullScreen?: boolean;
 }
 export function AreaDrawing({
   area,
@@ -161,7 +170,16 @@ export default function FloorMap(p: FloorMapProps) {
   );
   if (!floor)
     return (
-      <View style={styles.empty}>
+      <View
+        style={[
+          styles.empty,
+          p.fullScreen && { borderRadius: 0 },
+          p.insets && {
+            paddingTop: 24 + p.insets.top,
+            paddingBottom: 24 + p.insets.bottom,
+          },
+        ]}
+      >
         <Text style={styles.emptyTitle}>Map not available yet</Text>
         <Text style={styles.hint}>
           Equipment is still searchable in the results list.
@@ -212,6 +230,8 @@ export default function FloorMap(p: FloorMapProps) {
         width={floor.width}
         height={floor.height}
         focus={focus}
+        insets={p.insets}
+        fullScreen={p.fullScreen}
       >
         <Svg
           width={floor.width}

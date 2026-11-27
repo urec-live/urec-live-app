@@ -4,6 +4,9 @@ import {
   fitCamera,
   clampCamera,
   zoomCamera,
+  fitCameraWithin,
+  clampCameraWithin,
+  focusCamera,
   isPositioned,
   searchEquipment,
 } from "@/utils/equipmentMap";
@@ -128,6 +131,54 @@ it("fits/clamps the camera and preserves zoom focal coordinates", () => {
   const bound = clampCamera({ scale: 2, x: 900, y: -3000 }, 800, 600, 432, 332);
   expect(bound.x).toBe(24);
   expect(bound.y).toBe(332 - 1200 - 24);
+});
+describe("cameras for a map with panels over it", () => {
+  // A 432×700 screen; the search panel covers the top 200 px, the closed sheet the bottom 168,
+  // leaving the same 332 px band the plain test above uses.
+  const insets = { top: 200, bottom: 168 };
+  it("fits the floor into the uncovered band", () => {
+    expect(fitCameraWithin(800, 600, 432, 700, insets)).toEqual({
+      scale: 0.5,
+      x: 16,
+      y: 216,
+    });
+    expect(fitCameraWithin(800, 600, 432, 332, { top: 0, bottom: 0 })).toEqual(
+      fitCamera(800, 600, 432, 332),
+    );
+  });
+  it("lets a zoomed map slide under the panels but keeps every edge reachable", () => {
+    const down = clampCameraWithin(
+      { scale: 2, x: 900, y: 3000 },
+      800,
+      600,
+      432,
+      700,
+      insets,
+    );
+    expect(down).toEqual({ scale: 2, x: 24, y: 200 + 24 }); // top edge just below the panel
+    const up = clampCameraWithin(
+      { scale: 2, x: -9000, y: -3000 },
+      800,
+      600,
+      432,
+      700,
+      insets,
+    );
+    expect(up.x).toBe(432 - 1600 - 24);
+    expect(up.y + 1200).toBe(700 - 168 - 24); // bottom edge just above the sheet
+  });
+  it("centers a floor smaller than the band within the band", () => {
+    expect(
+      clampCameraWithin({ scale: 0.25, x: 0, y: 0 }, 800, 600, 432, 700, insets),
+    ).toEqual({ scale: 0.25, x: 116, y: 200 + 91 });
+  });
+  it("focuses a point in the middle of the band, clamped near the floor's edge", () => {
+    const c = focusCamera({ x: 400, y: 300 }, 1, 800, 600, 432, 700, insets);
+    expect(c.x + 400).toBe(216);
+    expect(c.y + 300).toBe(200 + 332 / 2);
+    const corner = focusCamera({ x: 0, y: 0 }, 1, 800, 600, 432, 700, insets);
+    expect(corner).toEqual({ scale: 1, x: 24, y: 224 });
+  });
 });
 it("does not omit machines from a dense 300-machine floor", () => {
   const machines = Array.from({ length: 300 }, (_, id) => ({ ...machine, id }));

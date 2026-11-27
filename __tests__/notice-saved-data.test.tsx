@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react-native";
+import "react-native-gesture-handler/jestSetup";
+import { fireEvent, render, screen } from "@testing-library/react-native";
 import { AxiosError } from "axios";
 import React from "react";
 import { View } from "react-native";
@@ -76,6 +77,7 @@ describe("The unreachable notice with saved data", () => {
     );
 
     expect(await screen.findByText("Can't reach UREC Live")).toBeTruthy();
+    fireEvent.press(screen.getByLabelText("Show equipment list"));
     expect(screen.getByText("Cable Station")).toBeTruthy();
     expect(screen.queryByText("Loading machines...")).toBeNull();
   });

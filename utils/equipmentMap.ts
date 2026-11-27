@@ -195,6 +195,70 @@ export function clampCamera(
         : Math.max(vh - h * c.scale - 24, Math.min(24, c.y)),
   };
 }
+/** Pixels at the top and bottom of the viewport that panels cover. */
+export interface ViewInsets {
+  top: number;
+  bottom: number;
+}
+const visibleHeight = (vh: number, i: ViewInsets) => {
+  "worklet";
+  return Math.max(1, vh - i.top - i.bottom);
+};
+/** fitCamera for the uncovered band between the insets. */
+export function fitCameraWithin(
+  w: number,
+  h: number,
+  vw: number,
+  vh: number,
+  insets: ViewInsets,
+): Camera {
+  "worklet";
+  const c = fitCamera(w, h, vw, visibleHeight(vh, insets));
+  return { ...c, y: c.y + insets.top };
+}
+/** clampCamera for the uncovered band: the map can slide under a panel, but always stays reachable. */
+export function clampCameraWithin(
+  c: Camera,
+  w: number,
+  h: number,
+  vw: number,
+  vh: number,
+  insets: ViewInsets,
+): Camera {
+  "worklet";
+  const r = clampCamera(
+    { ...c, y: c.y - insets.top },
+    w,
+    h,
+    vw,
+    visibleHeight(vh, insets),
+  );
+  return { ...r, y: r.y + insets.top };
+}
+/** Centers a map point in the uncovered band at the given scale. */
+export function focusCamera(
+  p: MapPoint,
+  scale: number,
+  w: number,
+  h: number,
+  vw: number,
+  vh: number,
+  insets: ViewInsets,
+): Camera {
+  "worklet";
+  return clampCameraWithin(
+    {
+      scale,
+      x: vw / 2 - p.x * scale,
+      y: insets.top + visibleHeight(vh, insets) / 2 - p.y * scale,
+    },
+    w,
+    h,
+    vw,
+    vh,
+    insets,
+  );
+}
 export function zoomCamera(c: Camera, scale: number, p: MapPoint): Camera {
   "worklet";
   const ratio = scale / c.scale;

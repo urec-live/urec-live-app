@@ -1,13 +1,33 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+  cancelAnimation,
   SharedValue,
   useAnimatedStyle,
   useSharedValue,
+  withTiming,
 } from "react-native-reanimated";
 import type { ViewportProps, PinProps } from "./MapViewport.types";
-import { clampCamera, fitCamera, zoomCamera } from "@/utils/equipmentMap";
+import {
+  Camera,
+  clampCameraWithin,
+  fitCameraWithin,
+  focusCamera,
+  zoomCamera,
+} from "@/utils/equipmentMap";
+import {
+  CameraLayout,
+  FOLLOW_FIT,
+  FOLLOW_NONE,
+  followCamera,
+} from "@/utils/mapPanels";
 const Zoom = createContext<{ scale: SharedValue<number>; fit: number } | null>(
   null,
 );
@@ -85,13 +105,19 @@ export function MapPin(p: PinProps) {
     </Animated.View>
   );
 }
+const SLIDE = { duration: 240 };
 export default function MapViewport({
   width,
   height,
   focus,
+  insets,
+  fullScreen,
   children,
 }: ViewportProps) {
   const [size, setSize] = useState({ w: 1, h: 1 });
+  const top = insets?.top ?? 0,
+    bottom = insets?.bottom ?? 0;
+  const view = { top, bottom };
   const scale = useSharedValue(1),
     x = useSharedValue(0),
     y = useSharedValue(0);
@@ -99,56 +125,71 @@ export default function MapViewport({
     startX = useSharedValue(0),
     startY = useSharedValue(0),
     focalX = useSharedValue(0),
-    focalY = useSharedValue(0);
-  const fitted = fitCamera(width, height, size.w, size.h);
-  const reset = () => {
-    scale.value = fitted.scale;
-    x.value = fitted.x;
-    y.value = fitted.y;
+    focalY = useSharedValue(0),
+    follow = useSharedValue(FOLLOW_FIT);
+  const fitted = fitCameraWithin(width, height, size.w, size.h, view);
+  const apply = (c: Camera, animate = false) => {
+    scale.value = animate ? withTiming(c.scale, SLIDE) : c.scale;
+    x.value = animate ? withTiming(c.x, SLIDE) : c.x;
+    y.value = animate ? withTiming(c.y, SLIDE) : c.y;
   };
-  useEffect(() => {
-    scale.value = fitted.scale;
-    x.value = fitted.x;
-    y.value = fitted.y;
-  }, [
-    width,
-    height,
-    size.w,
-    size.h,
-    fitted.scale,
-    fitted.x,
-    fitted.y,
-    scale,
-    x,
-    y,
-  ]);
+  const reset = () => {
+    apply(fitted);
+    follow.value = FOLLOW_FIT;
+  };
   const focusKey = focus?.key;
+  const last = useRef<CameraLayout>(null);
+  // Re-place the camera when the viewport, the focus or the panels over the map change.
   useEffect(() => {
-    if (!focus || size.w <= 1) return;
-    const next = clampCamera(
-      {
-        scale: fitted.scale * 2.5,
-        x: size.w / 2 - focus.x * fitted.scale * 2.5,
-        y: size.h / 2 - focus.y * fitted.scale * 2.5,
-      },
-      width,
-      height,
-      size.w,
-      size.h,
-    );
-    scale.value = next.scale;
-    x.value = next.x;
-    y.value = next.y;
+    if (size.w <= 1) return;
+    const next = { focusKey, top, bottom };
+    const plan = followCamera(last.current, next, follow.value);
+    last.current = next;
+    follow.value = plan.follow;
+    if (plan.move === "focus" && focus)
+      apply(
+        focusCamera(
+          focus,
+          fitted.scale * 2.5,
+          width,
+          height,
+          size.w,
+          size.h,
+          view,
+        ),
+        plan.slide,
+      );
+    else if (plan.move === "fit") apply(fitted, plan.slide);
+    else if (plan.move === "clamp")
+      apply(
+        clampCameraWithin(
+          { scale: scale.value, x: x.value, y: y.value },
+          width,
+          height,
+          size.w,
+          size.h,
+          view,
+        ),
+        plan.slide,
+      );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusKey, size.w, size.h]);
+  }, [focusKey, width, height, size.w, size.h, top, bottom]);
+  const takeOver = () => {
+    "worklet";
+    follow.value = FOLLOW_NONE;
+    cancelAnimation(scale);
+    cancelAnimation(x);
+    cancelAnimation(y);
+  };
   const pan = Gesture.Pan()
     .maxPointers(1)
     .onStart(() => {
+      takeOver();
       startX.value = x.value;
       startY.value = y.value;
     })
     .onUpdate((e) => {
-      const c = clampCamera(
+      const c = clampCameraWithin(
         {
           scale: scale.value,
           x: startX.value + e.translationX,
@@ -158,12 +199,14 @@ export default function MapViewport({
         height,
         size.w,
         size.h,
+        view,
       );
       x.value = c.x;
       y.value = c.y;
     });
   const pinch = Gesture.Pinch()
     .onStart((e) => {
+      takeOver();
       startScale.value = scale.value;
       startX.value = x.value;
       startY.value = y.value;
@@ -179,7 +222,7 @@ export default function MapViewport({
         ),
         { x: focalX.value, y: focalY.value },
       );
-      const next = clampCamera(
+      const next = clampCameraWithin(
         {
           ...c,
           x: c.x + e.focalX - focalX.value,
@@ -189,29 +232,31 @@ export default function MapViewport({
         height,
         size.w,
         size.h,
+        view,
       );
       scale.value = next.scale;
       x.value = next.x;
       y.value = next.y;
     });
   const zoom = (factor: number) => {
-    const c = clampCamera(
-      zoomCamera(
-        { scale: scale.value, x: x.value, y: y.value },
-        Math.max(
-          fitted.scale,
-          Math.min(fitted.scale * 6, scale.value * factor),
+    takeOver();
+    apply(
+      clampCameraWithin(
+        zoomCamera(
+          { scale: scale.value, x: x.value, y: y.value },
+          Math.max(
+            fitted.scale,
+            Math.min(fitted.scale * 6, scale.value * factor),
+          ),
+          { x: size.w / 2, y: top + Math.max(1, size.h - top - bottom) / 2 },
         ),
-        { x: size.w / 2, y: size.h / 2 },
+        width,
+        height,
+        size.w,
+        size.h,
+        view,
       ),
-      width,
-      height,
-      size.w,
-      size.h,
     );
-    scale.value = c.scale;
-    x.value = c.x;
-    y.value = c.y;
   };
   const style = useAnimatedStyle(() => ({
     transform: [
@@ -233,7 +278,7 @@ export default function MapViewport({
         minHeight: 120,
         overflow: "hidden",
         backgroundColor: "#F4F6F5",
-        borderRadius: 14,
+        borderRadius: fullScreen ? 0 : 14,
       }}
     >
       <GestureDetector gesture={Gesture.Simultaneous(pan, pinch)}>
@@ -251,7 +296,7 @@ export default function MapViewport({
         style={{
           position: "absolute",
           right: 12,
-          bottom: 12,
+          bottom: 12 + bottom,
           flexDirection: "row",
           gap: 4,
           backgroundColor: "white",
