@@ -80,6 +80,8 @@ All REST and SockJS origins come from `services/networkConfig.ts`.
 
 Do not add personal LAN addresses to source or duplicate base URLs in individual API modules.
 
+`EXPO_PUBLIC_MAPBOX_TOKEN` (a public `pk.` token, in `.env.local`) turns on the Mapbox indoor map in the Equipment tab; without it the tab keeps the SVG floor map.
+
 ## Known integration gaps
 
 - `app/chat.tsx` and `services/chatAPI.ts` call `POST /api/chat`, but the checked-out backend has no matching REST endpoint. Treat the chatbot as client UI, not an end-to-end completed feature.
@@ -137,6 +139,7 @@ Do not add personal LAN addresses to source or duplicate base URLs in individual
 - The floor map fills the screen (`FloorMap` with `fullScreen`). `components/equipment/MapTopPanel.tsx` (search, filters, floors, status) slides over its top. It's open by default, swipe up or tap its grab bar to hide it, and a pill brings it back. `components/equipment/ResultsSheet.tsx` (list, legend) slides over the bottom. It's closed by default, showing only its title bar and the selected item's card, and you swipe up or tap the title bar to open it. The panels overlay the map and never resize it.
 - Drags use react-native-gesture-handler `Pan` gestures and reanimated shared values. Snap rules (follow a flick over 300 dp/s, otherwise the nearer end) are in `utils/mapPanels.ts`. Only the sheet's title area drags it, so the list scrolls freely. The top panel's pan fails on horizontal movement, so the floor tabs still scroll.
 - The screen passes `insets={{ top, bottom }}` (how much the panels cover) to `FloorMap` → `MapViewport`, so fit, focus, clamping and the zoom buttons use the uncovered band (`fitCameraWithin`, `clampCameraWithin`, `focusCamera` in `utils/equipmentMap.ts`). `followCamera` decides what happens when the insets change: a fitted or focused view slides along. Once the member pans or zooms, their view stays put, apart from a sliding clamp that closes any gap a closing panel left.
+- **Mapbox indoor map** (when `EXPO_PUBLIC_MAPBOX_TOKEN` is set): `components/equipment/IndoorMap.tsx` (`@rnmapbox/maps`, native, Standard style, 2D) replaces `FloorMap` and draws Level 1 from `constants/indoorVenue.ts`. That file is a hand trace of the wayfinding sign in Mapbox's custom indoor schema (facility > structure > floor > room with `floor_id`), placed on the OSM building outline. The backend's floor plans are ignored in this mode. `utils/indoorPlacement.ts` lays every machine out in rows across the Fitness rooms, grouped by first muscle group, ignoring `floorX`/`floorY`. Floor tabs come from `INDOOR_FLOORS`, and the layers filter on `floor_id` (Mapbox's custom-UI approach; rnmapbox doesn't expose the native indoor selector). Camera props must keep their identity between renders, or live updates move the map. Under Jest, `@rnmapbox/maps` doesn't load: tests that render the tab mock `@/components/equipment/IndoorMap` (at least `{ indoorMapEnabled: false }`).
 - Tests that render the Equipment tab need `import "react-native-gesture-handler/jestSetup";` as their first import. Drive swipes with `fireGestureHandler` from `react-native-gesture-handler/jest-utils` inside `await act(async () => …)`, because the `runOnJS` state updates arrive as microtasks. Simulate measured sizes with `fireEvent(el, "layout", …)`. Panels hidden from accessibility are excluded from queries by default.
 
 ### Out of Order machines
@@ -163,7 +166,7 @@ npm run android
 
 Follow `docs/TEAM_WORKFLOW.md` before prebuild or native validation. After adding a route, regenerate typed routes if necessary by starting Expo, then rerun TypeScript.
 
-Help-request-specific manual and automated checks are documented in `HELP_REQUESTS_TESTING.md`; saved data, live updates and empty sessions in `MINOR_FIXES_TESTING.md`; the unreachable notice in `BACKEND_UNREACHABLE_TESTING.md`; chat GIFs, stickers, reactions and reporting in `CHAT_MEDIA_TESTING.md`; chat photos in `CHAT_PHOTOS_TESTING.md`; the Equipment tab's full-screen map and sliding panels in `EQUIPMENT_MAP_PANELS_TESTING.md`.
+Help-request-specific manual and automated checks are documented in `HELP_REQUESTS_TESTING.md`; saved data, live updates and empty sessions in `MINOR_FIXES_TESTING.md`; the unreachable notice in `BACKEND_UNREACHABLE_TESTING.md`; chat GIFs, stickers, reactions and reporting in `CHAT_MEDIA_TESTING.md`; chat photos in `CHAT_PHOTOS_TESTING.md`; the Equipment tab's full-screen map and sliding panels in `EQUIPMENT_MAP_PANELS_TESTING.md`; the Mapbox indoor map in `MAPBOX_INDOOR_MAP_TESTING.md`.
 
 AsyncStorage throws under Jest without its mock: add `jest.mock("@react-native-async-storage/async-storage", () => jest.requireActual("@react-native-async-storage/async-storage/jest/async-storage-mock"))` to any test that loads `services/resourceCache.ts`, and `await clearCache()` in `beforeEach`, since saved data is module-level.
 

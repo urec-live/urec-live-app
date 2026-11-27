@@ -22,6 +22,7 @@ jest.mock("@/contexts/GymContext", () => ({
   useGym: () => ({ gym: { id: 1, name: "UREC" }, loading: false }),
 }));
 jest.mock("@/components/FloorMap", () => () => null);
+jest.mock("@/components/equipment/IndoorMap", () => ({ indoorMapEnabled: false }));
 jest.mock("@/services/websocketService", () => ({
   __esModule: true,
   default: {

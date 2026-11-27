@@ -69,6 +69,21 @@ jest.mock("@/components/FloorMap", () => {
     ),
   };
 });
+let mockIndoor = false;
+jest.mock("@/components/equipment/IndoorMap", () => {
+  const { Text } = require("react-native");
+  return {
+    __esModule: true,
+    get indoorMapEnabled() {
+      return mockIndoor;
+    },
+    default: (p: any) => (
+      <Text testID="indoor-map">
+        {`${p.floorId}:${p.machines.length}:${p.highlightedEquipmentId}:${p.matchingEquipmentIds?.size ?? -1}`}
+      </Text>
+    ),
+  };
+});
 jest.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: () => null }));
 jest.mock("@react-native-async-storage/async-storage", () =>
   jest.requireActual(
@@ -167,6 +182,7 @@ beforeEach(async () => {
   mockApi.listAll.mockResolvedValue([cable, treadmill]);
   mockApi.getFloorPlans.mockResolvedValue(floors);
   mockApi.getExercisesByEquipmentId.mockResolvedValue([]);
+  mockIndoor = false;
 });
 it("preserves Ground during search, then switches and opens a cross-floor result", async () => {
   render(<Equipment />);
@@ -344,5 +360,30 @@ describe("full-screen map with sliding panels", () => {
     fireEvent(screen.getByLabelText(SEARCH), "submitEditing");
     expect(listOpen()).toBe(true);
     expect(screen.getByText("Treadmill")).toBeTruthy();
+  });
+});
+describe("Mapbox indoor map (token set)", () => {
+  beforeEach(() => {
+    mockIndoor = true;
+  });
+  it("shows Level 1 with every machine instead of the backend floors", async () => {
+    render(<Equipment />);
+    openList();
+    await screen.findByText("Treadmill");
+    expect(screen.queryByTestId("map-floor")).toBeNull();
+    expect(screen.getByTestId("indoor-map").props.children).toBe("l1:2:undefined:-1");
+    expect(screen.queryByText("Ground")).toBeNull();
+    expect(screen.queryByText("Indoor pool")).toBeNull();
+    expect(screen.getAllByText("Level 1").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Location not mapped")).toBeNull();
+  });
+  it("passes search matches and the chosen machine to the map", async () => {
+    render(<Equipment />);
+    openList();
+    await screen.findByText("Treadmill");
+    fireEvent.changeText(screen.getByLabelText(SEARCH), "running");
+    expect(screen.getByTestId("indoor-map").props.children).toBe("l1:2:undefined:1");
+    fireEvent.press(screen.getByLabelText(/Treadmill, In Use/));
+    expect(screen.getByTestId("indoor-map").props.children).toBe("l1:2:2:1");
   });
 });

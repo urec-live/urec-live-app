@@ -33,6 +33,8 @@ import { peekCached, subscribeCached } from "@/services/resourceCache";
 import { machineAPI, MachineDto, Exercise } from "@/services/machineAPI";
 import websocketService from "@/services/websocketService";
 import FloorMap from "@/components/FloorMap";
+import IndoorMap, { indoorMapEnabled } from "@/components/equipment/IndoorMap";
+import { INDOOR_FLOORS, LEVEL_1 } from "@/constants/indoorVenue";
 import EquipmentFilters from "@/components/equipment/EquipmentFilters";
 import MapTopPanel from "@/components/equipment/MapTopPanel";
 import ResultsSheet from "@/components/equipment/ResultsSheet";
@@ -69,6 +71,7 @@ function ConnectedEquipment({ gymName }: { gymName: string }) {
     [status, setStatus] = useState(""),
     [area, setArea] = useState("");
   const [floorId, setFloorId] = useState<number | null>(null),
+    [indoorFloorId, setIndoorFloorId] = useState(LEVEL_1.id),
     [selectedKey, setSelectedKey] = useState<string | null>(null);
   // The map fills the screen; the search panel starts open over its top, the results sheet
   // starts closed at its bottom.
@@ -140,9 +143,10 @@ function ConnectedEquipment({ gymName }: { gymName: string }) {
       }),
     [raw, legacy],
   );
+  // The Mapbox map draws its own Level 1, so the backend's floor plans are left out there.
   const floors = useMemo(
     () =>
-      (floorResource.data ?? [])
+      (indoorMapEnabled ? [] : (floorResource.data ?? []))
         .filter((f) => f.id !== 0)
         .sort((a, b) => a.floorNumber - b.floorNumber),
     [floorResource.data],
@@ -216,7 +220,7 @@ function ConnectedEquipment({ gymName }: { gymName: string }) {
   const statuses = [...new Set(machines.map((m) => m.status))].sort();
   const meta = (r: MapResult) =>
     r.machine
-      ? `${r.floor?.name ?? ""}${r.area ? ` · ${r.area.name}` : ""}${!isPositioned(r.machine, r.floor) ? " · Location not mapped" : ""}`.replace(
+      ? `${r.floor?.name ?? ""}${r.area ? ` · ${r.area.name}` : ""}${indoorMapEnabled ? LEVEL_1.name : !isPositioned(r.machine, r.floor) ? " · Location not mapped" : ""}`.replace(
           /^ · /,
           "",
         )
@@ -270,6 +274,15 @@ function ConnectedEquipment({ gymName }: { gymName: string }) {
       </View>
     </View>
   ) : null;
+  const selectMachine = (m: MachineDto) =>
+    choose(
+      allResults.find((r) => r.machine?.id === m.id) ?? {
+        key: `machine:${m.id}`,
+        name: m.name,
+        machine: m,
+        floor: floors.find((f) => f.equipment.some((eq) => eq.id === m.id)),
+      },
+    );
   return (
     <GestureHandlerRootView
       testID="equipment-screen"
@@ -277,46 +290,46 @@ function ConnectedEquipment({ gymName }: { gymName: string }) {
       onLayout={(e) => setPageHeight(e.nativeEvent.layout.height)}
     >
       <View style={StyleSheet.absoluteFill}>
-        <FloorMap
-          floors={floors}
-          allMachines={machines}
-          selectedFloorId={floor?.id}
-          hideFloorPicker
-          fullScreen
-          insets={{ top: topCover, bottom: peek }}
-          matchingEquipmentIds={active ? matchingIds : undefined}
-          matchingAreaIds={active ? matchingAreas : undefined}
-          highlightedEquipmentId={selected?.machine?.id}
-          selectedAreaId={
-            selected && !selected.machine ? selected.area?.id : null
-          }
-          onSelectEquipment={(m) =>
-            choose(
-              allResults.find((r) => r.machine?.id === m.id) ?? {
-                key: `machine:${m.id}`,
-                name: m.name,
-                machine: m,
-                floor: floors.find((f) =>
-                  f.equipment.some((eq) => eq.id === m.id),
-                ),
-              },
-            )
-          }
-          onSelectArea={(a, f) =>
-            choose({
-              key: `area:${f.id}:${a.id}`,
-              name: a.name,
-              area: a,
-              floor: f,
-            })
-          }
-        />
+        {indoorMapEnabled ? (
+          <IndoorMap
+            machines={machines}
+            floorId={indoorFloorId}
+            insets={{ top: topCover, bottom: peek }}
+            matchingEquipmentIds={active ? matchingIds : undefined}
+            highlightedEquipmentId={selected?.machine?.id}
+            onSelectEquipment={selectMachine}
+          />
+        ) : (
+          <FloorMap
+            floors={floors}
+            allMachines={machines}
+            selectedFloorId={floor?.id}
+            hideFloorPicker
+            fullScreen
+            insets={{ top: topCover, bottom: peek }}
+            matchingEquipmentIds={active ? matchingIds : undefined}
+            matchingAreaIds={active ? matchingAreas : undefined}
+            highlightedEquipmentId={selected?.machine?.id}
+            selectedAreaId={
+              selected && !selected.machine ? selected.area?.id : null
+            }
+            onSelectEquipment={selectMachine}
+            onSelectArea={(a, f) =>
+              choose({
+                key: `area:${f.id}:${a.id}`,
+                name: a.name,
+                area: a,
+                floor: f,
+              })
+            }
+          />
+        )}
       </View>
       <MapTopPanel
         open={topOpen}
         onOpenChange={setTopOpen}
         onCoverChange={setTopCover}
-        collapsedLabel={[floor?.name ?? "Search", query && `“${query}”`]
+        collapsedLabel={[floor?.name ?? (indoorMapEnabled ? LEVEL_1.name : "Search"), query && `“${query}”`]
           .filter(Boolean)
           .join(" · ")}
       >
@@ -410,6 +423,25 @@ function ConnectedEquipment({ gymName }: { gymName: string }) {
           style={s.floors}
           contentContainerStyle={{ gap: 6 }}
         >
+          {/* Mapbox mode: the venue's own floors, filtered by floor_id as Mapbox's indoor docs suggest. */}
+          {(indoorMapEnabled ? INDOOR_FLOORS : []).map((f) => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: f.id === indoorFloorId }}
+              key={f.id}
+              onPress={() => setIndoorFloorId(f.id)}
+              style={[s.floorTab, f.id === indoorFloorId && s.floorActive]}
+            >
+              <Text
+                style={[
+                  s.floorText,
+                  f.id === indoorFloorId && { color: "white" },
+                ]}
+              >
+                {f.name} <Text style={{ opacity: 0.7 }}> {matchingIds.size}</Text>
+              </Text>
+            </Pressable>
+          ))}
           {floors.map((f) => (
             <Pressable
               accessibilityRole="button"

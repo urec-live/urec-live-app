@@ -7,6 +7,7 @@ jest.mock("@/contexts/GymContext", () => ({
   useGym: () => ({ gym: null, loading: false }),
 }));
 jest.mock("@/components/FloorMap", () => () => null);
+jest.mock("@/components/equipment/IndoorMap", () => ({ indoorMapEnabled: false }));
 jest.mock("@/services/websocketService", () => ({ default: {} }));
 jest.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: () => null }));
 jest.mock("@react-native-async-storage/async-storage", () =>

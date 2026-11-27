@@ -56,7 +56,8 @@
           "photosPermission": "UREC Live needs your photos so you can share them in chat.",
           "cameraPermission": "UREC Live needs the camera so you can take photos to share in chat."
         }
-      ]
+      ],
+      "@rnmapbox/maps"
     ],
     "experiments": {
       "typedRoutes": true,
