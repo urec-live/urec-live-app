@@ -2,10 +2,13 @@ import {
   FITNESS_ZONES,
   INDOOR_FLOORS,
   INDOOR_GEOJSON,
+  INDOOR_WALLS,
   toLngLat,
+  WALL_M,
+  wallQuads,
 } from "@/constants/indoorVenue";
 import type { MachineDto } from "@/services/machineAPI";
-import { placeEquipment } from "@/utils/indoorPlacement";
+import { footprint, placeEquipment } from "@/utils/indoorPlacement";
 
 const props = INDOOR_GEOJSON.features.map((f) => f.properties!);
 const ring = (id: string) =>
@@ -99,5 +102,79 @@ describe("placeEquipment", () => {
       ...Array(3).fill(undefined),
     ]);
     expect(placeEquipment([...input].reverse())).toEqual(placeEquipment(input));
+  });
+});
+
+describe("3D walls", () => {
+  const centre = (q: number[][]) =>
+    [0, 1].map((k) => q.reduce((sum, p) => sum + p[k], 0) / q.length);
+  const area = (q: number[][]) =>
+    Math.abs(
+      q.reduce((sum, [x0, y0], i) => {
+        const [x1, y1] = q[(i + 1) % q.length];
+        return sum + x0 * y1 - x1 * y0;
+      }, 0) / 2,
+    );
+  const key = (quads: number[][][]) =>
+    quads.map((q) => q.map((p) => p.map((v) => v.toFixed(6)).join(",")).sort().join(" ")).sort();
+  const square: [number, number][] = [[0, 0], [4, 0], [4, 4], [0, 4]];
+
+  it("puts one wall-thick quad inside each edge, for either winding", () => {
+    const quads = wallQuads(square);
+    expect(quads).toHaveLength(4);
+    quads.forEach((q) => {
+      expect(inside(centre(q), square)).toBe(true);
+      const edge = Math.hypot(q[1][0] - q[0][0], q[1][1] - q[0][1]);
+      expect(area(q) / edge).toBeCloseTo(WALL_M);
+    });
+    expect(key(wallQuads([...square].reverse()))).toEqual(key(quads));
+  });
+
+  const walls = INDOOR_WALLS.features.map((f) => ({
+    id: f.properties!.id as string,
+    floor: f.properties!.floor_id,
+    ring: (f.geometry as GeoJSON.Polygon).coordinates[0].slice(0, -1),
+  }));
+  it("has unique ids on known floors and includes the partition", () => {
+    const ids = walls.map((w) => w.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    const floors = new Set(INDOOR_FLOORS.map((f) => f.id));
+    walls.forEach((w) => expect(floors).toContain(w.floor));
+    expect(ids).toContain("l1-partition");
+  });
+  it("keeps every wall inside its own room or the outline (concave rings too)", () => {
+    const edges = walls.filter((w) => /-wall-\d+$/.test(w.id));
+    expect(edges.length).toBeGreaterThan(0);
+    edges.forEach((w) =>
+      expect(inside(centre(w.ring), ring(w.id.replace(/-wall-\d+$/, "")))).toBe(true),
+    );
+  });
+  it("leaves the open floor between the two Fitness rooms free of walls", () => {
+    const zones = FITNESS_ZONES.map((z) => {
+      const [a, b, c, d] = corners(z).map(toLngLat);
+      return [a, b, d, c];
+    });
+    walls.forEach((w) =>
+      w.ring.forEach((p) => zones.forEach((z) => expect(inside(p, z)).toBe(false))),
+    );
+  });
+});
+
+describe("footprint", () => {
+  it("is a box of the given size centred on the point", () => {
+    expect(footprint([10, 20])).toEqual([[9.5, 19.5], [10.5, 19.5], [10.5, 20.5], [9.5, 20.5]]);
+    expect(footprint([0, 0], 2)[2]).toEqual([1, 1]);
+  });
+  it("never overlaps another machine's box, even with 160 machines", () => {
+    const boxes = placeEquipment(machines(160)).map((p) => footprint(p.at));
+    let overlaps = 0;
+    boxes.forEach((a, i) =>
+      boxes.slice(i + 1).forEach((b) => {
+        const apart =
+          a[1][0] <= b[0][0] || b[1][0] <= a[0][0] || a[2][1] <= b[0][1] || b[2][1] <= a[0][1];
+        if (!apart) overlaps++;
+      }),
+    );
+    expect(overlaps).toBe(0);
   });
 });

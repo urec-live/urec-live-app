@@ -64,7 +64,7 @@ export type Zone = (typeof FITNESS_ZONES)[number];
 export const LEVEL_1 = { id: "l1", name: "Level 1" };
 export const INDOOR_FLOORS = [LEVEL_1];
 
-const polygon = (ring: Pt[]): GeoJSON.Polygon => ({
+export const polygon = (ring: Pt[]): GeoJSON.Polygon => ({
   type: "Polygon",
   coordinates: [[...ring, ring[0]].map(toLngLat)],
 });
@@ -95,6 +95,38 @@ export const INDOOR_GEOJSON: GeoJSON.FeatureCollection = {
     }),
     ...ROOMS.map(({ ring, ...room }) =>
       feature(ring, { type: "room", floor_id: LEVEL_1.id, ...room }),
+    ),
+  ],
+};
+
+export const WALL_M = 0.2; // wall thickness
+export const WALL_H = 2.5; // wall height; lower it if walls hide too many machines
+
+/** One quad per edge, offset inward so rooms sharing an edge get side-by-side walls, not z-fighting. */
+export function wallQuads(ring: Pt[], t = WALL_M): Pt[][] {
+  const area2 = ring.reduce((sum, [x0, y0], i) => {
+    const [x1, y1] = ring[(i + 1) % ring.length];
+    return sum + x0 * y1 - x1 * y0;
+  }, 0);
+  return ring.map(([x0, y0], i) => {
+    const [x1, y1] = ring[(i + 1) % ring.length];
+    const k = (Math.sign(area2) * t) / Math.hypot(x1 - x0, y1 - y0);
+    // (-dy, dx) is the left normal, which points inside when the signed area is positive.
+    const [nx, ny] = [-(y1 - y0) * k, (x1 - x0) * k];
+    return [[x0, y0], [x1, y1], [x1 + nx, y1 + ny], [x0 + nx, y0 + ny]];
+  });
+}
+
+const wall = (ring: Pt[], id: string) => feature(ring, { id, floor_id: LEVEL_1.id });
+// The Fitness rooms are open floor, so the line between them gets no wall; the partition stands as drawn.
+export const INDOOR_WALLS: GeoJSON.FeatureCollection = {
+  type: "FeatureCollection",
+  features: [
+    ...wallQuads(OUTLINE).map((q, i) => wall(q, `urec-main-wall-${i}`)),
+    ...ROOMS.filter((r) => r.class !== "strength").flatMap((r) =>
+      r.class === "wall"
+        ? [wall(r.ring, r.id)]
+        : wallQuads(r.ring).map((q, i) => wall(q, `${r.id}-wall-${i}`)),
     ),
   ],
 };

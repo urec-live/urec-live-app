@@ -127,8 +127,10 @@ Check on a mid-range Android phone that panning stays smooth.
 
 ## Open questions for the feature owner
 
-1. Replace the 2D view, or add a 2D/3D button? This plan replaces it. A button would mean one boolean that chooses between `pitch={0}` with the circle dots and this setup.
-2. Rotation on or off? This plan turns it on, with a compass.
+Both answered on 2026-11-27 and implemented:
+
+1. Add a 2D/3D button. A **3D** toggle (on by default) chooses between this setup and `pitch={0}` with the circle dots.
+2. Make rotation optional. A **Rotate** toggle (off by default) replaces the compass; turning it off turns the map back to north.
 
 ## Risks
 

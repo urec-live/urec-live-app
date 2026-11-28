@@ -32,3 +32,17 @@ export function placeEquipment(machines: MachineDto[], zones = FITNESS_ZONES) {
   while (grid.length < sorted.length) grid = cells(zones, (step *= 0.95));
   return sorted.map((machine, i) => ({ machine, at: grid[i] }));
 }
+
+/** A square ring of `size` metres centred on a placed point, drawn as a machine's box in 3D. */
+export const footprint = (
+  [x, y]: [number, number],
+  size = 1,
+): [number, number][] => {
+  const h = size / 2;
+  return [
+    [x - h, y - h],
+    [x + h, y - h],
+    [x + h, y + h],
+    [x - h, y + h],
+  ];
+};
